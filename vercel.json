@@ -3,17 +3,20 @@
     "builds": [
         {
             "src": "app/main.py",
+            "use": "@vercel/python"
+        },
+        {
+            "src": "/app/migrate.py",
             "use": "@vercel/python",
             "config": {
-                "maxLambdaSize": "15mb",
-                "runtime": "python3.9"
+                "zeroConfig": true
             }
         }
     ],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "app/main.py"
+            "dest": "/app/main.py"
         }
     ]
 }
