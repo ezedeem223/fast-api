@@ -10,8 +10,5 @@
             "src": "/(.*)",
             "dest": "app.py"
         }
-    ],
-    "scripts": {
-        "postdeploy": "python run_migrations.py"
-    }
+    ]
 }
