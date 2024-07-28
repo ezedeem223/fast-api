@@ -1,22 +1,17 @@
 {
-    "version": 2,
     "builds": [
         {
-            "src": "app/main.py",
+            "src": "app.py",
             "use": "@vercel/python"
-        },
-        {
-            "src": "/app/migrate.py",
-            "use": "@vercel/python",
-            "config": {
-                "zeroConfig": true
-            }
         }
     ],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "/app/main.py"
+            "dest": "app.py"
         }
-    ]
+    ],
+    "scripts": {
+        "postdeploy": "python run_migrations.py"
+    }
 }
