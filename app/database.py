@@ -22,7 +22,8 @@ def get_db():
         db.close()
 
 
-# while True:
+# قديم
+#  while True:
 
 #     try:
 #         conn = psycopg2.connect(
