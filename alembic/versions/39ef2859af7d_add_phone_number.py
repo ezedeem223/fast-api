@@ -1,8 +1,8 @@
 """add phone number
 
-Revision ID: 03d30771b8a2
-Revises: cad727e10181
-Create Date: 2024-07-23 20:22:25.587731
+Revision ID: 39ef2859af7d
+Revises: 178f39c1b4b5
+Create Date: 2024-07-29 10:36:28.928083
 
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "03d30771b8a2"
-down_revision: Union[str, None] = "cad727e10181"
+revision: str = "39ef2859af7d"
+down_revision: Union[str, None] = "178f39c1b4b5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

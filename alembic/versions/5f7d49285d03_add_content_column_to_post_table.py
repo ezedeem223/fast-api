@@ -1,8 +1,8 @@
-"""add content column to posts table
+"""add content column to post table
 
-Revision ID: 64165d709839
-Revises: ddb1305c3adc
-Create Date: 2024-07-22 21:14:27.936810
+Revision ID: 5f7d49285d03
+Revises: 99e5c5184e17
+Create Date: 2024-07-29 10:03:42.823925
 
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "64165d709839"
-down_revision: Union[str, None] = "ddb1305c3adc"
+revision: str = "5f7d49285d03"
+down_revision: Union[str, None] = "99e5c5184e17"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

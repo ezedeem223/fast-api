@@ -1,8 +1,8 @@
 """create posts table
 
-Revision ID: ddb1305c3adc
+Revision ID: 99e5c5184e17
 Revises: 
-Create Date: 2024-07-22 20:10:00.210771
+Create Date: 2024-07-29 09:03:46.946597
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "ddb1305c3adc"
+revision: str = "99e5c5184e17"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

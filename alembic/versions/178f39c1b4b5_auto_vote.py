@@ -1,8 +1,8 @@
-"""auto vote
+"""auto-vote
 
-Revision ID: cad727e10181
-Revises: 627574c2d1b8
-Create Date: 2024-07-23 03:18:12.318707
+Revision ID: 178f39c1b4b5
+Revises: 0c2e7ede5113
+Create Date: 2024-07-29 10:32:42.528014
 
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "cad727e10181"
-down_revision: Union[str, None] = "627574c2d1b8"
+revision: str = "178f39c1b4b5"
+down_revision: Union[str, None] = "0c2e7ede5113"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
