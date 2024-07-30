@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str
     access_token_expire_minutes: int
+    database_url: str = None  # إضافة هذا السطر
 
     class Config:
         env_file = ".env"
