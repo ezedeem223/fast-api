@@ -2,17 +2,3 @@ __pycache__
 venv/
 .vercel
 alembic.ini
-# Python
-*.pyc
-__pycache__/
-
-# Environment variables
-.env
-
-# Alembic
-alembic/versions/*.pyc
-alembic/versions/__pycache__/
-
-# Other
-*.log
-*.sqlite3
