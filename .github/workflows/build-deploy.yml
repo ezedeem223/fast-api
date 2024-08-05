@@ -3,7 +3,7 @@ name: Build and Deploy Code
 on: [push, pull_request]
 
 jobs:
-  job1:
+  build:
     environment:
       name: testing
     env: 
@@ -15,6 +15,7 @@ jobs:
       SECRET_KEY: ${{secrets.SECRET_KEY}}
       ALGORITHM: ${{secrets.ALGORITHM}}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${{secrets.ACCESS_TOKEN_EXPIRE_MINUTES}}
+
 
     services:
       postgres:
@@ -70,6 +71,37 @@ jobs:
       
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: pulling git repo
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Render CLI Login
+        env:
+          RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
+        run: |
+          curl -fsSL https://cli.render.com/install.sh | bash
+          render login --api-key $RENDER_API_TOKEN
+
+      - name: Deploy to Render
+        run: |
+          render deploy --service-id srv-cqkuarggph6c738lofa0
+
+
       
 
     
