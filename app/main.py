@@ -5,8 +5,6 @@ from .database import engine
 from .routers import post, user, auth, vote
 from .config import settings
 
-# إزالة أو تحديث هذا السطر
-# print(settings.database_username)
 
 # models.Base.metadata.create_all(bind=engine)
 
