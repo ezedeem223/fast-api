@@ -90,11 +90,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Download Render CLI
+        run: |
+          wget https://github.com/renderinc/cli/releases/download/v0.1.0/render-linux-amd64 -O render
+          chmod +x render
+          sudo mv render /usr/local/bin/
+
       - name: Render CLI Login
         env:
           RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
         run: |
-          wget -qO- https://cli.render.com/install.sh | bash
           render login --api-key $RENDER_API_TOKEN
 
       - name: Deploy to Render
