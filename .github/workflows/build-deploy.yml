@@ -94,15 +94,9 @@ jobs:
         env:
           RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
         run: |
-          curl -fsSL https://cli.render.com/install.sh | bash
+          wget -qO- https://cli.render.com/install.sh | bash
           render login --api-key $RENDER_API_TOKEN
 
       - name: Deploy to Render
         run: |
           render deploy --service-id srv-cqkuarggph6c738lofa0
-
-
-      
-
-    
-
