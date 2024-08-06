@@ -32,25 +32,28 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: pulling git repo
+      - name: Pulling git repo
         uses: actions/checkout@v2
-      - name: install python version 3.12
+      
+      - name: Install Python version 3.12
         uses: actions/setup-python@v2
         with:
           python-version: "3.12"
-      - name: udate pip
+      
+      - name: Update pip
         run: python -m pip install --upgrade pip
-      - name: install all dependdencies
+      
+      - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: test with pytest
-        run:
+      
+      - name: Test with pytest
+        run: |
           pip install pytest
           pytest
 
-      - name: Install render-cli
-        run: |
-          cargo install render-cli
+      - name: Install render-cli using npm
+        run: npm install -g render-cli
 
       - name: Deploy to Render
         run: |
-          render-cli deploy --token ${{ secrets.RENDER_API_TOKEN }} --service fast-api
+          render-cli deploy --token ${{ secrets.RENDER_API_TOKEN }} fast-api
