@@ -34,73 +34,23 @@ jobs:
     steps:
       - name: pulling git repo
         uses: actions/checkout@v2
-      
       - name: install python version 3.12
         uses: actions/setup-python@v2
         with:
           python-version: "3.12"
-      
-      - name: update pip
+      - name: udate pip
         run: python -m pip install --upgrade pip
-      
-      - name: install all dependencies
+      - name: install all dependdencies
         run: pip install -r requirements.txt
-      
       - name: test with pytest
-        run: |
+        run:
           pip install pytest
           pytest
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v1
-    
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
-        with:
-          context: ./
-          file: ./Dockerfile
-          builder: ${{ steps.buildx.outputs.name }}
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/fastapi:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
-      
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build]
-
-    steps:
-      - name: pulling git repo
-        uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
+      - name: Install render-cli
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Render CLI Login
-        env:
-          RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
-        run: |
-          wget -qO- https://cli.render.com/install.sh | bash
-          render login --api-key $RENDER_API_TOKEN
+          cargo install render-cli
 
       - name: Deploy to Render
         run: |
-          render deploy --service-id srv-cqkuarggph6c738lofa0
+          render-cli deploy --token ${{ secrets.RENDER_API_TOKEN }} --service fast-api
