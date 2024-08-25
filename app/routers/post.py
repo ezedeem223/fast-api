@@ -6,27 +6,64 @@ from fastapi import (
     HTTPException,
     Depends,
     APIRouter,
+    BackgroundTasks,
+    UploadFile,
+    File,
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List, Optional
-
+from ..notifications import send_email_notification, manager
+from cachetools import cached, TTLCache
+import os
+from pathlib import Path
+import requests  # لإرسال الطلبات إلى API الشبكات الاجتماعية
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
+# إنشاء ذاكرة مؤقتة بتوقيت انتهاء صلاحية (مثلاً 60 ثانية)
+cache = TTLCache(maxsize=100, ttl=60)
 
-# @app.get("/sqlalchemy")
-# def test_posts(db: Session = Depends(get_db)):
+MEDIA_DIR = Path("static/media")  # مسار حفظ الوسائط المتعددة
 
-#     posts = db.query(models.Post).all()
-#     print(posts)
-#     return {"data": "successfull"}
+# إعداد بيانات الوصول إلى API الشبكات الاجتماعية (تويتر وفيسبوك)
+TWITTER_API_URL = "https://api.twitter.com/2/tweets"
+TWITTER_BEARER_TOKEN = "YOUR_TWITTER_BEARER_TOKEN"
+
+FACEBOOK_API_URL = "https://graph.facebook.com/v11.0/me/feed"
+FACEBOOK_ACCESS_TOKEN = "YOUR_FACEBOOK_ACCESS_TOKEN"
+
+
+def share_on_twitter(content: str):
+    headers = {
+        "Authorization": f"Bearer {TWITTER_BEARER_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    data = {"text": content}
+    response = requests.post(TWITTER_API_URL, headers=headers, json=data)
+    if response.status_code != 201:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Failed to share post on Twitter",
+        )
+
+
+def share_on_facebook(content: str):
+    params = {
+        "access_token": FACEBOOK_ACCESS_TOKEN,
+        "message": content,
+    }
+    response = requests.post(FACEBOOK_API_URL, params=params)
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail="Failed to share post on Facebook",
+        )
 
 
 @router.get("/", response_model=List[schemas.PostOut])
-# @router.get("/")
 def get_posts(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
@@ -34,15 +71,6 @@ def get_posts(
     skip: int = 0,
     search: Optional[str] = "",
 ):
-    # cursor.execute("""SELECT * FROM posts """)
-    # posts = cursor.fetchall()
-    # posts = (
-    #     db.query(models.Post)
-    #     .filter(models.Post.title.contains(search))
-    #     .limit(limit)
-    #     .offset(skip)
-    #     .all()
-    # )
     posts = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
@@ -58,23 +86,85 @@ def get_posts(
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
 def create_posts(
+    background_tasks: BackgroundTasks,
     post: schemas.PostCreate,
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    # cursor.execute(
-    #     """INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING * """,
-    #     (post.title, post.content, post.published),
-    # )
-    # new_post = cursor.fetchone()
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
+        )
 
-    # conn.commit()
-    new_post = models.Post(owner_id=current_user.id, **post.dict())
-    # ( title=post.title, content=post.content, published=post.published)
+    new_post = models.Post(
+        owner_id=current_user.id,
+        content=post.content,
+        is_safe_content=True,
+    )
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
+
+    # إرسال إشعار بالبريد الإلكتروني عند إنشاء منشور جديد
+    send_email_notification(
+        background_tasks,
+        email_to=["recipient@example.com"],
+        subject="New Post Created",
+        body=f"A new post titled '{new_post.title}' has been created.",
+    )
+    background_tasks.add_task(manager.broadcast, f"New post created: {new_post.title}")
+
+    # مشاركة المحتوى على الشبكات الاجتماعية
+    try:
+        share_on_twitter(new_post.content)
+        share_on_facebook(new_post.content)
+    except HTTPException as e:
+        print(f"Error sharing on social media: {e.detail}")
+
     return new_post
+
+
+@router.post("/upload_file/", status_code=status.HTTP_201_CREATED)
+def upload_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(oauth2.get_current_user),
+):
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
+        )
+
+    # إنشاء مسار الملف والتحقق من وجود المجلد
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    file_location = MEDIA_DIR / file.filename
+
+    with open(file_location, "wb+") as file_object:
+        file_object.write(file.file.read())
+
+    new_post = models.Post(
+        owner_id=current_user.id,
+        content=str(file_location),
+        is_safe_content=True,
+    )
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    return {"message": "File uploaded successfully", "post_id": new_post.id}
+
+
+@router.post("/report/", status_code=status.HTTP_201_CREATED)
+def report_post(
+    post_id: int,
+    reason: str,
+    db: Session = Depends(get_db),
+    current_user: int = Depends(oauth2.get_current_user),
+):
+    report = models.Report(post_id=post_id, user_id=current_user.id, reason=reason)
+    db.add(report)
+    db.commit()
+    return {"message": "Report submitted successfully"}
 
 
 @router.get("/{id}", response_model=schemas.PostOut)
@@ -83,10 +173,6 @@ def get_post(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    # cursor.execute("""SELECT * from posts WHERE id = %s """, (str(id),))
-    # post = cursor.fetchone()
-    # post = db.query(models.Post).filter(models.Post.id == id).first()
-
     post = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
@@ -100,8 +186,6 @@ def get_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-        # responses.status_code = status.HTTP_404_NOT_FOUND
-        # return {'message': f"post with id: {id} was not found"}
     return post
 
 
@@ -111,22 +195,18 @@ def delete_post(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-
-    # cursor.execute("""DELETE FROM posts WHERE id = %s RETURNING *""", (str(id),))
-    # delete_post = cursor.fetchone()
-    # conn.commit()
     post_query = db.query(models.Post).filter(models.Post.id == id)
     post = post_query.first()
 
-    if post == None:
+    if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"post with id: {id} dose not exist",
+            detail=f"post with id: {id} does not exist",
         )
     if post.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perfrom requested action",
+            detail="Not authorized to perform requested action",
         )
     post_query.delete(synchronize_session=False)
     db.commit()
@@ -140,32 +220,110 @@ def update_post(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-
-    # cursor.execute(
-    #     """UPDATE posts SET title = %s, content = %s, published = %s WHERE ID = %s RETURNING *""",
-    #     (
-    #         post.title,
-    #         post.content,
-    #         post.published,
-    #         str(id),
-    #     ),
-    # )
-    # update_post = cursor.fetchone()
-    # conn.commit()
     post_query = db.query(models.Post).filter(models.Post.id == id)
 
     post = post_query.first()
 
-    if post == None:
+    if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"post with id: {id} dose not exist",
+            detail=f"post with id: {id} does not exist",
         )
     if post.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perfrom requested action",
+            detail="Not authorized to perform requested action",
         )
     post_query.update(update_post.dict(), synchronize_session=False)
     db.commit()
     return post_query.first()
+
+
+@router.post("/short_videos/", status_code=status.HTTP_201_CREATED)
+def create_short_video(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: int = Depends(oauth2.get_current_user),
+):
+    if not check_file_for_safe_content(video):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inappropriate content detected.",
+        )
+
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    file_location = MEDIA_DIR / video.filename
+
+    with open(file_location, "wb+") as file_object:
+        file_object.write(video.file.read())
+
+    new_post = models.Post(
+        owner_id=current_user.id,
+        content=str(file_location),
+        is_safe_content=True,
+        is_short_video=True,
+    )
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    # إرسال إشعار بالبريد الإلكتروني عند إنشاء فيديو قصير جديد
+    send_email_notification(
+        background_tasks,
+        email_to=["recipient@example.com"],
+        subject="New Short Video Created",
+        body=f"A new short video titled '{new_post.title}' has been created.",
+    )
+
+    return {"message": "Short video uploaded successfully", "post_id": new_post.id}
+
+
+@cached(cache)
+def get_recommendations_cached(db: Session, current_user: int):
+    followed_users = (
+        db.query(models.Follow.followed_id)
+        .filter(models.Follow.follower_id == current_user.id)
+        .subquery()
+    )
+
+    recommended_posts = (
+        db.query(models.Post)
+        .filter(
+            models.Post.owner_id.in_(followed_users)
+            | (models.Post.owner_id != current_user.id)
+        )
+        .order_by(func.random())
+        .limit(10)
+        .all()
+    )
+
+    return recommended_posts
+
+
+def get_recommendations(db: Session, current_user: int):
+    # الحصول على المنشورات من المستخدمين الذين يتابعهم المستخدم
+    followed_users = (
+        db.query(models.Follow.followed_id)
+        .filter(models.Follow.follower_id == current_user.id)
+        .subquery()
+    )
+
+    # توصيات بناءً على التفاعلات السابقة
+    recommended_posts = (
+        db.query(models.Post)
+        .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
+        .outerjoin(models.Comment, models.Comment.post_id == models.Post.id)
+        .filter(
+            (models.Post.owner_id.in_(followed_users))
+            | (models.Post.owner_id != current_user.id)
+        )
+        .group_by(models.Post.id)
+        .order_by(
+            func.count(models.Vote.id).desc(), func.count(models.Comment.id).desc()
+        )
+        .limit(10)
+        .all()
+    )
+
+    return recommended_posts

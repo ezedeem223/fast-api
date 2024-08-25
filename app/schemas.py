@@ -32,6 +32,24 @@ class Post(PostBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CommentBase(BaseModel):
+    content: str
+
+
+class CommentCreate(CommentBase):
+    pass
+
+
+class Comment(CommentBase):
+    id: int
+    created_at: datetime
+    owner_id: int
+    post_id: int
+    owner: UserOut
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PostOut(BaseModel):
     Post: Post
     votes: int
@@ -61,3 +79,32 @@ class TokenData(BaseModel):
 class Vote(BaseModel):
     post_id: int
     dir: conint(le=1)
+
+
+class ReportBase(BaseModel):
+    report_reason: str
+
+
+class ReportCreate(ReportBase):
+    post_id: Optional[int] = None
+    comment_id: Optional[int] = None
+
+
+class Report(ReportBase):
+    id: int
+    created_at: datetime
+    reporter_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Enable2FAResponse(BaseModel):
+    otp_secret: str
+
+
+class Verify2FARequest(BaseModel):
+    otp: str
+
+
+class Verify2FAResponse(BaseModel):
+    message: str

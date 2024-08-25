@@ -1,0 +1,36 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: app/main.py:14
+msgid "Hello mother fukers"
+msgstr ""
+
+#: app/models.py:30
+msgid "User is not verified."
+msgstr ""
+
+#: app/routers/post.py:45
+msgid "File uploaded successfully"
+msgstr ""
+
+#: app/routers/post.py:55
+msgid "Report submitted successfully"
+msgstr ""
+
+#: app/routers/comment.py:35
+msgid "Post not found"
+msgstr ""
+
+#: app/routers/comment.py:44
+msgid "Successfully followed user"
+msgstr ""
+
+#: app/routers/auth.py:53
+msgid "Invalid Credentials"
+msgstr ""
+
+#: app/routers/auth.py:90
+msgid "Verification document uploaded and user verified successfully."
+msgstr ""

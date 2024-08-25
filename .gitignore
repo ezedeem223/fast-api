@@ -1,4 +1,101 @@
-__pycache__
-venv/
+__pycache__/
 .vercel
 alembic.ini
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+*.eggs
+dist/
+build/
+wheels/
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Environments
+*.env
+.env.*
+
+# Database
+*.sqlite3
+
+# Logs
+*.log
+*.log.*
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Keys and credentials
+config/keys/private_key.pem
+config/keys/public_key.pem
+
+# Render files
+render.yaml
+render.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.swp
+
+# Compiled files
+*.o
+*.pyc
+*.pyo
+
+# Other
+.mypy_cache/
+pylint.log
+.mypy_cache/
+
+# Specific to web frameworks
+.vscode/
+vault_client.py
