@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     mail_from: EmailStr
     mail_port: int
     mail_server: str
-    rsa_private_key_path: str = "C:/Users/kglou/Desktop/fastapi/private_key.pem"
-    rsa_public_key_path: str = "C:/Users/kglou/Desktop/fastapi/public_key.pem"
+    rsa_private_key_path: str = "/etc/secrets/private_key.pem"
+    rsa_public_key_path: str = "/etc/secrets/public_key.pem"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
