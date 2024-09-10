@@ -12,10 +12,10 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "RS256"
     access_token_expire_minutes: int
-    google_client_id: str = "default_google_client_id"
-    google_client_secret: str = "default_google_client_secret"
-    facebook_client_id: str = "default_facebook_client_id"
-    facebook_client_secret: str = "default_facebook_client_secret"
+    google_client_id: str
+    google_client_secret: str
+    facebook_client_id: str
+    facebook_client_secret: str
     mail_username: str
     mail_password: str
     mail_from: EmailStr
