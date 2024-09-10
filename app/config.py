@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr
 
@@ -21,11 +22,10 @@ class Settings(BaseSettings):
     mail_port: int
     mail_server: str
 
-    # إضافة الحقول الخاصة بمسارات مفاتيح RSA
     rsa_private_key_path: str
     rsa_public_key_path: str
 
-    # إضافة الحقول الخاصة بالمفاتيح نفسها
+    # الآن سيتم التحقق من صحة المفاتيح
     rsa_private_key: str = None
     rsa_public_key: str = None
 
@@ -33,16 +33,26 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # قراءة المفاتيح من الملفات
-        self.rsa_private_key = self._read_key_file(self.rsa_private_key_path)
-        self.rsa_public_key = self._read_key_file(self.rsa_public_key_path)
+        # إضافة تأكد من قراءة المفاتيح بشكل صحيح
+        self.rsa_private_key = self._read_key_file(self.rsa_private_key_path, "private")
+        self.rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
 
-    def _read_key_file(self, filename):
+    def _read_key_file(self, filename, key_type):
+        if not os.path.exists(filename):
+            raise ValueError(f"{key_type.capitalize()} key file not found: {filename}")
+
         try:
             with open(filename, "r") as file:
-                return file.read().strip()
-        except FileNotFoundError:
-            raise ValueError(f"Key file not found: {filename}")
+                key_data = file.read().strip()
+                if not key_data:
+                    raise ValueError(
+                        f"{key_type.capitalize()} key file is empty: {filename}"
+                    )
+                return key_data
+        except Exception as e:
+            raise ValueError(
+                f"Error reading {key_type} key file: {filename}, error: {str(e)}"
+            )
 
 
 # تحميل الإعدادات
