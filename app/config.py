@@ -1,4 +1,3 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr
 
@@ -21,13 +20,20 @@ class Settings(BaseSettings):
     mail_from: EmailStr
     mail_port: int
     mail_server: str
-    rsa_private_key_path: str = "/etc/secrets/private_key.pem"
-    rsa_public_key_path: str = "/etc/secrets/public_key.pem"
+
+    # إضافة الحقول الخاصة بمسارات مفاتيح RSA
+    rsa_private_key_path: str
+    rsa_public_key_path: str
+
+    # إضافة الحقول الخاصة بالمفاتيح نفسها
+    rsa_private_key: str = None
+    rsa_public_key: str = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # قراءة المفاتيح من الملفات
         self.rsa_private_key = self._read_key_file(self.rsa_private_key_path)
         self.rsa_public_key = self._read_key_file(self.rsa_public_key_path)
 
@@ -39,4 +45,5 @@ class Settings(BaseSettings):
             raise ValueError(f"Key file not found: {filename}")
 
 
+# تحميل الإعدادات
 settings = Settings()
