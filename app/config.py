@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     mail_from: EmailStr
     mail_port: int
     mail_server: str
-    # vault_token: str = "your_vault_token"
     rsa_private_key_path: str = "C:/Users/kglou/Desktop/fastapi/private_key.pem"
     rsa_public_key_path: str = "C:/Users/kglou/Desktop/fastapi/public_key.pem"
 
@@ -29,6 +28,9 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Print to verify values
+        print(f"Mail Username: {self.mail_username}")
+        print(f"Mail Password: {self.mail_password}")
         self.rsa_private_key = self._read_key_file(self.rsa_private_key_path)
         self.rsa_public_key = self._read_key_file(self.rsa_public_key_path)
 
