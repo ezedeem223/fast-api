@@ -1,6 +1,6 @@
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import EmailStr
+from pydantic import EmailStr, PrivateAttr
 
 
 class Settings(BaseSettings):
@@ -25,19 +25,22 @@ class Settings(BaseSettings):
     rsa_private_key_path: str
     rsa_public_key_path: str
 
-    # الآن سيتم التحقق من صحة المفاتيح
-    rsa_private_key: str = None
-    rsa_public_key: str = None
+    # تعريف الحقول كحقول خاصة
+    _rsa_private_key: str = PrivateAttr()
+    _rsa_public_key: str = PrivateAttr()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # إضافة تأكد من قراءة المفاتيح بشكل صحيح
-        self.rsa_private_key = self._read_key_file(self.rsa_private_key_path, "private")
-        self.rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
+        # قراءة المفاتيح
+        self._rsa_private_key = self._read_key_file(
+            self.rsa_private_key_path, "private"
+        )
+        self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
 
     def _read_key_file(self, filename, key_type):
+        print(f"Reading {key_type} key file from: {filename}")  # طباعة المسار للتحقق
         if not os.path.exists(filename):
             raise ValueError(f"{key_type.capitalize()} key file not found: {filename}")
 
