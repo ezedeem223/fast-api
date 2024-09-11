@@ -9,6 +9,19 @@ from .config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
+# from hvac import Client
+
+
+# Initialize Vault client
+# vault_client = Client(url="http://127.0.0.1:8200", token=settings.vault_token)
+# secrets = (
+#     vault_client.secrets.kv.v2.read_secret_version(path="fastapi")
+#     .get("data")
+#     .get("data")
+# )
+
+
+# Read private and public keys from Vault
 # قراءة المفاتيح العامة والخاصة من المسارات المحددة
 def read_key_file(file_path: str) -> str:
     try:
