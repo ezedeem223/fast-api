@@ -1,5 +1,5 @@
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from . import schemas, database, models
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, HTTPException
