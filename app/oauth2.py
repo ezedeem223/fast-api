@@ -9,9 +9,20 @@ from .config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # إعداد البيانات المطلوبة لتشفير وفك تشفير JWT باستخدام RS256
-SECRET_KEY = settings.rsa_public_key  # استخدم المفتاح العام لفك التشفير
 ALGORITHM = settings.algorithm  # تأكد من أن الخوارزمية هي RS256
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+
+
+# قراءة المفتاح العام من الملف
+def read_public_key():
+    with open(settings.rsa_public_key_path, "r") as file:
+        return file.read().strip()
+
+
+# قراءة المفتاح الخاص من الملف
+def read_private_key():
+    with open(settings.rsa_private_key_path, "r") as file:
+        return file.read().strip()
 
 
 # إنشاء رمز JWT
@@ -21,7 +32,8 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
 
     # توقيع الرمز باستخدام المفتاح الخاص
-    encoded_jwt = jwt.encode(to_encode, settings.rsa_private_key, algorithm=ALGORITHM)
+    private_key = read_private_key()
+    encoded_jwt = jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -29,7 +41,8 @@ def create_access_token(data: dict):
 def verify_access_token(token: str, credentials_exception):
     try:
         # فك التشفير باستخدام المفتاح العام
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        public_key = read_public_key()
+        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
         id: str = payload.get("user_id")
 
         if id is None:
