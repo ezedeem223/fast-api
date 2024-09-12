@@ -1,50 +1,37 @@
 from jose import JWTError, jwt
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from . import schemas, database, models
+from sqlalchemy.orm import Session
 from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 from .config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-
-def read_key_file(file_path: str) -> str:
-    try:
-        with open(file_path, "r") as key_file:
-            key_data = key_file.read().strip()
-            if not key_data:
-                raise ValueError(f"Key file is empty: {file_path}")
-            return key_data
-    except Exception as e:
-        raise ValueError(f"Error reading key file: {file_path}, error: {str(e)}")
-
-
-# تحميل المفاتيح
-PRIVATE_KEY = settings._rsa_private_key
-PUBLIC_KEY = settings._rsa_public_key
-
-ALGORITHM = settings.algorithm
+# إعداد البيانات المطلوبة لتشفير وفك تشفير JWT باستخدام RS256
+SECRET_KEY = settings.rsa_public_key  # استخدم المفتاح العام لفك التشفير
+ALGORITHM = settings.algorithm  # تأكد من أن الخوارزمية هي RS256
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
+# إنشاء رمز JWT
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
-    # استخدم المفتاح الخاص لتوقيع التوكن
-    encoded_jwt = jwt.encode(to_encode, PRIVATE_KEY, algorithm=ALGORITHM)
-
+    # توقيع الرمز باستخدام المفتاح الخاص
+    encoded_jwt = jwt.encode(to_encode, settings.rsa_private_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 
+# التحقق من صحة الرمز JWT
 def verify_access_token(token: str, credentials_exception):
     try:
-        # استخدم المفتاح العام للتحقق من التوكن
-        payload = jwt.decode(token, PUBLIC_KEY, algorithms=[ALGORITHM])
+        # فك التشفير باستخدام المفتاح العام
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        id: str = payload.get("user_id")
 
-        id: str = str(payload.get("user_id"))
         if id is None:
             raise credentials_exception
         token_data = schemas.TokenData(id=id)
@@ -54,6 +41,7 @@ def verify_access_token(token: str, credentials_exception):
     return token_data
 
 
+# الحصول على المستخدم الحالي بناءً على رمز JWT
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
 ):
@@ -63,9 +51,7 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token_data = verify_access_token(token, credentials_exception)
+    token = verify_access_token(token, credentials_exception)
+    user = db.query(models.User).filter(models.User.id == token.id).first()
 
-    user = db.query(models.User).filter(models.User.id == token_data.id).first()
-    if user is None:
-        raise credentials_exception
     return user
