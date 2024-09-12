@@ -15,13 +15,20 @@ jobs:
       SECRET_KEY: ${{secrets.SECRET_KEY}}
       ALGORITHM: ${{secrets.ALGORITHM}}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${{secrets.ACCESS_TOKEN_EXPIRE_MINUTES}}
+      MAIL_USERNAME: ${{secrets.MAIL_USERNAME}}
+      MAIL_PASSWORD: ${{secrets.MAIL_PASSWORD}}
+      MAIL_FROM: ${{secrets.MAIL_FROM}}
+      MAIL_SERVER: ${{secrets.MAIL_SERVER}}
+      MAIL_PORT: ${{secrets.MAIL_PORT}}
+      RSA_PRIVATE_KEY_PATH: ${{secrets.RSA_PRIVATE_KEY_PATH}}
+      RSA_PUBLIC_KEY_PATH: ${{secrets.RSA_PUBLIC_KEY_PATH}}
 
     services:
       postgres:
         image: postgres
         env:
           POSTGRES_PASSWORD: ${{secrets.DATABASE_PASSWORD}}
-          POSTGRES_DB: ${{secrets.DATABASE_NAME}}_test
+          POSTGRES_DB: ${{secrets.DATABASE_NAME}}
         ports:
           - 5432:5432
         options: >-
