@@ -38,13 +38,8 @@ class Settings(BaseSettings):
             self.rsa_private_key_path, "private"
         )
         self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
-        # طباعة القيم للتحقق
-        print(f"Algorithm: {self.algorithm}")
-        print(f"Private Key Path: {self.rsa_private_key_path}")
-        print(f"Public Key Path: {self.rsa_public_key_path}")
 
     def _read_key_file(self, filename, key_type):
-        print(f"Reading {key_type} key file from: {filename}")  # طباعة المسار للتحقق
         if not os.path.exists(filename):
             raise ValueError(f"{key_type.capitalize()} key file not found: {filename}")
 

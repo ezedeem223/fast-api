@@ -23,20 +23,6 @@ from .notifications import (
     send_real_time_notification,
 )
 
-# from hvac import Client
-
-# Initialize Vault client
-# vault_client = Client(url="http://127.0.0.1:8200", token=settings.vault_token)
-# secrets = (
-#     vault_client.secrets.kv.v2.read_secret_version(path="fastapi")
-#     .get("data")
-#     .get("data")
-# )
-
-# Update settings with secrets from Vault
-# settings.database_password = secrets["DATABASE_PASSWORD"]
-# settings.secret_key = secrets["SECRET_KEY"]
-
 app = FastAPI()
 
 # إعدادات CORS

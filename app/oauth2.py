@@ -15,15 +15,14 @@ def read_key_file(file_path: str) -> str:
             key_data = key_file.read().strip()
             if not key_data:
                 raise ValueError(f"Key file is empty: {file_path}")
-            print(f"Read key file from: {file_path}")  # تحقق من قراءة الملف
             return key_data
     except Exception as e:
         raise ValueError(f"Error reading key file: {file_path}, error: {str(e)}")
 
 
 # تحميل المفاتيح
-PRIVATE_KEY = read_key_file(settings.rsa_private_key_path)
-PUBLIC_KEY = read_key_file(settings.rsa_public_key_path)
+PRIVATE_KEY = settings._rsa_private_key
+PUBLIC_KEY = settings._rsa_public_key
 
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
@@ -60,7 +59,7 @@ def get_current_user(
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=f"Could not validate credentials",
+        detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
