@@ -16,16 +16,16 @@ class Post(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     user_id = Column(Integer, ForeignKey("users.id"))
-
-    __table_args__ = (Index("idx_title_user", "title", "user_id"),)
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
-    owner = relationship("User")
+    __table_args__ = (Index("idx_title_user", "title", "user_id"),)
+
+    # Define relationships with explicit join conditions
+    owner = relationship("User", primaryjoin="Post.owner_id == User.id")
 
     is_safe_content = Column(Boolean, default=True)
-
     is_short_video = Column(Boolean, default=False)
 
 
@@ -44,8 +44,9 @@ class Comment(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    owner = relationship("User")
-    post = relationship("Post")
+    # Define relationships with explicit join conditions
+    owner = relationship("User", primaryjoin="Comment.owner_id == User.id")
+    post = relationship("Post", primaryjoin="Comment.post_id == Post.id")
 
 
 class User(Base):
@@ -59,7 +60,7 @@ class User(Base):
     )
     phone_number = Column(String)
 
-    # الحقول الجديدة للتحقق
+    # New fields for verification
     is_verified = Column(Boolean, default=False)
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
@@ -91,12 +92,10 @@ class Report(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    reporter = relationship("User")
-    post = relationship("Post")
-    comment = relationship("Comment")
-
-
-# في ملف models.py
+    # Define relationships with explicit join conditions
+    reporter = relationship("User", primaryjoin="Report.reporter_id == User.id")
+    post = relationship("Post", primaryjoin="Report.post_id == Post.id")
+    comment = relationship("Comment", primaryjoin="Report.comment_id == Comment.id")
 
 
 class Follow(Base):
@@ -111,6 +110,10 @@ class Follow(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
+    # Define relationships with explicit join conditions
+    follower = relationship("User", primaryjoin="Follow.follower_id == User.id")
+    followed = relationship("User", primaryjoin="Follow.followed_id == User.id")
+
 
 class Message(Base):
     __tablename__ = "messages"
@@ -122,6 +125,10 @@ class Message(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
+    # Define relationships with explicit join conditions
+    sender = relationship("User", primaryjoin="Message.sender_id == User.id")
+    receiver = relationship("User", primaryjoin="Message.receiver_id == User.id")
+
 
 class Community(Base):
     __tablename__ = "communities"
@@ -132,6 +139,9 @@ class Community(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+
+    # Define relationship with explicit join condition
+    owner = relationship("User", primaryjoin="Community.owner_id == User.id")
 
 
 class Block(Base):
@@ -145,3 +155,7 @@ class Block(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
+
+    # Define relationships with explicit join conditions
+    follower = relationship("User", primaryjoin="Block.follower_id == User.id")
+    blocked = relationship("User", primaryjoin="Block.blocked_id == User.id")
