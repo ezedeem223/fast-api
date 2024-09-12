@@ -9,26 +9,13 @@ from .config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
-# from hvac import Client
-
-
-# Initialize Vault client
-# vault_client = Client(url="http://127.0.0.1:8200", token=settings.vault_token)
-# secrets = (
-#     vault_client.secrets.kv.v2.read_secret_version(path="fastapi")
-#     .get("data")
-#     .get("data")
-# )
-
-
-# Read private and public keys from Vault
-# قراءة المفاتيح العامة والخاصة من المسارات المحددة
 def read_key_file(file_path: str) -> str:
     try:
         with open(file_path, "r") as key_file:
             key_data = key_file.read().strip()
             if not key_data:
                 raise ValueError(f"Key file is empty: {file_path}")
+            print(f"Read key file from: {file_path}")  # تحقق من قراءة الملف
             return key_data
     except Exception as e:
         raise ValueError(f"Error reading key file: {file_path}, error: {str(e)}")
