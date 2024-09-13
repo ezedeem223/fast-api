@@ -4,7 +4,7 @@ from pydantic import EmailStr
 from typing import List
 from .config import settings
 
-# إعدادات البريد الإلكتروني
+# Email configuration
 conf = ConnectionConfig(
     MAIL_USERNAME=settings.mail_username,
     MAIL_PASSWORD=settings.mail_password,
@@ -19,11 +19,11 @@ conf = ConnectionConfig(
 
 
 def send_email_notification(
-    background_tasks: BackgroundTasks, to: List[str], subject: str, body: str
+    background_tasks: BackgroundTasks, to: List[EmailStr], subject: str, body: str
 ):
     message = MessageSchema(
         subject=subject,
-        recipients=email_to,
+        recipients=to,  # Corrected: 'email_to' to 'to'
         body=body,
         subtype="html",
     )
@@ -31,7 +31,7 @@ def send_email_notification(
     background_tasks.add_task(fm.send_message, message)
 
 
-# إدارة اتصالات WebSocket
+# WebSocket connection management
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -51,11 +51,10 @@ class ConnectionManager:
             await connection.send_text(message)
 
 
-# إنشاء مثيل لـ ConnectionManager لاستخدامه في أجزاء المشروع الأخرى
+# Instance of ConnectionManager for usage across the project
 manager = ConnectionManager()
 
 
-# تعريف دالة send_real_time_notification
+# Define real-time notification function
 async def send_real_time_notification(websocket: WebSocket, user_id: int, data: str):
-    # مثال على كيفية إرسال إشعار في الوقت الحقيقي
     await manager.send_personal_message(f"User {user_id} says: {data}", websocket)

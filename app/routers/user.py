@@ -1,6 +1,5 @@
 from fastapi import (
     FastAPI,
-    responses,
     Response,
     status,
     HTTPException,
@@ -23,7 +22,7 @@ def create_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
 ):
-    # hash the password - user.password
+    # Hash the password - user.password
     hashed_password = utils.hash(user.password)
     user.password = hashed_password
 
@@ -32,10 +31,10 @@ def create_user(
     db.commit()
     db.refresh(new_user)
 
-    # إرسال إشعار بالبريد الإلكتروني عند إنشاء مستخدم جديد
+    # Send email notification upon user creation
     send_email_notification(
         background_tasks,
-        email_to=["recipient@example.com"],  # استخدام email_to بدلاً من to
+        to=[new_user.email],  # Corrected: 'email_to' to 'to'
         subject="New User Created",
         body=f"A new user with email {new_user.email} has been created.",
     )
@@ -61,29 +60,29 @@ def get_user(
 def verify_user(
     background_tasks: BackgroundTasks,
     file: UploadFile,
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
-    # تحقق من نوع الملف
+    # Verify file type
     if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
-    # احفظ الملف على السيرفر
+    # Save the file to the server
     file_location = f"static/{file.filename}"
     with open(file_location, "wb+") as file_object:
         file_object.write(file.file.read())
 
-    # تحديث قاعدة البيانات
+    # Update database with verification document
     current_user.verification_document = file_location
     current_user.is_verified = True
     db.commit()
 
-    # إرسال إشعار بالبريد الإلكتروني عند تحميل وثيقة التحقق
+    # Send email notification upon verification document upload
     send_email_notification(
         background_tasks,
-        to=["recipient@example.com"],  # تغيير من email_to إلى to
-        subject="New User Created",
-        body=f"A new user with email {new_user.email} has been created.",
+        to=[current_user.email],  # Corrected: 'email_to' to 'to'
+        subject="Verification Completed",
+        body=f"Your account has been verified successfully.",
     )
 
     return {"info": "Verification document uploaded and user verified successfully."}
