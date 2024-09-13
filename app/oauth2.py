@@ -50,8 +50,13 @@ def create_access_token(data: dict):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
-    # تأكد من أن user_id هو عدد صحيح
-    to_encode["user_id"] = int(to_encode["user_id"])
+    # Ensure that user_id is an integer
+    if "user_id" in to_encode:
+        try:
+            to_encode["user_id"] = int(to_encode["user_id"])
+        except ValueError:
+            logger.error(f"Invalid user_id format: {to_encode['user_id']}")
+            raise ValueError("Invalid user_id format")
 
     try:
         private_key = read_private_key()
@@ -67,19 +72,20 @@ def verify_access_token(token: str, credentials_exception):
     try:
         public_key = read_public_key()
         logger.info(f"Public Key (first 50 chars): {public_key[:50]}...")
-        logger.info(f"Token to verify: {token[:20]}...")  # لا تسجل الرمز كاملاً
+        logger.info(f"Token to verify: {token[:20]}...")
 
         payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
         logger.debug(f"Decoded Payload: {payload}")
 
-        try:
-            user_id: int = int(payload.get("user_id"))
-        except (TypeError, ValueError):
-            logger.error(f"Invalid user_id in token payload: {payload.get('user_id')}")
-            raise credentials_exception
-
+        user_id = payload.get("user_id")
         if user_id is None:
             logger.warning("User ID not found in token payload")
+            raise credentials_exception
+
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            logger.error(f"Invalid user_id in token payload: {user_id}")
             raise credentials_exception
 
         logger.debug(f"Extracted user_id: {user_id}")
