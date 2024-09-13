@@ -23,11 +23,11 @@ def send_email_notification(
 ):
     message = MessageSchema(
         subject=subject,
-        recipients=to,  # Corrected: 'email_to' to 'to'
+        recipients=to,  # Corrected 'email_to' to 'to'
         body=body,
-        subtype="html",
+        subtype="html",  # Ensure the email is sent as HTML
     )
-    fm = FastMail(conf)
+    fm = FastMail(conf)  # Make sure 'conf' is properly configured with email settings
     background_tasks.add_task(fm.send_message, message)
 
 
