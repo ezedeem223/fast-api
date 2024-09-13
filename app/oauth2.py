@@ -6,6 +6,7 @@ from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
+from typing import Optional
 
 # إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +17,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # إعداد البيانات المطلوبة لتشفير وفك تشفير JWT باستخدام RS256
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+
+
+# تعريف نموذج TokenData
+class TokenData(schemas.BaseModel):
+    id: Optional[int] = None
 
 
 # قراءة المفتاح العام من الملف
@@ -44,6 +50,9 @@ def create_access_token(data: dict):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
+    # تأكد من أن user_id هو عدد صحيح
+    to_encode["user_id"] = int(to_encode["user_id"])
+
     try:
         private_key = read_private_key()
         encoded_jwt = jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
@@ -58,15 +67,23 @@ def verify_access_token(token: str, credentials_exception):
     try:
         public_key = read_public_key()
         logger.info(f"Public Key (first 50 chars): {public_key[:50]}...")
-        logger.info(f"Token to verify: {token[:20]}...")  # Don't log the full token
-        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
-        logger.info(f"Decoded Payload: {payload}")
+        logger.info(f"Token to verify: {token[:20]}...")  # لا تسجل الرمز كاملاً
 
-        id: str = payload.get("user_id")
-        if id is None:
+        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
+        logger.debug(f"Decoded Payload: {payload}")
+
+        try:
+            user_id: int = int(payload.get("user_id"))
+        except (TypeError, ValueError):
+            logger.error(f"Invalid user_id in token payload: {payload.get('user_id')}")
+            raise credentials_exception
+
+        if user_id is None:
             logger.warning("User ID not found in token payload")
             raise credentials_exception
-        token_data = schemas.TokenData(id=id)
+
+        logger.debug(f"Extracted user_id: {user_id}")
+        token_data = TokenData(id=user_id)
         return token_data
     except JWTError as e:
         logger.error(f"JWT Error: {str(e)}")
