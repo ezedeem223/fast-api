@@ -1,17 +1,21 @@
-# tests/test_auth.py
-
 import pytest
 from jose import jwt
+from fastapi import HTTPException
 from app import schemas
 from app.config import settings
-from app.oauth2 import create_access_token
+from app.oauth2 import create_access_token, verify_access_token
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def test_authentication():
     user_id = 1
     token = create_access_token({"user_id": user_id})
     token_data = verify_access_token(token, HTTPException(status_code=401))
-    assert token_data.id == user_id, f"Expected user_id {user_id}, got {token_data.id}"
+    assert (
+        token_data.user_id == user_id
+    ), f"Expected user_id {user_id}, got {token_data.user_id}"
     logger.info("Authentication test passed successfully")
 
 

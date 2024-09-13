@@ -1,11 +1,9 @@
 from fastapi import (
-    FastAPI,
-    responses,
+    APIRouter,
     Response,
     status,
     HTTPException,
     Depends,
-    APIRouter,
     BackgroundTasks,
 )
 from sqlalchemy.orm import Session
@@ -21,6 +19,7 @@ def vote(
     db: Session = Depends(database.get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
+    # Check if the post exists
     post = db.query(models.Post).filter(models.Post.id == vote.post_id).first()
     if not post:
         raise HTTPException(
@@ -28,43 +27,47 @@ def vote(
             detail=f"Post with id: {vote.post_id} does not exist",
         )
 
+    # Query for an existing vote
     vote_query = db.query(models.Vote).filter(
         models.Vote.post_id == vote.post_id, models.Vote.user_id == current_user.id
     )
-
     found_vote = vote_query.first()
 
     if vote.dir == 1:
         if found_vote:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"user {current_user.id} has already voted on post {vote.post_id}",
+                detail=f"User {current_user.id} has already voted on post {vote.post_id}",
             )
+        # Create a new vote
         new_vote = models.Vote(post_id=vote.post_id, user_id=current_user.id)
         db.add(new_vote)
         db.commit()
 
-        # Sending a notification for a new vote
+        # Send notification for new vote
         background_tasks.add_task(
-            notifications.send_email_notification,  # Changed from send_notification to send_email_notification
-            f"User {current_user.id} voted on your post",
-            post.owner_id,
+            notifications.send_email_notification,
+            subject="New Vote on Your Post",
+            body=f"User {current_user.id} voted on your post",
+            recipient_id=post.owner_id,
         )
 
-        return {"message": "successfully added vote"}
+        return {"message": "Successfully added vote"}
     else:
         if not found_vote:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Vote does not exist"
             )
+        # Remove the vote
         vote_query.delete(synchronize_session=False)
         db.commit()
 
-        # Sending a notification for vote deletion
+        # Send notification for vote removal
         background_tasks.add_task(
-            notifications.send_email_notification,  # Changed from send_notification to send_email_notification
-            f"User {current_user.id} removed their vote from your post",
-            post.owner_id,
+            notifications.send_email_notification,
+            subject="Vote Removed from Your Post",
+            body=f"User {current_user.id} removed their vote from your post",
+            recipient_id=post.owner_id,
         )
 
-        return {"message": "successfully deleted vote"}
+        return {"message": "Successfully deleted vote"}
