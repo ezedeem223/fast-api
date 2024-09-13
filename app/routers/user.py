@@ -35,7 +35,7 @@ def create_user(
     # إرسال إشعار بالبريد الإلكتروني عند إنشاء مستخدم جديد
     send_email_notification(
         background_tasks,
-        to=["recipient@example.com"],  # تم تغيير email_to إلى to
+        email_to=["recipient@example.com"],  # استخدام email_to بدلاً من to
         subject="New User Created",
         body=f"A new user with email {new_user.email} has been created.",
     )
@@ -81,7 +81,7 @@ def verify_user(
     # إرسال إشعار بالبريد الإلكتروني عند تحميل وثيقة التحقق
     send_email_notification(
         background_tasks,
-        to=["recipient@example.com"],  # تم تغيير email_to إلى to
+        email_to=["recipient@example.com"],  # استخدام email_to بدلاً من to
         subject="User Verified",
         body=f"User with email {current_user.email} has been verified.",
     )

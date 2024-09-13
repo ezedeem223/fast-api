@@ -18,7 +18,9 @@ conf = ConnectionConfig(
 )
 
 
-def send_email_notification(subject: str, body: str, recipient_id: int):
+def send_email_notification(
+    background_tasks: BackgroundTasks, to: List[str], subject: str, body: str
+):
     message = MessageSchema(
         subject=subject,
         recipients=email_to,
