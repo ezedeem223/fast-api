@@ -58,12 +58,8 @@ def verify_access_token(token: str, credentials_exception):
     try:
         public_key = read_public_key()
         logger.info(f"Public Key (first 50 chars): {public_key[:50]}...")
-        payload = jwt.decode(
-            token,
-            public_key,
-            algorithms=[ALGORITHM],
-            options={"verify_signature": True},
-        )
+        logger.info(f"Token to verify: {token[:20]}...")  # Don't log the full token
+        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
         logger.info(f"Decoded Payload: {payload}")
 
         id: str = payload.get("user_id")
