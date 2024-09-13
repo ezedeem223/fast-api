@@ -46,7 +46,7 @@ def vote(
 
         # Sending a notification for a new vote
         background_tasks.add_task(
-            notifications.send_notification,
+            notifications.send_email_notification,  # Changed from send_notification to send_email_notification
             f"User {current_user.id} voted on your post",
             post.owner_id,
         )
@@ -62,7 +62,7 @@ def vote(
 
         # Sending a notification for vote deletion
         background_tasks.add_task(
-            notifications.send_notification,
+            notifications.send_email_notification,  # Changed from send_notification to send_email_notification
             f"User {current_user.id} removed their vote from your post",
             post.owner_id,
         )

@@ -4,6 +4,7 @@ import pytest
 from jose import jwt
 from app import schemas
 from app.config import settings
+from app.oauth2 import create_access_token
 
 
 def test_authentication():
