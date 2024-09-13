@@ -6,7 +6,7 @@ from typing import Optional, List
 class PostBase(BaseModel):
     title: str
     content: str
-    published: bool = True
+    published: bool = True  # Corrected formatting
 
 
 class PostCreate(PostBase):
@@ -136,7 +136,7 @@ class MessageOut(BaseModel):
         orm_mode = True
 
 
-# إضافة نموذج CommunityOut
+# Community models
 class CommunityBase(BaseModel):
     name: str
     description: Optional[str] = None
