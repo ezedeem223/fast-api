@@ -6,20 +6,20 @@ from fastapi import (
     HTTPException,
     Depends,
     APIRouter,
-    BackgroundTasks,  # استيراد BackgroundTasks لإدارة المهام الخلفية
-    UploadFile,  # تأكد من استيراد UploadFile لأنك تستخدمه في مسار التحقق
+    BackgroundTasks,
+    UploadFile,
 )
 from sqlalchemy.orm import Session
 from .. import models, schemas, utils, oauth2
 from ..database import get_db
-from ..notifications import send_email_notification  # تأكد من استيراد وظيفة الإشعارات
+from ..notifications import send_email_notification
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
 def create_user(
-    background_tasks: BackgroundTasks,  # إضافة BackgroundTasks كمعامل
+    background_tasks: BackgroundTasks,
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
 ):
@@ -35,7 +35,7 @@ def create_user(
     # إرسال إشعار بالبريد الإلكتروني عند إنشاء مستخدم جديد
     send_email_notification(
         background_tasks,
-        email_to=["recipient@example.com"],
+        to=["recipient@example.com"],  # تم تغيير email_to إلى to
         subject="New User Created",
         body=f"A new user with email {new_user.email} has been created.",
     )
@@ -59,7 +59,7 @@ def get_user(
 
 @router.post("/verify")
 def verify_user(
-    background_tasks: BackgroundTasks,  # إضافة BackgroundTasks كمعامل
+    background_tasks: BackgroundTasks,
     file: UploadFile,
     current_user: int = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
@@ -75,13 +75,13 @@ def verify_user(
 
     # تحديث قاعدة البيانات
     current_user.verification_document = file_location
-    current_user.is_verified = True  # تحديث حالة التحقق للمستخدم إلى "موثق"
+    current_user.is_verified = True
     db.commit()
 
     # إرسال إشعار بالبريد الإلكتروني عند تحميل وثيقة التحقق
     send_email_notification(
         background_tasks,
-        email_to=["recipient@example.com"],
+        to=["recipient@example.com"],  # تم تغيير email_to إلى to
         subject="User Verified",
         body=f"User with email {current_user.email} has been verified.",
     )
