@@ -13,10 +13,7 @@ def test_authentication():
     user_id = 1
     token = create_access_token({"user_id": user_id})
     token_data = verify_access_token(token, HTTPException(status_code=401))
-    assert (
-        token_data.user_id == user_id
-    ), f"Expected user_id {user_id}, got {token_data.user_id}"
-    logger.info("Authentication test passed successfully")
+    assert token_data.id == user_id, f"Expected user_id {user_id}, got {token_data.id}"
 
 
 # def test_unauthorized_access(client):
