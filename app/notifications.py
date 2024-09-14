@@ -18,14 +18,11 @@ conf = ConnectionConfig(
 )
 
 
-def send_email_notification(
-    background_tasks: BackgroundTasks, to: List[EmailStr], subject: str, body: str
-):
+def send_email_notification(to: List[EmailStr], subject: str, body: str):
     """
     Send an email notification in the background.
 
     Args:
-        background_tasks: FastAPI's BackgroundTasks instance.
         to: List of recipient email addresses.
         subject: Subject of the email.
         body: Body of the email.
@@ -37,7 +34,22 @@ def send_email_notification(
         subtype="html",
     )
     fm = FastMail(conf)
-    background_tasks.add_task(fm.send_message, message)
+    fm.send_message(message)
+
+
+def schedule_email_notification(
+    background_tasks: BackgroundTasks, to: List[EmailStr], subject: str, body: str
+):
+    """
+    Schedule the email notification to be sent in the background.
+
+    Args:
+        background_tasks: FastAPI's BackgroundTasks instance.
+        to: List of recipient email addresses.
+        subject: Subject of the email.
+        body: Body of the email.
+    """
+    background_tasks.add_task(send_email_notification, to, subject, body)
 
 
 # WebSocket connection management
