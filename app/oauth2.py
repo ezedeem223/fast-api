@@ -21,7 +21,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 # تعريف نموذج TokenData
 class TokenData(schemas.BaseModel):
-    id: Optional[int] = None
+    user_id: Optional[int] = None
 
 
 # قراءة المفتاح العام من الملف
