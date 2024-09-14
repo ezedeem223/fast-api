@@ -5,7 +5,7 @@ from app import models
 @pytest.fixture()
 def test_vote(test_posts, session, test_user):
     # إضافة تصويت جديد إلى قاعدة البيانات
-    new_vote = models.Vote(post_id=test_posts[3].id, user_id=test_user["id"])
+    new_vote = models.Vote(post_id=test_posts[3].id, user_id=test_user.id)
     session.add(new_vote)
     session.commit()
     return new_vote  # أضف الإرجاع لتسهيل الاختبار
@@ -21,10 +21,18 @@ def test_vote_on_post(authorized_client, test_posts):
     # التحقق من تفاصيل الاستجابة إذا كانت تحتوي على معلومات
     response_json = res.json()
     assert "message" in response_json
-    assert response_json["message"] == "Vote added successfully"
+    assert response_json["message"] == "Successfully added vote"
 
     # التحقق من أن التصويت قد تم تسجيله في قاعدة البيانات
     # يمكنك إضافة اختبار للتحقق من قاعدة البيانات إذا لزم الأمر
+    vote_in_db = (
+        session.query(models.Vote)
+        .filter(
+            models.Vote.post_id == test_posts[3].id, models.Vote.user_id == test_user.id
+        )
+        .first()
+    )
+    assert vote_in_db is not None
 
 
 # def test_vote_twice_post(authorized_client, test_posts, test_vote):
