@@ -6,7 +6,6 @@ from .routers import (
     post,
     user,
     auth,
-    vote,
     comment,
     follow,
     block,
@@ -17,6 +16,7 @@ from .routers import (
     community,
     p2fa,
 )
+from .routers.vote import router as vote_router
 from .config import settings
 from .notifications import (
     ConnectionManager,
@@ -25,11 +25,11 @@ from .notifications import (
 
 app = FastAPI()
 
-# إعدادات CORS
+# CORS settings
 origins = [
     "https://example.com",
     "https://www.example.com",
-    # أضف هنا النطاقات الموثوقة فقط
+    # Add your trusted domains here
 ]
 
 app.add_middleware(
@@ -43,7 +43,7 @@ app.add_middleware(
 app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
-app.include_router(vote.router)
+app.include_router(vote_router)
 app.include_router(comment.router)
 app.include_router(follow.router)
 app.include_router(block.router)
@@ -68,7 +68,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     try:
         while True:
             data = await websocket.receive_text()
-            # تأكد من أن البيانات صحيحة قبل إرسال الإشعارات
             if not data:
                 raise ValueError("Received empty message")
             await send_real_time_notification(websocket, user_id, data)
@@ -76,6 +75,5 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
         await manager.disconnect(websocket)
         print(f"Client #{user_id} disconnected")
     except Exception as e:
-        # قم بتسجيل الأخطاء المحتملة
         print(f"An error occurred: {e}")
         await manager.disconnect(websocket)
