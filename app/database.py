@@ -1,8 +1,5 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import time
 from .config import settings
 
 # تكوين عنوان الاتصال بقاعدة البيانات
@@ -13,7 +10,6 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_size=10,  # عدد الاتصالات في المسبح
     max_overflow=20,  # عدد الاتصالات الإضافية التي يمكن إنشاؤها
-    timeout=90,  # مهلة الاتصال
 )
 
 # تكوين الجلسة المحلية
