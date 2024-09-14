@@ -45,9 +45,9 @@ def vote(
         db.commit()
 
         # Send notification for new vote
-        background_tasks.add_task(
-            notifications.send_email_notification,
-            to=[post.owner.email],  # Updated to use post owner's email
+        notifications.schedule_email_notification(
+            background_tasks,
+            to=[post.owner.email],
             subject="New Vote on Your Post",
             body=f"User {current_user.id} voted on your post.",
         )
@@ -63,9 +63,9 @@ def vote(
         db.commit()
 
         # Send notification for vote removal
-        background_tasks.add_task(
-            notifications.send_email_notification,
-            to=[post.owner.email],  # Updated to use post owner's email
+        notifications.schedule_email_notification(
+            background_tasks,
+            to=[post.owner.email],
             subject="Vote Removed from Your Post",
             body=f"User {current_user.id} removed their vote from your post.",
         )
