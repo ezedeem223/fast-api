@@ -7,7 +7,13 @@ from app.config import settings
 from app.database import get_db, Base
 
 # إعداد URL للاتصال بقاعدة البيانات
-SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}_test"
+SQLALCHEMY_DATABASE_URL = (
+    f"postgresql://{settings.database_username}:"
+    f"{settings.database_password}@"
+    f"{settings.database_hostname}:"
+    f"{settings.database_port}/"
+    f"{settings.database_name}_test"
+)
 
 # إنشاء محرك الاتصال بقاعدة البيانات
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
@@ -16,8 +22,11 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@pytest.fixture()
+@pytest.fixture(
+    scope="function"
+)  # تغيير النطاق إلى "function" لضمان تنظيف القاعدة بين الاختبارات
 def session():
+    # إعادة بناء قاعدة البيانات للاختبارات
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -27,8 +36,11 @@ def session():
         db.close()
 
 
-@pytest.fixture()
+@pytest.fixture(
+    scope="function"
+)  # تغيير النطاق إلى "function" لضمان عدم تداخل الاختبارات
 def client(session):
+    # تجاوز دالة get_db لرجوع الجلسة الاختبارية
     def override_get_db():
         try:
             yield session

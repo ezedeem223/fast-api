@@ -21,9 +21,11 @@ def test_authentication():
                 status_code=401, detail="Invalid credentials"
             ),
         )
+        # تحقق من أن token_data يحتوي على user_id
         assert (
-            token_data.user_id == user_id
-        ), f"Expected user_id {user_id}, got {token_data.user_id}"
+            token_data.id
+            == user_id  # استخدم 'id' بدلاً من 'user_id' إذا كانت البنية هكذا
+        ), f"Expected user_id {user_id}, got {token_data.id}"
     except HTTPException as e:
         logger.error(f"Authentication failed with error: {e.detail}")
         assert False, "Token verification failed"
