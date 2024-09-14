@@ -29,6 +29,9 @@ class Post(Base):
     comments = relationship(
         "Comment", primaryjoin="Post.id == Comment.post_id", back_populates="post"
     )
+    reports = relationship(
+        "Report", primaryjoin="Post.id == Report.post_id", back_populates="post"
+    )
 
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)

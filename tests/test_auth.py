@@ -22,8 +22,8 @@ def test_authentication():
             ),
         )
         assert (
-            token_data["user_id"] == user_id
-        ), f"Expected user_id {user_id}, got {token_data['user_id']}"
+            token_data.user_id == user_id
+        ), f"Expected user_id {user_id}, got {token_data.user_id}"
     except HTTPException as e:
         logger.error(f"Authentication failed with error: {e.detail}")
         assert False, "Token verification failed"
