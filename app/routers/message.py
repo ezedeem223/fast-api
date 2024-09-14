@@ -24,7 +24,7 @@ def send_message(
     message: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = Depends(),
+    background_tasks: BackgroundTasks = BackgroundTasks(),  # تعديل هنا
 ):
     new_message = models.Message(
         sender_id=current_user.id, receiver_id=recipient_id, content=message
@@ -34,8 +34,8 @@ def send_message(
     db.refresh(new_message)
 
     # إرسال إشعار للمستلم
-    notifications.send_notification(
-        background_tasks,
+    background_tasks.add_task(
+        notifications.send_notification,
         user_id=recipient_id,
         message=f"You have received a new message from {current_user.email}.",
     )
@@ -79,7 +79,7 @@ def send_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = Depends(),
+    background_tasks: BackgroundTasks = BackgroundTasks(),  # تعديل هنا
 ):
     # إنشاء مسار الملف المؤقت
     file_location = f"static/messages/{file.filename}"
@@ -106,8 +106,8 @@ def send_file(
     db.refresh(new_message)
 
     # إرسال إشعار للمستلم
-    notifications.send_notification(
-        background_tasks,
+    background_tasks.add_task(
+        notifications.send_notification,
         user_id=recipient_id,
         message=f"You have received a file from {current_user.email}.",
     )
