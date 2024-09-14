@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         )
         self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
 
-    def _read_key_file(self, filename, key_type):
+    def _read_key_file(self, filename: str, key_type: str) -> str:
         if not os.path.exists(filename):
             raise ValueError(f"{key_type.capitalize()} key file not found: {filename}")
 
@@ -51,9 +51,13 @@ class Settings(BaseSettings):
                         f"{key_type.capitalize()} key file is empty: {filename}"
                     )
                 return key_data
-        except Exception as e:
+        except IOError as e:
             raise ValueError(
                 f"Error reading {key_type} key file: {filename}, error: {str(e)}"
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Unexpected error reading {key_type} key file: {filename}, error: {str(e)}"
             )
 
 

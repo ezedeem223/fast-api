@@ -9,11 +9,25 @@ router = APIRouter(prefix="/block", tags=["Block"])
 def block_user(
     user_id: int,
     db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot block yourself"
+        )
+
+    # تحقق مما إذا كان المستخدم محظورًا بالفعل
+    existing_block = (
+        db.query(models.Block)
+        .filter(
+            models.Block.follower_id == current_user.id,
+            models.Block.blocked_id == user_id,
+        )
+        .first()
+    )
+    if existing_block:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User is already blocked"
         )
 
     block = models.Block(follower_id=current_user.id, blocked_id=user_id)
@@ -27,7 +41,7 @@ def block_user(
 def unblock_user(
     user_id: int,
     db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     block = (
         db.query(models.Block)

@@ -1,14 +1,12 @@
 from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.config import settings
-from app.database import get_db
-from app.database import Base
+from app.database import get_db, Base
 from app.oauth2 import create_access_token
 from app import models
-from alembic import command
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}_test"
 
@@ -20,7 +18,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 
 @pytest.fixture()
-def session():  # تعديل الاسم هنا من Session إلى session
+def session():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -31,10 +29,10 @@ def session():  # تعديل الاسم هنا من Session إلى session
 
 
 @pytest.fixture()
-def client(session):  # تعديل الاسم هنا من Session إلى session
+def client(session):
     def override_get_db():
         try:
-            yield session  # تعديل الاسم هنا من Session إلى session
+            yield session
         finally:
             session.close()
 
@@ -78,9 +76,7 @@ def authorized_client(client, token):
 
 
 @pytest.fixture
-def test_posts(
-    test_user, session, test_user2
-):  # تعديل الاسم هنا من Session إلى session
+def test_posts(test_user, session, test_user2):
     posts_data = [
         {
             "title": "first title",

@@ -19,16 +19,14 @@ from ..notifications import send_email_notification, manager
 from cachetools import cached, TTLCache
 import os
 from pathlib import Path
-import requests  # لإرسال الطلبات إلى API الشبكات الاجتماعية
+import requests
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
-# إنشاء ذاكرة مؤقتة بتوقيت انتهاء صلاحية (مثلاً 60 ثانية)
 cache = TTLCache(maxsize=100, ttl=60)
 
-MEDIA_DIR = Path("static/media")  # مسار حفظ الوسائط المتعددة
+MEDIA_DIR = Path("static/media")
 
-# إعداد بيانات الوصول إلى API الشبكات الاجتماعية (تويتر وفيسبوك)
 TWITTER_API_URL = "https://api.twitter.com/2/tweets"
 TWITTER_BEARER_TOKEN = "YOUR_TWITTER_BEARER_TOKEN"
 
@@ -107,10 +105,10 @@ def create_posts(
 
     # إرسال إشعار بالبريد الإلكتروني عند إنشاء منشور جديد
     send_email_notification(
-        background_tasks,
-        email_to=["recipient@example.com"],
+        background_tasks=background_tasks,
+        to=[current_user.email],  # استخدام البريد الإلكتروني للمستخدم الحالي
         subject="New Post Created",
-        body=f"A new post titled '{new_post.title}' has been created.",
+        body=f"Your new post titled '{new_post.title}' has been created successfully.",
     )
     background_tasks.add_task(manager.broadcast, f"New post created: {new_post.title}")
 
@@ -135,7 +133,6 @@ def upload_file(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
         )
 
-    # إنشاء مسار الملف والتحقق من وجود المجلد
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     file_location = MEDIA_DIR / file.filename
 
@@ -270,10 +267,10 @@ def create_short_video(
 
     # إرسال إشعار بالبريد الإلكتروني عند إنشاء فيديو قصير جديد
     send_email_notification(
-        background_tasks,
-        email_to=["recipient@example.com"],
+        background_tasks=background_tasks,
+        to=[current_user.email],  # استخدام البريد الإلكتروني للمستخدم الحالي
         subject="New Short Video Created",
-        body=f"A new short video titled '{new_post.title}' has been created.",
+        body=f"Your new short video titled '{new_post.title}' has been created successfully.",
     )
 
     return {"message": "Short video uploaded successfully", "post_id": new_post.id}
@@ -302,28 +299,47 @@ def get_recommendations_cached(db: Session, current_user: int):
 
 
 def get_recommendations(db: Session, current_user: int):
-    # الحصول على المنشورات من المستخدمين الذين يتابعهم المستخدم
+    # الحصول على قائمة المستخدمين الذين يتابعهم المستخدم الحالي
     followed_users = (
         db.query(models.Follow.followed_id)
         .filter(models.Follow.follower_id == current_user.id)
         .subquery()
     )
 
-    # توصيات بناءً على التفاعلات السابقة
+    # استرجاع المنشورات الموصى بها بناءً على المتابعة والتفاعلات
     recommended_posts = (
         db.query(models.Post)
         .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
         .outerjoin(models.Comment, models.Comment.post_id == models.Post.id)
-        .filter(
-            (models.Post.owner_id.in_(followed_users))
-            | (models.Post.owner_id != current_user.id)
-        )
+        .filter(models.Post.owner_id.in_(followed_users))
         .group_by(models.Post.id)
         .order_by(
-            func.count(models.Vote.id).desc(), func.count(models.Comment.id).desc()
+            func.count(models.Vote.id).desc(),  # الترتيب حسب عدد الأصوات
+            func.count(models.Comment.id).desc(),  # الترتيب حسب عدد التعليقات
+            models.Post.created_at.desc(),  # إعطاء الأولوية للمنشورات الأحدث
         )
         .limit(10)
         .all()
     )
 
-    return recommended_posts
+    # عرض منشورات مقترحة أخرى من مستخدمين غير متابعين ولكن لهم محتوى قد يعجب المستخدم
+    other_posts = (
+        db.query(models.Post)
+        .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
+        .outerjoin(models.Comment, models.Comment.post_id == models.Post.id)
+        .filter(
+            models.Post.owner_id.notin_(followed_users),
+            models.Post.owner_id != current_user.id,
+        )
+        .group_by(models.Post.id)
+        .order_by(
+            func.count(models.Vote.id).desc(),
+            func.count(models.Comment.id).desc(),
+            models.Post.created_at.desc(),
+        )
+        .limit(5)  # يمكن تعديل العدد حسب الحاجة
+        .all()
+    )
+
+    # دمج القائمتين معًا
+    return recommended_posts + other_posts

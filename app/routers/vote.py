@@ -17,7 +17,7 @@ def vote(
     vote: schemas.Vote,
     background_tasks: BackgroundTasks,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),  # Corrected type
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     # Check if the post exists
     post = db.query(models.Post).filter(models.Post.id == vote.post_id).first()
@@ -47,9 +47,9 @@ def vote(
         # Send notification for new vote
         background_tasks.add_task(
             notifications.send_email_notification,
+            to=[post.owner.email],  # Updated to use post owner's email
             subject="New Vote on Your Post",
-            body=f"User {current_user.id} voted on your post",
-            recipient_id=post.owner_id,
+            body=f"User {current_user.id} voted on your post.",
         )
 
         return {"message": "Successfully added vote"}
@@ -65,9 +65,9 @@ def vote(
         # Send notification for vote removal
         background_tasks.add_task(
             notifications.send_email_notification,
+            to=[post.owner.email],  # Updated to use post owner's email
             subject="Vote Removed from Your Post",
-            body=f"User {current_user.id} removed their vote from your post",
-            recipient_id=post.owner_id,
+            body=f"User {current_user.id} removed their vote from your post.",
         )
 
         return {"message": "Successfully deleted vote"}

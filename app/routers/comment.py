@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List
-from ..notifications import send_email_notification  # تأكد من استيراد وظيفة الإشعارات
+from ..notifications import send_email_notification
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -35,11 +35,14 @@ def create_comment(
     db.refresh(new_comment)
 
     # إرسال إشعار بالبريد الإلكتروني عند إنشاء تعليق جديد
+    post_owner_email = (
+        db.query(models.User.email).filter(models.User.id == post.owner_id).scalar()
+    )
     send_email_notification(
-        background_tasks,
-        email_to=["recipient@example.com"],
-        subject="New Comment Created",
-        body=f"A new comment has been added to the post titled '{post.title}'.",
+        background_tasks=background_tasks,
+        to=[post_owner_email],
+        subject="New Comment on Your Post",
+        body=f"A new comment has been added to your post titled '{post.title}'.",
     )
 
     return new_comment
@@ -51,6 +54,11 @@ def get_comments(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+        )
     comments = db.query(models.Comment).filter(models.Comment.post_id == post_id).all()
     return comments
 
@@ -63,7 +71,13 @@ def report_comment(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    # تحقق من وجود التعليق إذا كان `comment_id` موجودًا
+    if report.post_id:
+        post = db.query(models.Post).filter(models.Post.id == report.post_id).first()
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+            )
+
     if report.comment_id:
         comment = (
             db.query(models.Comment)

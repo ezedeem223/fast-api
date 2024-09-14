@@ -14,7 +14,7 @@ router = APIRouter(prefix="/communities", tags=["Communities"])
 def create_community(
     community: schemas.CommunityCreate,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     # التحقق إذا كان المجتمع موجود بالفعل
     existing_community = (
@@ -37,7 +37,8 @@ def create_community(
 # الحصول على جميع المجتمعات
 @router.get("/", response_model=List[schemas.CommunityOut])
 def get_communities(
-    db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     communities = db.query(models.Community).all()
     return communities
@@ -48,7 +49,7 @@ def get_communities(
 def join_community(
     community_id: int,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
@@ -59,7 +60,7 @@ def join_community(
         )
 
     # التحقق إذا كان المستخدم عضوًا بالفعل
-    if current_user in community.members:
+    if current_user.id in [member.id for member in community.members]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is already a member of this community",
@@ -75,7 +76,7 @@ def join_community(
 def leave_community(
     community_id: int,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
@@ -86,7 +87,7 @@ def leave_community(
         )
 
     # التحقق إذا كان المستخدم عضوًا في المجتمع
-    if current_user not in community.members:
+    if current_user.id not in [member.id for member in community.members]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is not a member of this community",

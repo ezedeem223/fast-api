@@ -23,7 +23,9 @@ class Post(Base):
     __table_args__ = (Index("idx_title_user", "title", "user_id"),)
 
     # Define relationships with explicit join conditions
-    owner = relationship("User", primaryjoin="Post.owner_id == User.id")
+    owner = relationship(
+        "User", primaryjoin="Post.owner_id == User.id", back_populates="posts"
+    )
 
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
@@ -45,8 +47,12 @@ class Comment(Base):
     )
 
     # Define relationships with explicit join conditions
-    owner = relationship("User", primaryjoin="Comment.owner_id == User.id")
-    post = relationship("Post", primaryjoin="Comment.post_id == Post.id")
+    owner = relationship(
+        "User", primaryjoin="Comment.owner_id == User.id", back_populates="comments"
+    )
+    post = relationship(
+        "Post", primaryjoin="Comment.post_id == Post.id", back_populates="comments"
+    )
 
 
 class User(Base):
@@ -64,6 +70,40 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
+
+    # Relationships
+    posts = relationship(
+        "Post", primaryjoin="User.id == Post.owner_id", back_populates="owner"
+    )
+    comments = relationship(
+        "Comment", primaryjoin="User.id == Comment.owner_id", back_populates="owner"
+    )
+    reports = relationship(
+        "Report", primaryjoin="User.id == Report.reporter_id", back_populates="reporter"
+    )
+    follows = relationship(
+        "Follow", primaryjoin="User.id == Follow.follower_id", back_populates="follower"
+    )
+    followed_by = relationship(
+        "Follow", primaryjoin="User.id == Follow.followed_id", back_populates="followed"
+    )
+    sent_messages = relationship(
+        "Message", primaryjoin="User.id == Message.sender_id", back_populates="sender"
+    )
+    received_messages = relationship(
+        "Message",
+        primaryjoin="User.id == Message.receiver_id",
+        back_populates="receiver",
+    )
+    communities = relationship(
+        "Community", primaryjoin="User.id == Community.owner_id", back_populates="owner"
+    )
+    blocks = relationship(
+        "Block", primaryjoin="User.id == Block.follower_id", back_populates="follower"
+    )
+    blocked_by = relationship(
+        "Block", primaryjoin="User.id == Block.blocked_id", back_populates="blocked"
+    )
 
 
 class Vote(Base):
@@ -93,9 +133,17 @@ class Report(Base):
     )
 
     # Define relationships with explicit join conditions
-    reporter = relationship("User", primaryjoin="Report.reporter_id == User.id")
-    post = relationship("Post", primaryjoin="Report.post_id == Post.id")
-    comment = relationship("Comment", primaryjoin="Report.comment_id == Comment.id")
+    reporter = relationship(
+        "User", primaryjoin="Report.reporter_id == User.id", back_populates="reports"
+    )
+    post = relationship(
+        "Post", primaryjoin="Report.post_id == Post.id", back_populates="reports"
+    )
+    comment = relationship(
+        "Comment",
+        primaryjoin="Report.comment_id == Comment.id",
+        back_populates="reports",
+    )
 
 
 class Follow(Base):
@@ -111,8 +159,14 @@ class Follow(Base):
     )
 
     # Define relationships with explicit join conditions
-    follower = relationship("User", primaryjoin="Follow.follower_id == User.id")
-    followed = relationship("User", primaryjoin="Follow.followed_id == User.id")
+    follower = relationship(
+        "User", primaryjoin="Follow.follower_id == User.id", back_populates="follows"
+    )
+    followed = relationship(
+        "User",
+        primaryjoin="Follow.followed_id == User.id",
+        back_populates="followed_by",
+    )
 
 
 class Message(Base):
@@ -126,8 +180,16 @@ class Message(Base):
     )
 
     # Define relationships with explicit join conditions
-    sender = relationship("User", primaryjoin="Message.sender_id == User.id")
-    receiver = relationship("User", primaryjoin="Message.receiver_id == User.id")
+    sender = relationship(
+        "User",
+        primaryjoin="Message.sender_id == User.id",
+        back_populates="sent_messages",
+    )
+    receiver = relationship(
+        "User",
+        primaryjoin="Message.receiver_id == User.id",
+        back_populates="received_messages",
+    )
 
 
 class Community(Base):
@@ -141,7 +203,11 @@ class Community(Base):
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
 
     # Define relationship with explicit join condition
-    owner = relationship("User", primaryjoin="Community.owner_id == User.id")
+    owner = relationship(
+        "User",
+        primaryjoin="Community.owner_id == User.id",
+        back_populates="communities",
+    )
 
 
 class Block(Base):
@@ -157,5 +223,9 @@ class Block(Base):
     )
 
     # Define relationships with explicit join conditions
-    follower = relationship("User", primaryjoin="Block.follower_id == User.id")
-    blocked = relationship("User", primaryjoin="Block.blocked_id == User.id")
+    follower = relationship(
+        "User", primaryjoin="Block.follower_id == User.id", back_populates="blocks"
+    )
+    blocked = relationship(
+        "User", primaryjoin="Block.blocked_id == User.id", back_populates="blocked_by"
+    )

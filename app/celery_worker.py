@@ -5,7 +5,11 @@ from typing import List
 from app.config import settings
 
 # إعداد Celery
-celery_app = Celery("worker", broker="pyamqp://guest@localhost//", backend="rpc://")
+celery_app = Celery(
+    "worker",
+    broker=settings.celery_broker_url,  # تأكد من تعيين عنوان broker المناسب
+    backend=settings.celery_backend_url,  # تأكد من تعيين عنوان backend المناسب
+)
 
 # إعدادات البريد الإلكتروني
 conf = ConnectionConfig(
@@ -20,20 +24,26 @@ conf = ConnectionConfig(
     USE_CREDENTIALS=True,
 )
 
+# إنشاء كائن FastMail مرة واحدة لاستخدامه في جميع المهام
+fm = FastMail(conf)
+
 
 @celery_app.task
 def send_email_task(email_to: List[EmailStr], subject: str, body: str):
     """
     مهمة لإرسال البريد الإلكتروني باستخدام Celery.
     """
-    message = MessageSchema(
-        subject=subject,
-        recipients=email_to,  # قائمة المستلمين
-        body=body,
-        subtype="html",
-    )
-    fm = FastMail(conf)
-    fm.send_message(message)
+    try:
+        message = MessageSchema(
+            subject=subject,
+            recipients=email_to,  # قائمة المستلمين
+            body=body,
+            subtype="html",
+        )
+        fm.send_message(message)
+    except Exception as e:
+        # إدارة الأخطاء
+        print(f"Failed to send email: {e}")
 
 
 # مثال على مهمة أخرى

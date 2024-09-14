@@ -26,7 +26,11 @@ from .notifications import (
 app = FastAPI()
 
 # إعدادات CORS
-origins = ["https://www.google.com"]
+origins = [
+    "https://example.com",
+    "https://www.example.com",
+    # أضف هنا النطاقات الموثوقة فقط
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +68,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     try:
         while True:
             data = await websocket.receive_text()
+            # تأكد من أن البيانات صحيحة قبل إرسال الإشعارات
+            if not data:
+                raise ValueError("Received empty message")
             await send_real_time_notification(websocket, user_id, data)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
         print(f"Client #{user_id} disconnected")
+    except Exception as e:
+        # قم بتسجيل الأخطاء المحتملة
+        print(f"An error occurred: {e}")
+        await manager.disconnect(websocket)

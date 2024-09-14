@@ -9,7 +9,12 @@ from .config import settings
 SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"
 
 # إنشاء محرك الاتصال بقاعدة البيانات
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_size=10,  # عدد الاتصالات في المسبح
+    max_overflow=20,  # عدد الاتصالات الإضافية التي يمكن إنشاؤها
+    timeout=90,  # مهلة الاتصال
+)
 
 # تكوين الجلسة المحلية
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

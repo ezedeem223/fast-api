@@ -50,7 +50,7 @@ def create_access_token(data: dict):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
-    # Ensure that user_id is an integer
+    # تأكد من أن user_id هو عدد صحيح
     if "user_id" in to_encode:
         try:
             to_encode["user_id"] = int(to_encode["user_id"])
@@ -71,8 +71,7 @@ def create_access_token(data: dict):
 def verify_access_token(token: str, credentials_exception):
     try:
         public_key = read_public_key()
-        logger.info(f"Public Key (first 50 chars): {public_key[:50]}...")
-        logger.info(f"Token to verify: {token[:20]}...")
+        logger.debug(f"Token to verify: {token[:20]}...")
 
         payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
         logger.debug(f"Decoded Payload: {payload}")
@@ -88,7 +87,6 @@ def verify_access_token(token: str, credentials_exception):
             logger.error(f"Invalid user_id in token payload: {user_id}")
             raise credentials_exception
 
-        logger.debug(f"Extracted user_id: {user_id}")
         token_data = TokenData(id=user_id)
         return token_data
     except JWTError as e:

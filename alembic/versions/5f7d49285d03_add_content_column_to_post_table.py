@@ -3,14 +3,11 @@
 Revision ID: 5f7d49285d03
 Revises: 99e5c5184e17
 Create Date: 2024-07-29 10:03:42.823925
-
 """
 
 from typing import Sequence, Union
-
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "5f7d49285d03"
@@ -24,7 +21,7 @@ def upgrade():
         "posts",
         sa.Column(
             "content",
-            sa.String(),
+            sa.String(),  # Consider using sa.Text() if you expect large content
             nullable=False,
         ),
     )
@@ -32,4 +29,3 @@ def upgrade():
 
 def downgrade():
     op.drop_column("posts", "content")
-    pass

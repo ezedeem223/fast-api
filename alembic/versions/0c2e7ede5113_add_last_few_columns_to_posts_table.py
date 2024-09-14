@@ -3,14 +3,11 @@
 Revision ID: 0c2e7ede5113
 Revises: 90b8bfe2dfc0
 Create Date: 2024-07-29 10:26:03.258319
-
 """
 
 from typing import Sequence, Union
-
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "0c2e7ede5113"
@@ -22,7 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade():
     op.add_column(
         "posts",
-        sa.Column("published", sa.Boolean(), nullable=False, server_default="TRUE"),
+        sa.Column(
+            "published", sa.Boolean(), nullable=False, server_default=sa.true()
+        ),  # Use sa.true() for boolean
     )
     op.add_column(
         "posts",
@@ -34,10 +33,7 @@ def upgrade():
         ),
     )
 
-    pass
-
 
 def downgrade():
     op.drop_column("posts", "published")
     op.drop_column("posts", "created_at")
-    pass

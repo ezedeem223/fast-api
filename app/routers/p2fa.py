@@ -11,6 +11,12 @@ def enable_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(database.get_db),
 ):
+    # تحقق مما إذا كانت المصادقة الثنائية مفعلة بالفعل
+    if current_user.otp_secret:
+        raise HTTPException(
+            status_code=400, detail="Two-factor authentication is already enabled."
+        )
+
     # توليد سر 2FA جديد
     secret = pyotp.random_base32()
 

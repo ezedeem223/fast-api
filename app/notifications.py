@@ -21,13 +21,22 @@ conf = ConnectionConfig(
 def send_email_notification(
     background_tasks: BackgroundTasks, to: List[EmailStr], subject: str, body: str
 ):
+    """
+    Send an email notification in the background.
+
+    Args:
+        background_tasks: FastAPI's BackgroundTasks instance.
+        to: List of recipient email addresses.
+        subject: Subject of the email.
+        body: Body of the email.
+    """
     message = MessageSchema(
         subject=subject,
-        recipients=to,  # Corrected 'email_to' to 'to'
+        recipients=to,
         body=body,
-        subtype="html",  # Ensure the email is sent as HTML
+        subtype="html",
     )
-    fm = FastMail(conf)  # Make sure 'conf' is properly configured with email settings
+    fm = FastMail(conf)
     background_tasks.add_task(fm.send_message, message)
 
 
@@ -37,16 +46,41 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
+        """
+        Accept a WebSocket connection and add it to the active connections list.
+
+        Args:
+            websocket: WebSocket connection to be accepted.
+        """
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
+        """
+        Remove a WebSocket connection from the active connections list.
+
+        Args:
+            websocket: WebSocket connection to be removed.
+        """
         self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
+        """
+        Send a personal message to a specific WebSocket connection.
+
+        Args:
+            message: Message to be sent.
+            websocket: WebSocket connection to which the message will be sent.
+        """
         await websocket.send_text(message)
 
     async def broadcast(self, message: str):
+        """
+        Broadcast a message to all active WebSocket connections.
+
+        Args:
+            message: Message to be broadcasted.
+        """
         for connection in self.active_connections:
             await connection.send_text(message)
 
@@ -57,4 +91,12 @@ manager = ConnectionManager()
 
 # Define real-time notification function
 async def send_real_time_notification(websocket: WebSocket, user_id: int, data: str):
+    """
+    Send a real-time notification to a WebSocket connection.
+
+    Args:
+        websocket: WebSocket connection to which the notification will be sent.
+        user_id: ID of the user sending the message.
+        data: Message content.
+    """
     await manager.send_personal_message(f"User {user_id} says: {data}", websocket)

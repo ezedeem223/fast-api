@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, conint, ConfigDict
+from pydantic import BaseModel, EmailStr, conint
 from datetime import datetime
 from typing import Optional, List
 
@@ -6,7 +6,7 @@ from typing import Optional, List
 class PostBase(BaseModel):
     title: str
     content: str
-    published: bool = True  # Corrected formatting
+    published: bool = True
 
 
 class PostCreate(PostBase):
@@ -18,7 +18,8 @@ class UserOut(BaseModel):
     email: EmailStr
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class Post(PostBase):
@@ -27,7 +28,8 @@ class Post(PostBase):
     owner_id: int
     owner: UserOut
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class CommentBase(BaseModel):
@@ -45,14 +47,16 @@ class Comment(CommentBase):
     post_id: int
     owner: UserOut
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class PostOut(BaseModel):
-    Post: Post
+    post: Post
     votes: int
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class UserCreate(BaseModel):
@@ -93,7 +97,8 @@ class Report(ReportBase):
     created_at: datetime
     reporter_id: int
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class Enable2FAResponse(BaseModel):
@@ -129,7 +134,7 @@ class Message(MessageBase):
 
 
 class MessageOut(BaseModel):
-    Message: Message
+    message: Message
     count: int
 
     class Config:
@@ -157,7 +162,7 @@ class Community(CommunityBase):
 
 
 class CommunityOut(BaseModel):
-    Community: Community
+    community: Community
     member_count: int
 
     class Config:

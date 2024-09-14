@@ -22,11 +22,13 @@ def create_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
 ):
-    # Hash the password - user.password
+    # Hash the password
     hashed_password = utils.hash(user.password)
     user.password = hashed_password
 
-    new_user = models.User(**user.model_dump())
+    new_user = models.User(
+        **user.dict()
+    )  # Updated to use `user.dict()` for compatibility
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -34,7 +36,7 @@ def create_user(
     # Send email notification upon user creation
     send_email_notification(
         background_tasks,
-        to=[new_user.email],  # Corrected: 'email_to' to 'to'
+        to=[new_user.email],
         subject="New User Created",
         body=f"A new user with email {new_user.email} has been created.",
     )
@@ -79,8 +81,8 @@ def verify_user(
 
     # Send email notification upon verification document upload
     send_email_notification(
-        background_tasks,
-        to=[current_user.email],  # Corrected: 'email_to' to 'to'
+        background_tasks=background_tasks,
+        to=[current_user.email],
         subject="Verification Completed",
         body=f"Your account has been verified successfully.",
     )
