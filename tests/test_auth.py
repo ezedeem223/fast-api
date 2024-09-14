@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def test_authentication():
     user_id = 1
-    token = create_access_token({"id": user_id})  # استخدم 'id' بدلاً من 'user_id'
+    token = create_access_token({"user_id": user_id})
 
     try:
         # تمرير credentials_exception إلى verify_access_token
@@ -21,9 +21,10 @@ def test_authentication():
                 status_code=401, detail="Invalid credentials"
             ),
         )
-        # تحقق من أن token_data يحتوي على id
+        # تحقق من أن token_data يحتوي على user_id
         assert (
-            token_data.id == user_id  # استخدم 'id' بدلاً من 'user_id'
+            token_data.id
+            == user_id  # استخدم 'id' بدلاً من 'user_id' إذا كانت البنية هكذا
         ), f"Expected user_id {user_id}, got {token_data.id}"
     except HTTPException as e:
         logger.error(f"Authentication failed with error: {e.detail}")
