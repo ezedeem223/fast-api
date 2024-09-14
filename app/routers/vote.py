@@ -47,7 +47,7 @@ def vote(
         # Send notification for new vote
         notifications.schedule_email_notification(
             background_tasks,
-            to=[post.owner.email],
+            to=post.owner.email,  # Changed from list to single email
             subject="New Vote on Your Post",
             body=f"User {current_user.id} voted on your post.",
         )
@@ -59,13 +59,13 @@ def vote(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Vote does not exist"
             )
         # Remove the vote
-        vote_query.delete(synchronize_session="fetch")  # Changed to fetch
+        vote_query.delete(synchronize_session=False)
         db.commit()
 
         # Send notification for vote removal
         notifications.schedule_email_notification(
             background_tasks,
-            to=[post.owner.email],
+            to=post.owner.email,  # Changed from list to single email
             subject="Vote Removed from Your Post",
             body=f"User {current_user.id} removed their vote from your post.",
         )

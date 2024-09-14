@@ -1,7 +1,7 @@
 from fastapi import BackgroundTasks, WebSocket
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from pydantic import EmailStr
-from typing import List
+from typing import List, Union
 from .config import settings
 
 # Email configuration
@@ -38,17 +38,22 @@ def send_email_notification(to: List[EmailStr], subject: str, body: str):
 
 
 def schedule_email_notification(
-    background_tasks: BackgroundTasks, to: List[EmailStr], subject: str, body: str
+    background_tasks: BackgroundTasks,
+    to: Union[List[EmailStr], EmailStr],
+    subject: str,
+    body: str,
 ):
     """
     Schedule the email notification to be sent in the background.
 
     Args:
         background_tasks: FastAPI's BackgroundTasks instance.
-        to: List of recipient email addresses.
+        to: Recipient email address or list of addresses.
         subject: Subject of the email.
         body: Body of the email.
     """
+    if isinstance(to, str):
+        to = [to]
     background_tasks.add_task(send_email_notification, to, subject, body)
 
 
