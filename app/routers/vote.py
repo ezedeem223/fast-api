@@ -1,73 +1,61 @@
-from fastapi import (
-    APIRouter,
-    Response,
-    status,
-    HTTPException,
-    Depends,
-    BackgroundTasks,
-)
-from sqlalchemy.orm import Session
-from .. import schemas, database, models, oauth2, notifications
-
-router = APIRouter(prefix="/vote", tags=["Vote"])
+import pytest
+from app import models
+from unittest.mock import patch
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def vote(
-    vote: schemas.Vote,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+@pytest.fixture()
+def test_vote(test_posts, session, test_user):
+    new_vote = models.Vote(post_id=test_posts[3].id, user_id=test_user.id)
+    session.add(new_vote)
+    session.commit()
+    return new_vote
+
+
+@patch("app.notifications.send_email_notification")
+def test_vote_on_post(
+    mock_send_email, authorized_client, test_posts, test_user, session
 ):
-    # Check if the post exists
-    post = db.query(models.Post).filter(models.Post.id == vote.post_id).first()
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {vote.post_id} does not exist",
-        )
+    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 1})
+    assert res.status_code == 201
+    response_json = res.json()
+    assert "message" in response_json
+    assert response_json["message"] == "Successfully added vote"
 
-    # Query for an existing vote
-    vote_query = db.query(models.Vote).filter(
-        models.Vote.post_id == vote.post_id, models.Vote.user_id == current_user.id
+    vote_in_db = (
+        session.query(models.Vote)
+        .filter(
+            models.Vote.post_id == test_posts[3].id, models.Vote.user_id == test_user.id
+        )
+        .first()
     )
-    found_vote = vote_query.first()
+    assert vote_in_db is not None
 
-    if vote.dir == 1:
-        if found_vote:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"User {current_user.id} has already voted on post {vote.post_id}",
-            )
-        # Create a new vote
-        new_vote = models.Vote(post_id=vote.post_id, user_id=current_user.id)
-        db.add(new_vote)
-        db.commit()
+    # Verify that send_email_notification was called with correct arguments
+    mock_send_email.assert_called_once()
+    args, kwargs = mock_send_email.call_args
+    assert len(args[0]) == 1  # 'to' should be a list with one email
 
-        # Send notification for new vote
-        notifications.schedule_email_notification(
-            background_tasks,
-            to=post.owner.email,  # Changed from list to single email
-            subject="New Vote on Your Post",
-            body=f"User {current_user.id} voted on your post.",
+
+@patch("app.notifications.send_email_notification")
+def test_remove_vote(
+    mock_send_email, authorized_client, test_posts, test_user, test_vote, session
+):
+    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 0})
+    assert res.status_code == 201
+    response_json = res.json()
+    assert "message" in response_json
+    assert response_json["message"] == "Successfully deleted vote"
+
+    vote_in_db = (
+        session.query(models.Vote)
+        .filter(
+            models.Vote.post_id == test_posts[3].id, models.Vote.user_id == test_user.id
         )
+        .first()
+    )
+    assert vote_in_db is None
 
-        return {"message": "Successfully added vote"}
-    else:
-        if not found_vote:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Vote does not exist"
-            )
-        # Remove the vote
-        vote_query.delete(synchronize_session=False)
-        db.commit()
-
-        # Send notification for vote removal
-        notifications.schedule_email_notification(
-            background_tasks,
-            to=post.owner.email,  # Changed from list to single email
-            subject="Vote Removed from Your Post",
-            body=f"User {current_user.id} removed their vote from your post.",
-        )
-
-        return {"message": "Successfully deleted vote"}
+    # Verify that send_email_notification was called with correct arguments
+    mock_send_email.assert_called_once()
+    args, kwargs = mock_send_email.call_args
+    assert len(args[0]) == 1  # 'to' should be a list with one email
