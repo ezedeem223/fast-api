@@ -60,6 +60,13 @@ class Comment(Base):
         "Post", primaryjoin="Comment.post_id == Post.id", back_populates="comments"
     )
 
+    # Add relationship to Report model
+    reports = relationship(
+        "Report",
+        primaryjoin="Comment.id == Report.comment_id",
+        back_populates="comment",
+    )
+
 
 class User(Base):
     __tablename__ = "users"
