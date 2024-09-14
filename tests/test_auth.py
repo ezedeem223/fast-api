@@ -14,7 +14,13 @@ def test_authentication():
     token = create_access_token({"user_id": user_id})
 
     try:
-        token_data = verify_access_token(token)
+        # تمرير credentials_exception إلى verify_access_token
+        token_data = verify_access_token(
+            token,
+            credentials_exception=HTTPException(
+                status_code=401, detail="Invalid credentials"
+            ),
+        )
         assert (
             token_data["user_id"] == user_id
         ), f"Expected user_id {user_id}, got {token_data['user_id']}"

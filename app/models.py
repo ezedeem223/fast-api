@@ -26,6 +26,9 @@ class Post(Base):
     owner = relationship(
         "User", primaryjoin="Post.owner_id == User.id", back_populates="posts"
     )
+    comments = relationship(
+        "Comment", primaryjoin="Post.id == Comment.post_id", back_populates="post"
+    )
 
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
