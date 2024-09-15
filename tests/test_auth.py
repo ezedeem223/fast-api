@@ -31,17 +31,17 @@ def test_authentication():
         assert False, "Token verification failed"
 
 
-# def test_unauthorized_access(client):
-#     res = client.get("/protected-resource")
-#     assert res.status_code == 401  # Unauthorized
+def test_unauthorized_access(client):
+    res = client.get("/protected-resource")
+    assert res.status_code == 401  # Unauthorized
 
 
-# def test_invalid_login(client):
-#     res = client.post(
-#         "/login", data={"username": "wrong@example.com", "password": "wrongpassword"}
-#     )
-#     assert res.status_code == 403  # Forbidden
-#     assert res.json().get("detail") == "Invalid Credentials"
+def test_invalid_login(client):
+    res = client.post(
+        "/login", data={"username": "wrong@example.com", "password": "wrongpassword"}
+    )
+    assert res.status_code == 403  # Forbidden
+    assert res.json().get("detail") == "Invalid Credentials"
 
 
 # def test_valid_login(client, test_user):
