@@ -4,7 +4,6 @@ from pydantic import EmailStr, ConfigDict
 from typing import List, Union
 from .config import settings
 
-# Email configuration
 conf = ConnectionConfig(
     MAIL_USERNAME=settings.mail_username,
     MAIL_PASSWORD=settings.mail_password,
@@ -22,45 +21,44 @@ class EmailNotification(MessageSchema):
     model_config = ConfigDict(from_attributes=True)
 
 
-def send_email_notification(to: Union[str, List[str]], subject: str, body: str):
+async def send_email_notification(**kwargs):
     """
     Send an email notification.
 
-    Args:
+    Keyword Args:
         to: Recipient email address or list of addresses.
         subject: Subject of the email.
         body: Body of the email.
     """
-    recipients = [to] if isinstance(to, str) else to
+    recipients = kwargs.get("to")
+    if isinstance(recipients, str):
+        recipients = [recipients]
+
     message = EmailNotification(
-        subject=subject,
+        subject=kwargs.get("subject", ""),
         recipients=recipients,
-        body=body,
+        body=kwargs.get("body", ""),
         subtype="html",
     )
     fm = FastMail(conf)
-    fm.send_message(message)
+    await fm.send_message(message)
 
 
-def schedule_email_notification(
-    background_tasks: BackgroundTasks,
-    to: Union[str, List[str]],
-    subject: str,
-    body: str,
-):
+async def schedule_email_notification(background_tasks: BackgroundTasks, **kwargs):
     """
     Schedule the email notification to be sent in the background.
 
     Args:
         background_tasks: FastAPI's BackgroundTasks instance.
+
+    Keyword Args:
         to: Recipient email address or list of addresses.
         subject: Subject of the email.
         body: Body of the email.
     """
-    background_tasks.add_task(send_email_notification, to, subject, body)
+    background_tasks.add_task(send_email_notification, **kwargs)
 
 
-# WebSocket connection management
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -80,10 +78,8 @@ class ConnectionManager:
             await connection.send_text(message)
 
 
-# Instance of ConnectionManager for usage across the project
 manager = ConnectionManager()
 
 
-# Define real-time notification function
 async def send_real_time_notification(websocket: WebSocket, user_id: int, data: str):
     await manager.send_personal_message(f"User {user_id} says: {data}", websocket)

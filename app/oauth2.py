@@ -50,7 +50,6 @@ def create_access_token(data: dict):
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
-    # تأكد من أن user_id هو عدد صحيح
     if "user_id" in to_encode:
         try:
             to_encode["user_id"] = int(to_encode["user_id"])

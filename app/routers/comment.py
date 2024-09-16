@@ -9,13 +9,12 @@ router = APIRouter(prefix="/comments", tags=["Comments"])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Comment)
-def create_comment(
+async def create_comment(
     background_tasks: BackgroundTasks,
     comment: schemas.CommentCreate,
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    # تحقق من إذا كان المستخدم موثقًا
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
@@ -34,13 +33,11 @@ def create_comment(
     db.commit()
     db.refresh(new_comment)
 
-    # إرسال إشعار بالبريد الإلكتروني عند إنشاء تعليق جديد
     post_owner_email = (
         db.query(models.User.email).filter(models.User.id == post.owner_id).scalar()
     )
-    send_email_notification(
-        background_tasks=background_tasks,
-        to=[post_owner_email],
+    await send_email_notification(
+        to=post_owner_email,
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post titled '{post.title}'.",
     )

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/follow", tags=["Follow"])
 
 
 @router.post("/{user_id}", status_code=status.HTTP_201_CREATED)
-def follow_user(
+async def follow_user(
     user_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(database.get_db),
@@ -39,7 +39,6 @@ def follow_user(
             detail="You already follow this user",
         )
 
-    # التحقق من وجود المستخدم المراد متابعته
     user_to_follow = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_to_follow:
         raise HTTPException(
@@ -51,10 +50,8 @@ def follow_user(
     db.add(new_follow)
     db.commit()
 
-    # إرسال إشعار بالبريد الإلكتروني عند متابعة مستخدم
-    send_email_notification(
-        background_tasks=background_tasks,
-        to=[user_to_follow.email],  # استخدام البريد الإلكتروني للمستخدم المتابَع
+    await send_email_notification(
+        to=user_to_follow.email,
         subject="New Follower",
         body=f"You have a new follower: {current_user.username}",
     )
@@ -63,7 +60,7 @@ def follow_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def unfollow_user(
+async def unfollow_user(
     user_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(database.get_db),
@@ -83,7 +80,6 @@ def unfollow_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="You do not follow this user"
         )
 
-    # الحصول على معلومات المستخدم المتابَع
     user_unfollowed = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_unfollowed:
         raise HTTPException(
@@ -94,12 +90,8 @@ def unfollow_user(
     db.delete(follow)
     db.commit()
 
-    # إرسال إشعار بالبريد الإلكتروني عند إلغاء متابعة مستخدم
-    send_email_notification(
-        background_tasks=background_tasks,
-        to=[
-            user_unfollowed.email
-        ],  # استخدام البريد الإلكتروني للمستخدم الذي تم إلغاء متابعته
+    await send_email_notification(
+        to=user_unfollowed.email,
         subject="Follower Lost",
         body=f"You have lost a follower: {current_user.username}",
     )

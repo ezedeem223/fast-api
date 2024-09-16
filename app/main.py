@@ -1,7 +1,16 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from . import models
-from .database import engine
+from .database import engine, get_db
 from .routers import (
     post,
     user,
@@ -22,6 +31,7 @@ from .notifications import (
     ConnectionManager,
     send_real_time_notification,
 )
+from .oauth2 import get_current_user  # استيراد للتحقق من المستخدم
 
 app = FastAPI()
 
@@ -77,3 +87,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     except Exception as e:
         print(f"An error occurred: {e}")
         await manager.disconnect(websocket)
+
+
+# حماية المسار المحمي باستخدام توثيق JWT
+@app.get("/protected-resource")
+def protected_resource(
+    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    return {
+        "message": "You have access to this protected resource",
+        "user_id": current_user.id,
+    }

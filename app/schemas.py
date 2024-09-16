@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, conint
+from pydantic import BaseModel, EmailStr, conint, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 
@@ -18,8 +18,7 @@ class UserOut(BaseModel):
     email: EmailStr
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Post(PostBase):
@@ -28,8 +27,7 @@ class Post(PostBase):
     owner_id: int
     owner: UserOut
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommentBase(BaseModel):
@@ -47,16 +45,14 @@ class Comment(CommentBase):
     post_id: int
     owner: UserOut
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PostOut(BaseModel):
     post: Post
     votes: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(BaseModel):
@@ -97,8 +93,7 @@ class Report(ReportBase):
     created_at: datetime
     reporter_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Enable2FAResponse(BaseModel):
@@ -123,22 +118,20 @@ class MessageCreate(MessageBase):
     pass
 
 
-class Message(MessageBase):
+class Message(BaseModel):
     id: int
     created_at: datetime
     sender: UserOut
     receiver: UserOut
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MessageOut(BaseModel):
     message: Message
     count: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Community models
@@ -151,19 +144,17 @@ class CommunityCreate(CommunityBase):
     pass
 
 
-class Community(CommunityBase):
+class Community(BaseModel):
     id: int
     created_at: datetime
     owner_id: int
     owner: UserOut
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommunityOut(BaseModel):
     community: Community
     member_count: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
