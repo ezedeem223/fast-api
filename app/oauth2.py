@@ -6,7 +6,7 @@ from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
-from typing import Optional
+from typing import Optional, Dict
 
 # إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
@@ -45,8 +45,8 @@ def read_private_key():
 
 
 # إنشاء رمز JWT
-def create_access_token(data: dict):
-    to_encode = data.copy()
+def create_access_token(data: schemas.BaseModel) -> str:
+    to_encode: Dict[str, any] = data.model_dump()  # استخدام model_dump بدلاً من dict
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
