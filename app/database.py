@@ -8,8 +8,8 @@ SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.database_username}:{settings.
 # إنشاء محرك الاتصال بقاعدة البيانات
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    pool_size=10,  # عدد الاتصالات في المسبح
-    max_overflow=20,  # عدد الاتصالات الإضافية التي يمكن إنشاؤها
+    pool_size=100,  # عدد الاتصالات في المسبح
+    max_overflow=200,  # عدد الاتصالات الإضافية التي يمكن إنشاؤها
 )
 
 # تكوين الجلسة المحلية

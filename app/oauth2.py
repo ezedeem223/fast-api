@@ -6,25 +6,21 @@ from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
-from typing import Optional, Dict
+from typing import Optional
 
-# إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# إعداد البيانات المطلوبة لتشفير وفك تشفير JWT باستخدام RS256
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
-# تعريف نموذج TokenData
 class TokenData(schemas.BaseModel):
     id: Optional[int] = None
 
 
-# قراءة المفتاح العام من الملف
 def read_public_key():
     try:
         with open(settings.rsa_public_key_path, "rb") as file:
@@ -34,7 +30,6 @@ def read_public_key():
         raise
 
 
-# قراءة المفتاح الخاص من الملف
 def read_private_key():
     try:
         with open(settings.rsa_private_key_path, "rb") as file:
@@ -44,9 +39,8 @@ def read_private_key():
         raise
 
 
-# إنشاء رمز JWT
-def create_access_token(data: schemas.BaseModel) -> str:
-    to_encode: Dict[str, any] = data.model_dump()  # استخدام model_dump بدلاً من dict
+def create_access_token(data: dict):
+    to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
@@ -66,7 +60,6 @@ def create_access_token(data: schemas.BaseModel) -> str:
         raise
 
 
-# التحقق من صحة الرمز JWT
 def verify_access_token(token: str, credentials_exception):
     try:
         public_key = read_public_key()
@@ -96,7 +89,6 @@ def verify_access_token(token: str, credentials_exception):
         raise credentials_exception
 
 
-# الحصول على المستخدم الحالي بناءً على رمز JWT
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
 ):

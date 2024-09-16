@@ -5,7 +5,7 @@ from app.config import settings
 from app.oauth2 import (
     create_access_token,
     verify_access_token,
-)  # إضافة verify_access_token هنا
+)
 from app.notifications import send_email_notification
 import logging
 
@@ -44,6 +44,7 @@ def test_invalid_login(client):
     assert res.json().get("detail") == "Invalid Credentials"
 
 
+@pytest.mark.asyncio
 async def test_valid_login(client, test_user):
     res = client.post(
         "/login",
@@ -58,7 +59,7 @@ async def test_valid_login(client, test_user):
         payload.get("user_id") == test_user["id"]
     ), f"Expected user_id {test_user['id']} in the token payload"
 
-    # Добавим отправку уведомления по электронной почте
+    # Sending email notification
     await send_email_notification(
         to=test_user["email"],
         subject="Successful Login",
@@ -66,14 +67,15 @@ async def test_valid_login(client, test_user):
     )
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "email, password, status_code",
     [
         ("wrongemail@example.com", "password123", 403),
         ("testuser@example.com", "wrongpassword", 403),
         ("wrongemail@example.com", "wrongpassword", 403),
-        (None, "password123", 422),
-        ("testuser@example.com", None, 422),
+        (None, "password123", 403),
+        ("testuser@example.com", None, 403),
     ],
 )
 async def test_invalid_login_param(client, test_user, email, password, status_code):

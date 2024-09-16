@@ -6,7 +6,6 @@ from app.config import settings
 
 router = APIRouter(tags=["OAuth"])
 
-# إعداد OAuth مع Google
 oauth = OAuth()
 google = oauth.register(
     name="google",

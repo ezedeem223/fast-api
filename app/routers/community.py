@@ -27,7 +27,7 @@ def create_community(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Community already exists"
         )
 
-    new_community = models.Community(owner_id=current_user.id, **community.dict())
+    new_community = models.Community(owner_id=current_user.id, **community.model_dump())
     db.add(new_community)
     db.commit()
     db.refresh(new_community)

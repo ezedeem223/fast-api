@@ -231,7 +231,7 @@ def update_post(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to perform requested action",
         )
-    post_query.update(update_post.dict(), synchronize_session=False)
+    post_query.update(update_post.model_dump(), synchronize_session=False)
     db.commit()
     return post_query.first()
 

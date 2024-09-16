@@ -27,7 +27,9 @@ async def create_comment(
         )
 
     new_comment = models.Comment(
-        owner_id=current_user.id, post_id=comment.post_id, **comment.dict()
+        owner_id=current_user.id,
+        post_id=comment.post_id,
+        **comment.model_dump(),  # تم التغيير هنا
     )
     db.add(new_comment)
     db.commit()
