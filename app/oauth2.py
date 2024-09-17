@@ -21,24 +21,6 @@ class TokenData(schemas.BaseModel):
     id: Optional[int] = None
 
 
-def read_public_key():
-    try:
-        with open(settings.rsa_public_key_path, "rb") as file:
-            return file.read()
-    except Exception as e:
-        logger.error(f"Error reading public key: {str(e)}")
-        raise
-
-
-def read_private_key():
-    try:
-        with open(settings.rsa_private_key_path, "rb") as file:
-            return file.read()
-    except Exception as e:
-        logger.error(f"Error reading private key: {str(e)}")
-        raise
-
-
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -52,8 +34,9 @@ def create_access_token(data: dict):
             raise ValueError("Invalid user_id format")
 
     try:
-        private_key = read_private_key()
-        encoded_jwt = jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
+        encoded_jwt = jwt.encode(
+            to_encode, settings.rsa_private_key, algorithm=ALGORITHM
+        )
         return encoded_jwt
     except Exception as e:
         logger.error(f"Error creating access token: {str(e)}")
@@ -62,10 +45,9 @@ def create_access_token(data: dict):
 
 def verify_access_token(token: str, credentials_exception):
     try:
-        public_key = read_public_key()
         logger.debug(f"Token to verify: {token[:20]}...")
 
-        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
         logger.debug(f"Decoded Payload: {payload}")
 
         user_id = payload.get("user_id")

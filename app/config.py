@@ -1,6 +1,10 @@
 import os
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr, PrivateAttr
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -25,7 +29,6 @@ class Settings(BaseSettings):
     rsa_private_key_path: str
     rsa_public_key_path: str
 
-    # تعريف الحقول كحقول خاصة
     _rsa_private_key: str = PrivateAttr()
     _rsa_public_key: str = PrivateAttr()
 
@@ -33,7 +36,6 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # قراءة المفاتيح
         self._rsa_private_key = self._read_key_file(
             self.rsa_private_key_path, "private"
         )
@@ -41,24 +43,43 @@ class Settings(BaseSettings):
 
     def _read_key_file(self, filename: str, key_type: str) -> str:
         if not os.path.exists(filename):
+            logger.error(f"{key_type.capitalize()} key file not found: {filename}")
             raise ValueError(f"{key_type.capitalize()} key file not found: {filename}")
 
         try:
             with open(filename, "r") as file:
                 key_data = file.read().strip()
                 if not key_data:
+                    logger.error(
+                        f"{key_type.capitalize()} key file is empty: {filename}"
+                    )
                     raise ValueError(
                         f"{key_type.capitalize()} key file is empty: {filename}"
                     )
+                logger.info(f"Successfully read {key_type} key from {filename}")
                 return key_data
         except IOError as e:
+            logger.error(
+                f"Error reading {key_type} key file: {filename}, error: {str(e)}"
+            )
             raise ValueError(
                 f"Error reading {key_type} key file: {filename}, error: {str(e)}"
             )
         except Exception as e:
+            logger.error(
+                f"Unexpected error reading {key_type} key file: {filename}, error: {str(e)}"
+            )
             raise ValueError(
                 f"Unexpected error reading {key_type} key file: {filename}, error: {str(e)}"
             )
+
+    @property
+    def rsa_private_key(self) -> str:
+        return self._rsa_private_key
+
+    @property
+    def rsa_public_key(self) -> str:
+        return self._rsa_public_key
 
 
 # تحميل الإعدادات

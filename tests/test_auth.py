@@ -1,11 +1,7 @@
 import pytest
-from jose import jwt
 from fastapi import HTTPException
 from app.config import settings
-from app.oauth2 import (
-    create_access_token,
-    verify_access_token,
-)
+from app.oauth2 import create_access_token, verify_access_token
 from app.notifications import send_email_notification
 import logging
 
@@ -54,10 +50,15 @@ async def test_valid_login(client, test_user):
     token = res.json().get("access_token")
     assert token is not None, "Expected a token in the response"
 
-    payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    assert (
-        payload.get("user_id") == test_user["id"]
-    ), f"Expected user_id {test_user['id']} in the token payload"
+    try:
+        token_data = verify_access_token(
+            token, HTTPException(status_code=401, detail="Invalid token")
+        )
+        assert (
+            token_data.id == test_user["id"]
+        ), f"Expected user_id {test_user['id']} in the token payload"
+    except HTTPException as e:
+        pytest.fail(f"Token verification failed: {e.detail}")
 
     # Sending email notification
     await send_email_notification(
@@ -90,3 +91,10 @@ async def test_invalid_login_param(client, test_user, email, password, status_co
             subject="Failed Login Attempt",
             body="There was a failed login attempt on your account.",
         )
+
+
+def test_token_creation_and_verification():
+    user_id = 1
+    token = create_access_token({"user_id": user_id})
+    token_data = verify_access_token(token, HTTPException(status_code=401))
+    assert token_data.id == user_id
