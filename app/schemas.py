@@ -144,7 +144,12 @@ class CommunityCreate(CommunityBase):
     pass
 
 
-class Community(BaseModel):
+class CommunityUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class Community(CommunityBase):
     id: int
     created_at: datetime
     owner_id: int
@@ -154,7 +159,19 @@ class Community(BaseModel):
 
 
 class CommunityOut(BaseModel):
-    community: Community
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    owner_id: int
+    owner: UserOut
     member_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityList(BaseModel):
+    communities: List[CommunityOut]
+    total: int
 
     model_config = ConfigDict(from_attributes=True)
