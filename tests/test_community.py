@@ -130,14 +130,12 @@ def test_delete_community(authorized_client, test_community):
 
 
 def test_join_and_leave_community(
-    authorized_client, test_community, test_user2, client, db
+    authorized_client, test_community, test_user2, client
 ):
     # Login as the second user
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
     login_res = client.post("/login", data=login_data)
-    assert (
-        login_res.status_code == status.HTTP_200_OK
-    ), f"Login failed: {login_res.json()}"
+    assert login_res.status_code == status.HTTP_200_OK
     token = login_res.json().get("access_token")
 
     # Create a new client with the second user's token
@@ -149,9 +147,7 @@ def test_join_and_leave_community(
 
     # Check initial community membership
     check_membership = second_user_client.get(f"/communities/{test_community['id']}")
-    assert (
-        check_membership.status_code == status.HTTP_200_OK
-    ), f"Failed to get community: {check_membership.json()}"
+    assert check_membership.status_code == status.HTTP_200_OK
     initial_community_data = check_membership.json()
     logger.info(f"Initial community data: {initial_community_data}")
 
@@ -163,21 +159,14 @@ def test_join_and_leave_community(
         leave_res = second_user_client.post(
             f"/communities/{test_community['id']}/leave"
         )
-        assert (
-            leave_res.status_code == status.HTTP_200_OK
-        ), f"Failed to leave community: {leave_res.json()}"
+        assert leave_res.status_code == status.HTTP_200_OK
         logger.info("User left the community before joining")
 
     # Join the community as the second user
     join_res = second_user_client.post(f"/communities/{test_community['id']}/join")
     logger.info(f"Join response: {join_res.status_code} - {join_res.json()}")
-    assert (
-        join_res.status_code == status.HTTP_200_OK
-    ), f"Failed to join community: {join_res.json()}"
+    assert join_res.status_code == status.HTTP_200_OK
     assert join_res.json()["message"] == "Joined the community successfully"
-
-    # Refresh the database session
-    db.refresh(test_community)
 
     # Verify membership after joining
     check_membership_after = second_user_client.get(
@@ -195,9 +184,7 @@ def test_join_and_leave_community(
     duplicate_join_res = second_user_client.post(
         f"/communities/{test_community['id']}/join"
     )
-    assert (
-        duplicate_join_res.status_code == status.HTTP_400_BAD_REQUEST
-    ), f"Unexpected response when joining again: {duplicate_join_res.json()}"
+    assert duplicate_join_res.status_code == status.HTTP_400_BAD_REQUEST
     assert (
         "User is already a member of this community"
         in duplicate_join_res.json()["detail"]
@@ -205,13 +192,8 @@ def test_join_and_leave_community(
 
     # Leave the community
     leave_res = second_user_client.post(f"/communities/{test_community['id']}/leave")
-    assert (
-        leave_res.status_code == status.HTTP_200_OK
-    ), f"Failed to leave community: {leave_res.json()}"
+    assert leave_res.status_code == status.HTTP_200_OK
     assert leave_res.json()["message"] == "Left the community successfully"
-
-    # Refresh the database session
-    db.refresh(test_community)
 
     # Verify the user is no longer a member
     check_membership_final = second_user_client.get(
@@ -229,9 +211,7 @@ def test_join_and_leave_community(
     duplicate_leave_res = second_user_client.post(
         f"/communities/{test_community['id']}/leave"
     )
-    assert (
-        duplicate_leave_res.status_code == status.HTTP_400_BAD_REQUEST
-    ), f"Unexpected response when leaving again: {duplicate_leave_res.json()}"
+    assert duplicate_leave_res.status_code == status.HTTP_400_BAD_REQUEST
     assert (
         "User is not a member of this community" in duplicate_leave_res.json()["detail"]
     )
