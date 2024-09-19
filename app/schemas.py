@@ -169,6 +169,7 @@ class CommunityOut(BaseModel):
     owner_id: int
     owner: UserOut
     member_count: int
+    members: List[UserOut]
 
     model_config = ConfigDict(from_attributes=True)
 

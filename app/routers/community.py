@@ -126,6 +126,7 @@ def join_community(
         )
     community.members.append(current_user)
     db.commit()
+    db.refresh(community)  # Add this line to refresh the session
     return {"message": "Joined the community successfully"}
 
 
@@ -153,4 +154,5 @@ def leave_community(
         )
     community.members.remove(current_user)
     db.commit()
+    db.refresh(community)  # Add this line to refresh the session
     return {"message": "Left the community successfully"}

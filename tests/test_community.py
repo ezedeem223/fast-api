@@ -176,6 +176,9 @@ def test_join_and_leave_community(
     ), f"Failed to join community: {join_res.json()}"
     assert join_res.json()["message"] == "Joined the community successfully"
 
+    # Refresh the database session
+    db.refresh(test_community)
+
     # Verify membership after joining
     check_membership_after = second_user_client.get(
         f"/communities/{test_community['id']}"
@@ -206,6 +209,9 @@ def test_join_and_leave_community(
         leave_res.status_code == status.HTTP_200_OK
     ), f"Failed to leave community: {leave_res.json()}"
     assert leave_res.json()["message"] == "Left the community successfully"
+
+    # Refresh the database session
+    db.refresh(test_community)
 
     # Verify the user is no longer a member
     check_membership_final = second_user_client.get(
