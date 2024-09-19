@@ -1,6 +1,8 @@
-from pydantic import BaseModel, EmailStr, conint, ConfigDict
+from pydantic import BaseModel, EmailStr, conint, ValidationError, ConfigDict, constr
 from datetime import datetime
 from typing import Optional, List
+
+# Redefining classes with the same structure to simulate validation and check for issues
 
 
 class PostBase(BaseModel):
@@ -136,7 +138,7 @@ class MessageOut(BaseModel):
 
 # Community models
 class CommunityBase(BaseModel):
-    name: str
+    name: constr(min_length=1)
     description: Optional[str] = None
 
 
@@ -145,7 +147,7 @@ class CommunityCreate(CommunityBase):
 
 
 class CommunityUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[constr(min_length=1)] = None
     description: Optional[str] = None
 
 
@@ -154,6 +156,7 @@ class Community(CommunityBase):
     created_at: datetime
     owner_id: int
     owner: UserOut
+    members: List[UserOut]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -175,3 +178,35 @@ class CommunityList(BaseModel):
     total: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Simulate an instance of some models to ensure they validate correctly
+try:
+    # Example instances
+    post_example = PostOut(
+        post=Post(
+            id=1,
+            title="Sample Post",
+            content="Content",
+            published=True,
+            created_at=datetime.now(),
+            owner_id=1,
+            owner=UserOut(id=1, email="test@example.com", created_at=datetime.now()),
+        ),
+        votes=10,
+    )
+    community_example = CommunityOut(
+        id=1,
+        name="Community Name",
+        description="Community Description",
+        created_at=datetime.now(),
+        owner_id=1,
+        owner=UserOut(id=1, email="owner@example.com", created_at=datetime.now()),
+        member_count=50,
+    )
+
+    print("PostOut instance:", post_example)
+    print("CommunityOut instance:", community_example)
+
+except ValidationError as e:
+    print("Validation error:", e)

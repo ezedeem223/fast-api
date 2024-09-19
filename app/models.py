@@ -1,8 +1,20 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Index, Table
 from sqlalchemy.sql.expression import text
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from .database import Base
 from sqlalchemy.orm import relationship
+
+# Association table for many-to-many relationship between Community and User
+community_members = Table(
+    "community_members",
+    Base.metadata,
+    Column(
+        "community_id",
+        ForeignKey("communities.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Post(Base):
@@ -111,6 +123,9 @@ class User(Base):
     communities = relationship(
         "Community", primaryjoin="User.id == Community.owner_id", back_populates="owner"
     )
+    member_of_communities = relationship(
+        "Community", secondary="community_members", back_populates="members"
+    )
     blocks = relationship(
         "Block", primaryjoin="User.id == Block.follower_id", back_populates="follower"
     )
@@ -216,11 +231,14 @@ class Community(Base):
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
 
     # Define relationship with explicit join condition
-    owner = relationship(
-        "User",
-        primaryjoin="Community.owner_id == User.id",
-        back_populates="communities",
+    owner = relationship("User", back_populates="communities")
+    members = relationship(
+        "User", secondary="community_members", back_populates="member_of_communities"
     )
+
+    @property
+    def member_count(self):
+        return len(self.members)
 
 
 class Block(Base):
