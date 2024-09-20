@@ -119,14 +119,17 @@ def join_community(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Community with id: {id} was not found",
         )
-    if current_user in community.members:
+
+    # Check if the user is already a member
+    if any(member.id == current_user.id for member in community.members):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is already a member of this community",
         )
+
     community.members.append(current_user)
     db.commit()
-    db.refresh(community)  # Add this line to refresh the session
+    db.refresh(community)
     return {"message": "Joined the community successfully"}
 
 

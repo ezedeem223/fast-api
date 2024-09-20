@@ -27,22 +27,18 @@ class Post(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
-    user_id = Column(Integer, ForeignKey("users.id"))
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
-    __table_args__ = (Index("idx_title_user", "title", "user_id"),)
+    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
 
-    # Define relationships with explicit join conditions
-    owner = relationship(
-        "User", primaryjoin="Post.owner_id == User.id", back_populates="posts"
-    )
+    owner = relationship("User", back_populates="posts")
     comments = relationship(
-        "Comment", primaryjoin="Post.id == Comment.post_id", back_populates="post"
+        "Comment", back_populates="post", cascade="all, delete-orphan"
     )
     reports = relationship(
-        "Report", primaryjoin="Post.id == Report.post_id", back_populates="post"
+        "Report", back_populates="post", cascade="all, delete-orphan"
     )
 
     is_safe_content = Column(Boolean, default=True)
@@ -64,19 +60,10 @@ class Comment(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Define relationships with explicit join conditions
-    owner = relationship(
-        "User", primaryjoin="Comment.owner_id == User.id", back_populates="comments"
-    )
-    post = relationship(
-        "Post", primaryjoin="Comment.post_id == Post.id", back_populates="comments"
-    )
-
-    # Add relationship to Report model
+    owner = relationship("User", back_populates="comments")
+    post = relationship("Post", back_populates="comments")
     reports = relationship(
-        "Report",
-        primaryjoin="Comment.id == Report.comment_id",
-        back_populates="comment",
+        "Report", back_populates="comment", cascade="all, delete-orphan"
     )
 
 
@@ -90,47 +77,58 @@ class User(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     phone_number = Column(String)
-
-    # New fields for verification
     is_verified = Column(Boolean, default=False)
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
 
-    # Relationships
-    posts = relationship(
-        "Post", primaryjoin="User.id == Post.owner_id", back_populates="owner"
-    )
+    posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
-        "Comment", primaryjoin="User.id == Comment.owner_id", back_populates="owner"
+        "Comment", back_populates="owner", cascade="all, delete-orphan"
     )
     reports = relationship(
-        "Report", primaryjoin="User.id == Report.reporter_id", back_populates="reporter"
+        "Report", back_populates="reporter", cascade="all, delete-orphan"
     )
     follows = relationship(
-        "Follow", primaryjoin="User.id == Follow.follower_id", back_populates="follower"
+        "Follow",
+        foreign_keys="[Follow.follower_id]",
+        back_populates="follower",
+        cascade="all, delete-orphan",
     )
     followed_by = relationship(
-        "Follow", primaryjoin="User.id == Follow.followed_id", back_populates="followed"
+        "Follow",
+        foreign_keys="[Follow.followed_id]",
+        back_populates="followed",
+        cascade="all, delete-orphan",
     )
     sent_messages = relationship(
-        "Message", primaryjoin="User.id == Message.sender_id", back_populates="sender"
+        "Message",
+        foreign_keys="[Message.sender_id]",
+        back_populates="sender",
+        cascade="all, delete-orphan",
     )
     received_messages = relationship(
         "Message",
-        primaryjoin="User.id == Message.receiver_id",
+        foreign_keys="[Message.receiver_id]",
         back_populates="receiver",
+        cascade="all, delete-orphan",
     )
-    communities = relationship(
-        "Community", primaryjoin="User.id == Community.owner_id", back_populates="owner"
+    owned_communities = relationship(
+        "Community", back_populates="owner", cascade="all, delete-orphan"
     )
     member_of_communities = relationship(
-        "Community", secondary="community_members", back_populates="members"
+        "Community", secondary=community_members, back_populates="members"
     )
     blocks = relationship(
-        "Block", primaryjoin="User.id == Block.follower_id", back_populates="follower"
+        "Block",
+        foreign_keys="[Block.blocker_id]",
+        back_populates="blocker",
+        cascade="all, delete-orphan",
     )
     blocked_by = relationship(
-        "Block", primaryjoin="User.id == Block.blocked_id", back_populates="blocked"
+        "Block",
+        foreign_keys="[Block.blocked_id]",
+        back_populates="blocked",
+        cascade="all, delete-orphan",
     )
 
 
@@ -160,18 +158,9 @@ class Report(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Define relationships with explicit join conditions
-    reporter = relationship(
-        "User", primaryjoin="Report.reporter_id == User.id", back_populates="reports"
-    )
-    post = relationship(
-        "Post", primaryjoin="Report.post_id == Post.id", back_populates="reports"
-    )
-    comment = relationship(
-        "Comment",
-        primaryjoin="Report.comment_id == Comment.id",
-        back_populates="reports",
-    )
+    reporter = relationship("User", back_populates="reports")
+    post = relationship("Post", back_populates="reports")
+    comment = relationship("Comment", back_populates="reports")
 
 
 class Follow(Base):
@@ -186,14 +175,11 @@ class Follow(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Define relationships with explicit join conditions
     follower = relationship(
-        "User", primaryjoin="Follow.follower_id == User.id", back_populates="follows"
+        "User", foreign_keys=[follower_id], back_populates="follows"
     )
     followed = relationship(
-        "User",
-        primaryjoin="Follow.followed_id == User.id",
-        back_populates="followed_by",
+        "User", foreign_keys=[followed_id], back_populates="followed_by"
     )
 
 
@@ -207,16 +193,11 @@ class Message(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Define relationships with explicit join conditions
     sender = relationship(
-        "User",
-        primaryjoin="Message.sender_id == User.id",
-        back_populates="sent_messages",
+        "User", foreign_keys=[sender_id], back_populates="sent_messages"
     )
     receiver = relationship(
-        "User",
-        primaryjoin="Message.receiver_id == User.id",
-        back_populates="received_messages",
+        "User", foreign_keys=[receiver_id], back_populates="received_messages"
     )
 
 
@@ -230,10 +211,9 @@ class Community(Base):
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
 
-    # Define relationship with explicit join condition
-    owner = relationship("User", back_populates="communities")
+    owner = relationship("User", back_populates="owned_communities")
     members = relationship(
-        "User", secondary="community_members", back_populates="member_of_communities"
+        "User", secondary=community_members, back_populates="member_of_communities"
     )
 
     @property
@@ -243,7 +223,7 @@ class Community(Base):
 
 class Block(Base):
     __tablename__ = "blocks"
-    follower_id = Column(
+    blocker_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     blocked_id = Column(
@@ -253,10 +233,7 @@ class Block(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Define relationships with explicit join conditions
-    follower = relationship(
-        "User", primaryjoin="Block.follower_id == User.id", back_populates="blocks"
-    )
+    blocker = relationship("User", foreign_keys=[blocker_id], back_populates="blocks")
     blocked = relationship(
-        "User", primaryjoin="Block.blocked_id == User.id", back_populates="blocked_by"
+        "User", foreign_keys=[blocked_id], back_populates="blocked_by"
     )
