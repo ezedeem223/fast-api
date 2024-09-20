@@ -1,10 +1,8 @@
 import pytest
 from fastapi import status
 from app.schemas import CommunityOut
-from app.config import settings
 import logging
-
-# from database import SQLALCHEMY_DATABASE_URL, session, settings, sessionmaker
+from fastapi.testclient import TestClient
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +145,7 @@ def test_join_and_leave_community(
     token = login_res.json().get("access_token")
 
     # Create a new client with the second user's token
-    second_user_client = client
+    second_user_client = TestClient(client.app)
     second_user_client.headers = {
         **second_user_client.headers,
         "Authorization": f"Bearer {token}",
@@ -158,22 +156,13 @@ def test_join_and_leave_community(
     assert get_community_res.status_code == status.HTTP_200_OK
     community_data = get_community_res.json()
 
-    is_member = any(
+    # Ensure the user is not already a member
+    assert not any(
         member["id"] == test_user2["id"] for member in community_data["members"]
-    )
-
-    # If the user is already a member, leave the community first
-    if is_member:
-        leave_res = second_user_client.post(
-            f"/communities/{test_community['id']}/leave"
-        )
-        assert (
-            leave_res.status_code == status.HTTP_200_OK
-        ), f"Failed to leave: {leave_res.json()}"
+    ), "User is already a member of the community"
 
     # Join the community as the second user
     join_res = second_user_client.post(f"/communities/{test_community['id']}/join")
-    print(f"Join response: {join_res.status_code}, {join_res.json()}")
     assert (
         join_res.status_code == status.HTTP_200_OK
     ), f"Failed to join: {join_res.json()}"
@@ -189,7 +178,6 @@ def test_join_and_leave_community(
 
     # Leave the community
     leave_res = second_user_client.post(f"/communities/{test_community['id']}/leave")
-    print(f"Leave response: {leave_res.status_code}, {leave_res.json()}")
     assert (
         leave_res.status_code == status.HTTP_200_OK
     ), f"Failed to leave: {leave_res.json()}"
