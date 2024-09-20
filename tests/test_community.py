@@ -1,7 +1,10 @@
 import pytest
 from fastapi import status
 from app.schemas import CommunityOut
+from app.config import settings
 import logging
+
+# from database import SQLALCHEMY_DATABASE_URL, session, settings, sessionmaker
 
 logger = logging.getLogger(__name__)
 
