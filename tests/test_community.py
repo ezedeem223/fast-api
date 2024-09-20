@@ -150,6 +150,24 @@ def test_join_and_leave_community(
         "Authorization": f"Bearer {token}",
     }
 
+    # Check initial membership status
+    get_community_res = second_user_client.get(f"/communities/{test_community['id']}")
+    assert get_community_res.status_code == status.HTTP_200_OK
+    community_data = get_community_res.json()
+
+    is_member = any(
+        member["id"] == test_user2["id"] for member in community_data["members"]
+    )
+
+    # If the user is already a member, leave the community first
+    if is_member:
+        leave_res = second_user_client.post(
+            f"/communities/{test_community['id']}/leave"
+        )
+        assert (
+            leave_res.status_code == status.HTTP_200_OK
+        ), f"Failed to leave: {leave_res.json()}"
+
     # Join the community as the second user
     join_res = second_user_client.post(f"/communities/{test_community['id']}/join")
     print(f"Join response: {join_res.status_code}, {join_res.json()}")
@@ -158,7 +176,7 @@ def test_join_and_leave_community(
     ), f"Failed to join: {join_res.json()}"
     assert join_res.json()["message"] == "Joined the community successfully"
 
-    # Verify membership by getting the community details
+    # Verify membership after joining
     get_community_res = second_user_client.get(f"/communities/{test_community['id']}")
     assert get_community_res.status_code == status.HTTP_200_OK
     community_data = get_community_res.json()
