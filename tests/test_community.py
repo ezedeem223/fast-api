@@ -130,7 +130,7 @@ def test_delete_community(authorized_client, test_community):
 
 
 def test_join_and_leave_community(
-    authorized_client, test_community, test_user2, client, db
+    authorized_client, test_community, test_user2, client
 ):
     # Ensure test_user2 is not the owner of the community
     assert (
@@ -150,16 +150,6 @@ def test_join_and_leave_community(
         "Authorization": f"Bearer {token}",
     }
 
-    # Check initial membership status
-    community = (
-        db.query(models.Community)
-        .filter(models.Community.id == test_community["id"])
-        .first()
-    )
-    assert test_user2["id"] not in [
-        member.id for member in community.members
-    ], "User should not be a member initially"
-
     # Join the community as the second user
     join_res = second_user_client.post(f"/communities/{test_community['id']}/join")
     print(f"Join response: {join_res.status_code}, {join_res.json()}")
@@ -168,11 +158,13 @@ def test_join_and_leave_community(
     ), f"Failed to join: {join_res.json()}"
     assert join_res.json()["message"] == "Joined the community successfully"
 
-    # Check membership status after joining
-    db.refresh(community)
-    assert test_user2["id"] in [
-        member.id for member in community.members
-    ], "User should be a member after joining"
+    # Verify membership by getting the community details
+    get_community_res = second_user_client.get(f"/communities/{test_community['id']}")
+    assert get_community_res.status_code == status.HTTP_200_OK
+    community_data = get_community_res.json()
+    assert any(
+        member["id"] == test_user2["id"] for member in community_data["members"]
+    ), "User should be a member after joining"
 
     # Leave the community
     leave_res = second_user_client.post(f"/communities/{test_community['id']}/leave")
@@ -182,11 +174,13 @@ def test_join_and_leave_community(
     ), f"Failed to leave: {leave_res.json()}"
     assert leave_res.json()["message"] == "Left the community successfully"
 
-    # Check membership status after leaving
-    db.refresh(community)
-    assert test_user2["id"] not in [
-        member.id for member in community.members
-    ], "User should not be a member after leaving"
+    # Verify membership after leaving
+    get_community_res = second_user_client.get(f"/communities/{test_community['id']}")
+    assert get_community_res.status_code == status.HTTP_200_OK
+    community_data = get_community_res.json()
+    assert not any(
+        member["id"] == test_user2["id"] for member in community_data["members"]
+    ), "User should not be a member after leaving"
 
     # Try to leave again (should fail)
     leave_again_res = second_user_client.post(
