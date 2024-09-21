@@ -79,7 +79,7 @@ def get_posts(
         .all()
     )
 
-    return posts
+    return [schemas.PostOut(post=post, votes=votes) for post, votes in posts]
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
@@ -94,8 +94,14 @@ def create_posts(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
         )
 
+    if not post.content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Content cannot be empty"
+        )
+
     new_post = models.Post(
         owner_id=current_user.id,
+        title=post.title,
         content=post.content,
         is_safe_content=True,
     )
@@ -103,16 +109,14 @@ def create_posts(
     db.commit()
     db.refresh(new_post)
 
-    # إرسال إشعار بالبريد الإلكتروني عند إنشاء منشور جديد
     send_email_notification(
         background_tasks=background_tasks,
-        to=[current_user.email],  # استخدام البريد الإلكتروني للمستخدم الحالي
+        to=[current_user.email],
         subject="New Post Created",
         body=f"Your new post titled '{new_post.title}' has been created successfully.",
     )
     background_tasks.add_task(manager.broadcast, f"New post created: {new_post.title}")
 
-    # مشاركة المحتوى على الشبكات الاجتماعية
     try:
         share_on_twitter(new_post.content)
         share_on_facebook(new_post.content)
@@ -141,6 +145,7 @@ def upload_file(
 
     new_post = models.Post(
         owner_id=current_user.id,
+        title=file.filename,
         content=str(file_location),
         is_safe_content=True,
     )
@@ -183,7 +188,7 @@ def get_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    return post
+    return schemas.PostOut(post=post[0], votes=post[1])
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -218,7 +223,6 @@ def update_post(
     current_user: int = Depends(oauth2.get_current_user),
 ):
     post_query = db.query(models.Post).filter(models.Post.id == id)
-
     post = post_query.first()
 
     if post is None:
@@ -231,6 +235,12 @@ def update_post(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to perform requested action",
         )
+
+    if not update_post.content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Content cannot be empty"
+        )
+
     post_query.update(update_post.model_dump(), synchronize_session=False)
     db.commit()
     return post_query.first()
@@ -243,11 +253,17 @@ def create_short_video(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    if not check_file_for_safe_content(video):
+    if not current_user.is_verified:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inappropriate content detected.",
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
         )
+
+    # TODO: Implement check_file_for_safe_content function
+    # if not check_file_for_safe_content(video):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="Inappropriate content detected.",
+    #     )
 
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     file_location = MEDIA_DIR / video.filename
@@ -257,6 +273,7 @@ def create_short_video(
 
     new_post = models.Post(
         owner_id=current_user.id,
+        title=video.filename,
         content=str(file_location),
         is_safe_content=True,
         is_short_video=True,
@@ -265,10 +282,9 @@ def create_short_video(
     db.commit()
     db.refresh(new_post)
 
-    # إرسال إشعار بالبريد الإلكتروني عند إنشاء فيديو قصير جديد
     send_email_notification(
         background_tasks=background_tasks,
-        to=[current_user.email],  # استخدام البريد الإلكتروني للمستخدم الحالي
+        to=[current_user.email],
         subject="New Short Video Created",
         body=f"Your new short video titled '{new_post.title}' has been created successfully.",
     )
@@ -298,15 +314,16 @@ def get_recommendations_cached(db: Session, current_user: int):
     return recommended_posts
 
 
-def get_recommendations(db: Session, current_user: int):
-    # الحصول على قائمة المستخدمين الذين يتابعهم المستخدم الحالي
+@router.get("/recommendations/", response_model=List[schemas.Post])
+def get_recommendations(
+    db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user)
+):
     followed_users = (
         db.query(models.Follow.followed_id)
         .filter(models.Follow.follower_id == current_user.id)
         .subquery()
     )
 
-    # استرجاع المنشورات الموصى بها بناءً على المتابعة والتفاعلات
     recommended_posts = (
         db.query(models.Post)
         .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
@@ -314,15 +331,14 @@ def get_recommendations(db: Session, current_user: int):
         .filter(models.Post.owner_id.in_(followed_users))
         .group_by(models.Post.id)
         .order_by(
-            func.count(models.Vote.id).desc(),  # الترتيب حسب عدد الأصوات
-            func.count(models.Comment.id).desc(),  # الترتيب حسب عدد التعليقات
-            models.Post.created_at.desc(),  # إعطاء الأولوية للمنشورات الأحدث
+            func.count(models.Vote.id).desc(),
+            func.count(models.Comment.id).desc(),
+            models.Post.created_at.desc(),
         )
         .limit(10)
         .all()
     )
 
-    # عرض منشورات مقترحة أخرى من مستخدمين غير متابعين ولكن لهم محتوى قد يعجب المستخدم
     other_posts = (
         db.query(models.Post)
         .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
@@ -337,9 +353,8 @@ def get_recommendations(db: Session, current_user: int):
             func.count(models.Comment.id).desc(),
             models.Post.created_at.desc(),
         )
-        .limit(5)  # يمكن تعديل العدد حسب الحاجة
+        .limit(5)
         .all()
     )
 
-    # دمج القائمتين معًا
     return recommended_posts + other_posts
