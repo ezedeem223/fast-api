@@ -12,7 +12,7 @@ from app import models
 SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}_test"
 
 # إنشاء محرك الاتصال بقاعدة البيانات
-engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=True)
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
 # تكوين الجلسة المحلية للاختبار
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -20,7 +20,6 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="function")
 def session():
-    # تأكد من أن قاعدة البيانات نظيفة قبل كل اختبار
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -32,7 +31,6 @@ def session():
 
 @pytest.fixture(scope="function")
 def client(session):
-    # تجاوز الدالة get_db لتستخدم الجلسة الخاصة بالاختبار
     def override_get_db():
         try:
             yield session
@@ -41,14 +39,13 @@ def client(session):
 
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
-    app.dependency_overrides.clear()  # إعادة تعيين التعديلات بعد كل اختبار
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")
-def test_user2(client):
-    user_data = {"email": "hello3@gmail.com", "password": "password123"}
+def test_user(client):
+    user_data = {"email": "hello123@gmail.com", "password": "password123"}
     res = client.post("/users/", json=user_data)
-
     assert res.status_code == 201
     new_user = res.json()
     new_user["password"] = user_data["password"]
@@ -56,10 +53,9 @@ def test_user2(client):
 
 
 @pytest.fixture(scope="function")
-def test_user(client):
-    user_data = {"email": "hello123@gmail.com", "password": "password123"}
+def test_user2(client):
+    user_data = {"email": "hello3@gmail.com", "password": "password123"}
     res = client.post("/users/", json=user_data)
-
     assert res.status_code == 201
     new_user = res.json()
     new_user["password"] = user_data["password"]
@@ -90,12 +86,7 @@ def test_posts(test_user, session, test_user2):
         {"title": "3rd title", "content": "3rd content", "owner_id": test_user2["id"]},
     ]
 
-    def create_post_model(post):
-        return models.Post(**post)
-
-    posts = [create_post_model(post) for post in posts_data]
-
+    posts = [models.Post(**post) for post in posts_data]
     session.add_all(posts)
     session.commit()
-
     return session.query(models.Post).all()

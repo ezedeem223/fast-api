@@ -6,6 +6,7 @@ from fastapi import (
     UploadFile,
     File,
     BackgroundTasks,
+    Form,
 )
 from sqlalchemy.orm import Session
 from typing import List
@@ -15,7 +16,7 @@ from fastapi.responses import FileResponse
 import clamd
 import os
 
-router = APIRouter(prefix="/messages", tags=["Messages"])
+router = APIRouter(prefix="/message", tags=["Messages"])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -24,8 +25,14 @@ def send_message(
     message: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),  # تعديل هنا
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
     new_message = models.Message(
         sender_id=current_user.id, receiver_id=recipient_id, content=message
     )
@@ -33,11 +40,12 @@ def send_message(
     db.commit()
     db.refresh(new_message)
 
-    # إرسال إشعار للمستلم
     background_tasks.add_task(
-        notifications.send_notification,
-        user_id=recipient_id,
-        message=f"You have received a new message from {current_user.email}.",
+        notifications.schedule_email_notification,
+        background_tasks=background_tasks,
+        to=recipient.email,
+        subject="New Message",
+        body=f"You have received a new message from {current_user.email}.",
     )
 
     return new_message
@@ -73,26 +81,47 @@ def get_inbox(
     return messages
 
 
-@router.post("/send_file")
-def send_file(
-    recipient_id: int,
+@router.post("/send_file", status_code=status.HTTP_201_CREATED)
+async def send_file(
     file: UploadFile = File(...),
+    recipient_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),  # تعديل هنا
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    # إنشاء مسار الملف المؤقت
+    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    # Check if file is empty
+    await file.seek(0)
+    file_content = await file.read()
+    await file.seek(0)  # Reset file pointer
+
+    if len(file_content) == 0 or file.filename == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty"
+        )
+
+    file_size = len(file_content)
+
+    if file_size > 10 * 1024 * 1024:  # 10MB
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large",
+        )
+
     file_location = f"static/messages/{file.filename}"
 
-    # تأكد من إنشاء المجلد إذا لم يكن موجودًا
     os.makedirs(os.path.dirname(file_location), exist_ok=True)
 
-    with open(file_location, "wb+") as file_object:
-        file_object.write(file.file.read())
+    with open(file_location, "wb") as file_object:
+        file_object.write(file_content)
 
-    # فحص الملف للتأكد من خلوه من الفيروسات
     if not scan_file_for_viruses(file_location):
-        os.remove(file_location)  # إزالة الملف إذا كان مصابًا
+        os.remove(file_location)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File is infected with a virus.",
@@ -105,11 +134,12 @@ def send_file(
     db.commit()
     db.refresh(new_message)
 
-    # إرسال إشعار للمستلم
     background_tasks.add_task(
-        notifications.send_notification,
-        user_id=recipient_id,
-        message=f"You have received a file from {current_user.email}.",
+        notifications.schedule_email_notification,
+        background_tasks=background_tasks,
+        to=recipient.email,
+        subject="New File Received",
+        body=f"You have received a file from {current_user.email}.",
     )
 
     return {"message": "File sent successfully"}
@@ -124,7 +154,23 @@ def scan_file_for_viruses(file_path: str) -> bool:
 
 
 @router.get("/download/{file_name}")
-def download_file(file_name: str):
+def download_file(
+    file_name: str,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
+):
+    message = (
+        db.query(models.Message)
+        .filter(models.Message.content == f"static/messages/{file_name}")
+        .first()
+    )
+    if not message or (
+        message.sender_id != current_user.id and message.receiver_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
+        )
+
     file_path = f"static/messages/{file_name}"
     if not os.path.exists(file_path):
         raise HTTPException(
