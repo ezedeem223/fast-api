@@ -42,13 +42,9 @@ def client(session):
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def test_user(client):
-    user_data = {
-        "email": "hello123@gmail.com",
-        "password": "password123",
-        "username": "testuser1",
-    }
+    user_data = {"email": "hello123@gmail.com", "password": "password123"}
     res = client.post("/users/", json=user_data)
     assert res.status_code == 201
     new_user = res.json()
@@ -56,13 +52,9 @@ def test_user(client):
     return new_user
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def test_user2(client):
-    user_data = {
-        "email": "hello456@gmail.com",
-        "password": "password456",
-        "username": "testuser2",
-    }
+    user_data = {"email": "hello3@gmail.com", "password": "password123"}
     res = client.post("/users/", json=user_data)
     assert res.status_code == 201
     new_user = res.json()

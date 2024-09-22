@@ -4,6 +4,7 @@ from fastapi import (
     status,
     HTTPException,
     BackgroundTasks,
+    Path,
 )
 from sqlalchemy.orm import Session
 from .. import models, database, oauth2
@@ -14,16 +15,11 @@ router = APIRouter(prefix="/follow", tags=["Follow"])
 
 @router.post("/{user_id}", status_code=status.HTTP_201_CREATED)
 async def follow_user(
-    user_id: int,
-    background_tasks: BackgroundTasks,
+    user_id: int = Path(..., gt=0),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: int = Depends(oauth2.get_current_user),
 ):
-    if user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user ID"
-        )
-
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot follow yourself"
@@ -59,7 +55,7 @@ async def follow_user(
         send_email_notification,
         to=user_to_follow.email,
         subject="New Follower",
-        body=f"You have a new follower: {current_user.username}",
+        body=f"You have a new follower: {current_user.email}",
     )
 
     return {"message": "Successfully followed user"}
@@ -67,8 +63,8 @@ async def follow_user(
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def unfollow_user(
-    user_id: int,
-    background_tasks: BackgroundTasks,
+    user_id: int = Path(..., gt=0),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(database.get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
@@ -96,10 +92,11 @@ async def unfollow_user(
     db.delete(follow)
     db.commit()
 
-    await send_email_notification(
+    background_tasks.add_task(
+        send_email_notification,
         to=user_unfollowed.email,
         subject="Follower Lost",
-        body=f"You have lost a follower: {current_user.username}",
+        body=f"You have lost a follower: {current_user.email}",
     )
 
-    return {"message": "Successfully unfollowed user"}
+    return None  # FastAPI will automatically create a 204 No Content response
