@@ -17,8 +17,13 @@ async def follow_user(
     user_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(database.get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    if user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user ID"
+        )
+
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot follow yourself"
@@ -50,7 +55,8 @@ async def follow_user(
     db.add(new_follow)
     db.commit()
 
-    await send_email_notification(
+    background_tasks.add_task(
+        send_email_notification,
         to=user_to_follow.email,
         subject="New Follower",
         body=f"You have a new follower: {current_user.username}",
