@@ -19,34 +19,44 @@ import os
 router = APIRouter(prefix="/message", tags=["Messages"])
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Message)
 def send_message(
-    recipient_id: int,
-    message: str,
+    message: schemas.MessageCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
+    recipient = (
+        db.query(models.User).filter(models.User.id == message.recipient_id).first()
+    )
     if not recipient:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="User not found",
+        )
+
+    block = (
+        db.query(models.Block)
+        .filter(
+            models.Block.blocker_id == message.recipient_id,
+            models.Block.blocked_id == current_user.id,
+        )
+        .first()
+    )
+
+    if block:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="You can't send messages to this user",
         )
 
     new_message = models.Message(
-        sender_id=current_user.id, receiver_id=recipient_id, content=message
+        sender_id=current_user.id,
+        receiver_id=message.recipient_id,
+        content=message.content,
     )
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
-
-    background_tasks.add_task(
-        notifications.schedule_email_notification,
-        background_tasks=background_tasks,
-        to=recipient.email,
-        subject="New Message",
-        body=f"You have received a new message from {current_user.email}.",
-    )
 
     return new_message
 
@@ -55,6 +65,8 @@ def send_message(
 def get_messages(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 500,
 ):
     messages = (
         db.query(models.Message)
@@ -62,23 +74,33 @@ def get_messages(
             (models.Message.sender_id == current_user.id)
             | (models.Message.receiver_id == current_user.id)
         )
+        .order_by(models.Message.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )
-    return messages
+    return list(map(schemas.Message.from_orm, messages))
 
 
 @router.get("/inbox", response_model=List[schemas.MessageOut])
 def get_inbox(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 100,
 ):
     messages = (
         db.query(models.Message)
         .filter(models.Message.receiver_id == current_user.id)
         .order_by(models.Message.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )
-    return messages
+    return [
+        schemas.MessageOut(message=schemas.Message.from_orm(message), count=1)
+        for message in messages
+    ]
 
 
 @router.post("/send_file", status_code=status.HTTP_201_CREATED)

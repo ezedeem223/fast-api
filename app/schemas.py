@@ -111,20 +111,20 @@ class Verify2FAResponse(BaseModel):
 
 
 class MessageBase(BaseModel):
-    content: str
-    receiver_id: int
-    sender_id: int
+    content: constr(max_length=1000)
 
 
 class MessageCreate(MessageBase):
-    pass
+    recipient_id: int
 
 
-class Message(BaseModel):
+class Message(MessageBase):
     id: int
-    created_at: datetime
-    sender: UserOut
-    receiver: UserOut
+    sender_id: int
+    receiver_id: int
+    timestamp: datetime
+    sender: Optional[UserOut]
+    receiver: Optional[UserOut]
 
     model_config = ConfigDict(from_attributes=True)
 
