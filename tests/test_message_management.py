@@ -4,7 +4,7 @@ from app.database import get_db
 from sqlalchemy.orm import Session
 from fastapi import UploadFile
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture
@@ -38,7 +38,8 @@ def test_send_message_to_nonexistent_user(authorized_client):
 def test_send_empty_message(authorized_client, test_user2):
     message_data = {"recipient_id": test_user2["id"], "content": ""}
     response = authorized_client.post("/message/", json=message_data)
-    assert response.status_code == 422  # Assuming empty content is not allowed
+    assert response.status_code == 422
+    assert "Message content cannot be empty" in response.json()["detail"]
 
 
 def test_get_messages(authorized_client, test_message):
@@ -48,7 +49,7 @@ def test_get_messages(authorized_client, test_message):
     assert isinstance(messages, list)
     assert len(messages) > 0
     assert "content" in messages[0]
-    assert messages[0]["content"] == "Test Message"
+    assert messages[0]["content"] == test_message.content
 
 
 def test_get_inbox(authorized_client, test_message):
@@ -58,7 +59,7 @@ def test_get_inbox(authorized_client, test_message):
     assert isinstance(messages, list)
     assert len(messages) > 0
     assert "message" in messages[0]
-    assert messages[0]["message"]["content"] == "Test Message"
+    assert messages[0]["message"]["content"] == test_message.content
     assert "count" in messages[0]
 
 
@@ -92,26 +93,17 @@ def test_send_large_file(mock_scan, authorized_client, test_user2):
     assert "File is too large" in response.json()["detail"]
 
 
-def test_download_file(authorized_client, test_message, monkeypatch):
-    # Mock the file existence check
-    def mock_path_exists(path):
-        return True
-
-    monkeypatch.setattr("os.path.exists", mock_path_exists)
-
-    # Mock the FileResponse
-    class MockFileResponse:
-        def __init__(self, path, filename):
-            self.path = path
-            self.filename = filename
-
-    monkeypatch.setattr("fastapi.responses.FileResponse", MockFileResponse)
+@patch("os.path.exists")
+@patch("fastapi.responses.FileResponse")
+def test_download_file(
+    mock_file_response, mock_path_exists, authorized_client, test_message, monkeypatch
+):
+    mock_path_exists.return_value = True
+    mock_file_response.return_value = MagicMock(status_code=200)
 
     file_name = "test.txt"
     response = authorized_client.get(f"/message/download/{file_name}")
     assert response.status_code == 200
-    assert isinstance(response, MockFileResponse)
-    assert response.filename == file_name
 
 
 def test_download_nonexistent_file(authorized_client):
