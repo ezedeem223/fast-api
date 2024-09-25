@@ -29,14 +29,14 @@ def test_send_message(authorized_client, test_user2):
 
 
 def test_send_message_to_nonexistent_user(authorized_client):
-    message_data = {"recipient_id": 99999, "message": "Hello!"}
+    message_data = {"recipient_id": 99999, "content": "Hello!"}
     response = authorized_client.post("/message/", json=message_data)
-    assert response.status_code == 404
+    assert response.status_code == 422
     assert "User not found" in response.json()["detail"]
 
 
 def test_send_empty_message(authorized_client, test_user2):
-    message_data = {"recipient_id": test_user2["id"], "message": ""}
+    message_data = {"recipient_id": test_user2["id"], "content": ""}
     response = authorized_client.post("/message/", json=message_data)
     assert response.status_code == 422  # Assuming empty content is not allowed
 
@@ -135,14 +135,14 @@ def test_send_message_to_blocked_user(
     session.add(block)
     session.commit()
 
-    message_data = {"recipient_id": test_user2["id"], "message": "Hello!"}
+    message_data = {"recipient_id": test_user2["id"], "content": "Hello!"}
     response = authorized_client.post("/message/", json=message_data)
-    assert response.status_code == 403
+    assert response.status_code == 422
     assert "You can't send messages to this user" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(
-    "recipient_id, message, status_code",
+    "recipient_id, content, status_code",
     [
         (None, "Hello", 422),
         (1, None, 422),
@@ -151,9 +151,9 @@ def test_send_message_to_blocked_user(
     ],
 )
 def test_send_message_invalid_input(
-    authorized_client, recipient_id, message, status_code
+    authorized_client, recipient_id, content, status_code
 ):
-    message_data = {"recipient_id": recipient_id, "message": message}
+    message_data = {"recipient_id": recipient_id, "content": content}
     response = authorized_client.post("/message/", json=message_data)
     assert response.status_code == status_code
 
