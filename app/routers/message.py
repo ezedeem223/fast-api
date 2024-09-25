@@ -25,6 +25,12 @@ def send_message(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    if not message.content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Message content cannot be empty",
+        )
+
     recipient = (
         db.query(models.User).filter(models.User.id == message.recipient_id).first()
     )
@@ -79,7 +85,7 @@ def get_messages(
         .limit(limit)
         .all()
     )
-    return list(map(schemas.Message.from_orm, messages))
+    return messages
 
 
 @router.get("/inbox", response_model=List[schemas.MessageOut])
@@ -97,10 +103,7 @@ def get_inbox(
         .limit(limit)
         .all()
     )
-    return [
-        schemas.MessageOut(message=schemas.Message.from_orm(message), count=1)
-        for message in messages
-    ]
+    return [schemas.MessageOut(message=message, count=1) for message in messages]
 
 
 @router.post("/send_file", status_code=status.HTTP_201_CREATED)
@@ -199,6 +202,3 @@ def download_file(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
     return FileResponse(path=file_path, filename=file_name)
-
-
-# asd
