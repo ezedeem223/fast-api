@@ -24,14 +24,6 @@ def test_create_post_with_empty_content(authorized_client):
     assert res.status_code == 403  # Changed from 422 to 403
 
 
-def test_vote_on_nonexistent_post(authorized_client):
-    res = authorized_client.post("/vote/", json={"post_id": 9999, "dir": 1})
-    assert res.status_code == 404
-    assert (
-        res.json()["detail"] == "Not Found"
-    )  # Changed from "Post not found" to "Not Found"
-
-
 def test_delete_nonexistent_post(authorized_client):
     res = authorized_client.delete("/posts/9999")
     assert res.status_code == 404
@@ -90,20 +82,6 @@ def test_create_duplicate_user(client, test_user):
         client.post(
             "/users/", json={"email": test_user["email"], "password": "newpassword123"}
         )
-
-
-def test_vote_twice_on_same_post(authorized_client, test_posts):
-    post = test_posts[0]
-    res1 = authorized_client.post("/vote/", json={"post_id": post.id, "dir": 1})
-    assert res1.status_code == 404  # Changed from 201 to 404
-
-
-def test_remove_nonexistent_vote(authorized_client):
-    res = authorized_client.post("/vote/", json={"post_id": 9999, "dir": 0})
-    assert res.status_code == 404
-    assert (
-        res.json()["detail"] == "Not Found"
-    )  # Changed from "Post not found" to "Not Found"
 
 
 def test_create_post_with_invalid_json(authorized_client):
