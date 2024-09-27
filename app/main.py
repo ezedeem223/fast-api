@@ -24,8 +24,8 @@ from .routers import (
     message,
     community,
     p2fa,
+    vote,
 )
-from .routers.vote import router as vote_router
 from .config import settings
 from .notifications import (
     ConnectionManager,
@@ -53,7 +53,7 @@ app.add_middleware(
 app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
-app.include_router(vote_router)
+app.include_router(vote.router)
 app.include_router(comment.router)
 app.include_router(follow.router)
 app.include_router(block.router)
