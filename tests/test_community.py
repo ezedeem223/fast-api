@@ -1,50 +1,16 @@
 import pytest
 from fastapi import status
-from app.schemas import CommunityOut
+from app.schemas import (
+    CommunityOut,
+    ReelOut,
+    ArticleOut,
+    PostOut,
+    CommunityInvitationOut,
+)
 import logging
 from fastapi.testclient import TestClient
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture
-def test_user(client):
-    user_data = {
-        "email": "testuser@example.com",
-        "password": "testpassword",
-    }
-    res = client.post("/users", json=user_data)
-    assert res.status_code == status.HTTP_201_CREATED
-    new_user = res.json()
-    new_user["password"] = user_data["password"]
-    return new_user
-
-
-@pytest.fixture
-def test_user2(client):
-    user_data = {
-        "email": "testuser2@example.com",
-        "password": "testpassword2",
-    }
-    res = client.post("/users", json=user_data)
-    assert res.status_code == status.HTTP_201_CREATED
-    new_user = res.json()
-    new_user["password"] = user_data["password"]
-    return new_user
-
-
-@pytest.fixture
-def token(test_user, client):
-    login_data = {"username": test_user["email"], "password": test_user["password"]}
-    res = client.post("/login", data=login_data)
-    assert res.status_code == status.HTTP_200_OK
-    return res.json().get("access_token")
-
-
-@pytest.fixture
-def authorized_client(client, token):
-    client.headers = {**client.headers, "Authorization": f"Bearer {token}"}
-    return client
 
 
 @pytest.fixture
@@ -57,6 +23,184 @@ def test_community(authorized_client):
     assert res.status_code == status.HTTP_201_CREATED
     new_community = res.json()
     return new_community
+
+
+@pytest.fixture
+def test_reel(authorized_client, test_community):
+    reel_data = {
+        "title": "Test Reel",
+        "video_url": "http://example.com/test_video.mp4",
+        "description": "This is a test reel",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/reels", json=reel_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    new_reel = res.json()
+    return new_reel
+
+
+@pytest.fixture
+def test_article(authorized_client, test_community):
+    article_data = {
+        "title": "Test Article",
+        "content": "This is the content of the test article",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/articles", json=article_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    new_article = res.json()
+    return new_article
+
+
+@pytest.fixture
+def test_community_post(authorized_client, test_community):
+    post_data = {
+        "title": "Test Community Post",
+        "content": "This is a test post in the community",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/posts", json=post_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    new_post = res.json()
+    return new_post
+
+
+def test_create_reel(authorized_client, test_community):
+    reel_data = {
+        "title": "New Test Reel",
+        "video_url": "http://example.com/new_test_video.mp4",
+        "description": "This is a new test reel",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/reels", json=reel_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    created_reel = res.json()
+    assert created_reel["title"] == reel_data["title"]
+    assert created_reel["video_url"] == reel_data["video_url"]
+    assert created_reel["description"] == reel_data["description"]
+    assert "id" in created_reel
+    assert "created_at" in created_reel
+    assert "owner_id" in created_reel
+    assert "owner" in created_reel
+    assert "community" in created_reel
+
+
+def test_get_community_reels(authorized_client, test_community, test_reel):
+    res = authorized_client.get(f"/communities/{test_community['id']}/reels")
+    assert res.status_code == status.HTTP_200_OK
+    reels = res.json()
+    assert isinstance(reels, list)
+    assert len(reels) > 0
+    assert all(isinstance(reel, dict) for reel in reels)
+    assert all("id" in reel for reel in reels)
+    assert all("title" in reel for reel in reels)
+    assert all("video_url" in reel for reel in reels)
+    assert all("description" in reel for reel in reels)
+    assert all("created_at" in reel for reel in reels)
+    assert all("owner_id" in reel for reel in reels)
+    assert all("owner" in reel for reel in reels)
+    assert all("community" in reel for reel in reels)
+
+
+def test_create_article(authorized_client, test_community):
+    article_data = {
+        "title": "New Test Article",
+        "content": "This is the content of the new test article",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/articles", json=article_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    created_article = res.json()
+    assert created_article["title"] == article_data["title"]
+    assert created_article["content"] == article_data["content"]
+    assert "id" in created_article
+    assert "created_at" in created_article
+    assert "author_id" in created_article
+    assert "author" in created_article
+    assert "community" in created_article
+
+
+def test_get_community_articles(authorized_client, test_community, test_article):
+    res = authorized_client.get(f"/communities/{test_community['id']}/articles")
+    assert res.status_code == status.HTTP_200_OK
+    articles = res.json()
+    assert isinstance(articles, list)
+    assert len(articles) > 0
+    assert all(isinstance(article, dict) for article in articles)
+    assert all("id" in article for article in articles)
+    assert all("title" in article for article in articles)
+    assert all("content" in article for article in articles)
+    assert all("created_at" in article for article in articles)
+    assert all("author_id" in article for article in articles)
+    assert all("author" in article for article in articles)
+    assert all("community" in article for article in articles)
+
+
+def test_create_community_post(authorized_client, test_community):
+    post_data = {
+        "title": "New Test Community Post",
+        "content": "This is a new test post in the community",
+        "community_id": test_community["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/posts", json=post_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    created_post = res.json()
+    assert created_post["title"] == post_data["title"]
+    assert created_post["content"] == post_data["content"]
+    assert "id" in created_post
+    assert "created_at" in created_post
+    assert "owner_id" in created_post
+    assert "owner" in created_post
+    assert "community" in created_post
+
+
+def test_get_community_posts(authorized_client, test_community, test_community_post):
+    res = authorized_client.get(f"/communities/{test_community['id']}/posts")
+    assert res.status_code == status.HTTP_200_OK
+    posts = res.json()
+    assert isinstance(posts, list)
+    assert len(posts) > 0
+    assert all(isinstance(post, dict) for post in posts)
+    assert all("id" in post for post in posts)
+    assert all("title" in post for post in posts)
+    assert all("content" in post for post in posts)
+    assert all("created_at" in post for post in posts)
+    assert all("owner_id" in post for post in posts)
+    assert all("owner" in post for post in posts)
+    assert all("community" in post for post in posts)
+
+
+def test_create_reel_not_member(authorized_client, test_community, test_user2, client):
+    # Login as the second user
+    login_data = {"username": test_user2["email"], "password": test_user2["password"]}
+    login_res = client.post("/login", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
+    token = login_res.json().get("access_token")
+
+    # Try to create a reel as a non-member
+    headers = {"Authorization": f"Bearer {token}"}
+    reel_data = {
+        "title": "Unauthorized Reel",
+        "video_url": "http://example.com/unauthorized_video.mp4",
+        "description": "This reel should not be allowed",
+        "community_id": test_community["id"],
+    }
+    res = client.post(
+        f"/communities/{test_community['id']}/reels", json=reel_data, headers=headers
+    )
+    assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_create_community(authorized_client):
@@ -264,4 +408,170 @@ def test_delete_community_not_owner(
     # Try to delete the community as the second user
     headers = {"Authorization": f"Bearer {token}"}
     res = client.delete(f"/communities/{test_community['id']}", headers=headers)
+    assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_create_content_nonexistent_community(authorized_client):
+    nonexistent_id = 99999  # Assuming this ID doesn't exist
+    reel_data = {
+        "title": "Test Reel",
+        "video_url": "http://example.com/test_video.mp4",
+        "description": "This is a test reel",
+    }
+    res = authorized_client.post(f"/communities/{nonexistent_id}/reels", json=reel_data)
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    article_data = {
+        "title": "Test Article",
+        "content": "This is the content of the test article",
+    }
+    res = authorized_client.post(
+        f"/communities/{nonexistent_id}/articles", json=article_data
+    )
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    post_data = {
+        "title": "Test Community Post",
+        "content": "This is a test post in the community",
+    }
+    res = authorized_client.post(f"/communities/{nonexistent_id}/posts", json=post_data)
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.fixture
+def test_invitation(authorized_client, test_community, test_user2):
+    invitation_data = {
+        "community_id": test_community["id"],
+        "invitee_id": test_user2["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/invite", json=invitation_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    new_invitation = res.json()
+    return new_invitation
+
+
+def test_invite_friend_to_community(authorized_client, test_community, test_user2):
+    invitation_data = {
+        "community_id": test_community["id"],
+        "invitee_id": test_user2["id"],
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/invite", json=invitation_data
+    )
+    assert res.status_code == status.HTTP_201_CREATED
+    created_invitation = res.json()
+    assert created_invitation["community_id"] == test_community["id"]
+    assert created_invitation["invitee_id"] == test_user2["id"]
+    assert "id" in created_invitation
+    assert "inviter_id" in created_invitation
+    assert created_invitation["status"] == "pending"
+    assert "created_at" in created_invitation
+
+
+def test_get_user_invitations(authorized_client, test_invitation, test_user2, client):
+    # تسجيل الدخول كمستخدم مدعو
+    login_data = {"username": test_user2["email"], "password": test_user2["password"]}
+    login_res = client.post("/login", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
+    token = login_res.json().get("access_token")
+
+    # الحصول على دعوات المستخدم المدعو
+    headers = {"Authorization": f"Bearer {token}"}
+    res = client.get("/communities/invitations", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    invitations = res.json()
+    assert isinstance(invitations, list)
+    assert len(invitations) > 0
+    assert all(isinstance(invitation, dict) for invitation in invitations)
+    assert any(invitation["id"] == test_invitation["id"] for invitation in invitations)
+
+
+def test_accept_invitation(authorized_client, test_invitation, test_user2, client):
+    # Login as the invited user
+    login_data = {"username": test_user2["email"], "password": test_user2["password"]}
+    login_res = client.post("/login", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
+    token = login_res.json().get("access_token")
+
+    # Accept the invitation
+    headers = {"Authorization": f"Bearer {token}"}
+    res = client.post(
+        f"/communities/invitations/{test_invitation['id']}/accept", headers=headers
+    )
+    assert res.status_code == status.HTTP_200_OK
+    response_data = res.json()
+    assert response_data["message"] == "Invitation accepted successfully"
+
+    # Verify that the user is now a member of the community
+    res = client.get(f"/communities/{test_invitation['community_id']}", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    community_data = res.json()
+    assert any(member["id"] == test_user2["id"] for member in community_data["members"])
+
+
+def test_reject_invitation(authorized_client, test_invitation, test_user2, client):
+    # Login as the invited user
+    login_data = {"username": test_user2["email"], "password": test_user2["password"]}
+    login_res = client.post("/login", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
+    token = login_res.json().get("access_token")
+
+    # Reject the invitation
+    headers = {"Authorization": f"Bearer {token}"}
+    res = client.post(
+        f"/communities/invitations/{test_invitation['id']}/reject", headers=headers
+    )
+    assert res.status_code == status.HTTP_200_OK
+    response_data = res.json()
+    assert response_data["message"] == "Invitation rejected successfully"
+
+    # Verify that the user is not a member of the community
+    res = client.get(f"/communities/{test_invitation['community_id']}", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    community_data = res.json()
+    assert all(member["id"] != test_user2["id"] for member in community_data["members"])
+
+
+def test_invite_non_existing_user(authorized_client, test_community):
+    invitation_data = {
+        "community_id": test_community["id"],
+        "invitee_id": 99999,  # Non-existing user ID
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/invite", json=invitation_data
+    )
+    assert res.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_invite_already_member(authorized_client, test_community, test_user):
+    invitation_data = {
+        "community_id": test_community["id"],
+        "invitee_id": test_user["id"],  # The user who created the community
+    }
+    res = authorized_client.post(
+        f"/communities/{test_community['id']}/invite", json=invitation_data
+    )
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+
+def test_non_member_invite(authorized_client, test_community, test_user2, client):
+    # Login as the second user (non-member)
+    login_data = {"username": test_user2["email"], "password": test_user2["password"]}
+    login_res = client.post("/login", data=login_data)
+    assert login_res.status_code == status.HTTP_200_OK
+    token = login_res.json().get("access_token")
+
+    # Try to invite someone as a non-member
+    headers = {"Authorization": f"Bearer {token}"}
+    invitation_data = {
+        "community_id": test_community["id"],
+        "invitee_id": test_user2["id"],
+    }
+    res = client.post(
+        f"/communities/{test_community['id']}/invite",
+        json=invitation_data,
+        headers=headers,
+    )
     assert res.status_code == status.HTTP_403_FORBIDDEN

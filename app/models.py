@@ -1,6 +1,18 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Index, Table
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Boolean,
+    ForeignKey,
+    Index,
+    Table,
+    Enum,
+    Text,
+    DateTime,
+)
 from sqlalchemy.sql.expression import text
 from sqlalchemy.sql.sqltypes import TIMESTAMP
+from sqlalchemy.sql import func
 from .database import Base
 from sqlalchemy.orm import relationship
 
@@ -30,6 +42,9 @@ class Post(Base):
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True
+    )
 
     __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
 
@@ -37,6 +52,7 @@ class Post(Base):
     comments = relationship(
         "Comment", back_populates="post", cascade="all, delete-orphan"
     )
+    community = relationship("Community", back_populates="posts")
     reports = relationship(
         "Report", back_populates="post", cascade="all, delete-orphan"
     )
@@ -130,6 +146,20 @@ class User(Base):
         back_populates="blocked",
         cascade="all, delete-orphan",
     )
+    reels = relationship("Reel", back_populates="owner", cascade="all, delete-orphan")
+    articles = relationship(
+        "Article", back_populates="author", cascade="all, delete-orphan"
+    )
+    sent_invitations = relationship(
+        "CommunityInvitation",
+        foreign_keys="[CommunityInvitation.inviter_id]",
+        back_populates="inviter",
+    )
+    received_invitations = relationship(
+        "CommunityInvitation",
+        foreign_keys="[CommunityInvitation.invitee_id]",
+        back_populates="invitee",
+    )
 
 
 class Vote(Base):
@@ -215,10 +245,82 @@ class Community(Base):
     members = relationship(
         "User", secondary=community_members, back_populates="member_of_communities"
     )
+    posts = relationship(
+        "Post", back_populates="community", cascade="all, delete-orphan"
+    )
+    reels = relationship(
+        "Reel", back_populates="community", cascade="all, delete-orphan"
+    )
+    articles = relationship(
+        "Article", back_populates="community", cascade="all, delete-orphan"
+    )
+    invitations = relationship(
+        "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
+    )
 
     @property
     def member_count(self):
         return len(self.members)
+
+
+class CommunityInvitation(Base):
+    __tablename__ = "community_invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"))
+    inviter_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    invitee_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    community = relationship("Community", back_populates="invitations")
+    inviter = relationship(
+        "User", foreign_keys=[inviter_id], back_populates="sent_invitations"
+    )
+    invitee = relationship(
+        "User", foreign_keys=[invitee_id], back_populates="received_invitations"
+    )
+
+
+class Reel(Base):
+    __tablename__ = "reels"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    title = Column(String, nullable=False)
+    video_url = Column(String, nullable=False)
+    description = Column(String)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+
+    owner = relationship("User", back_populates="reels")
+    community = relationship("Community", back_populates="reels")
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+
+    author = relationship("User", back_populates="articles")
+    community = relationship("Community", back_populates="articles")
 
 
 class Block(Base):
