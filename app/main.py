@@ -53,8 +53,12 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error for request: {request.url}")
+    logger.error(f"Error details: {exc.errors()}")
     if request.url.path.startswith("/communities"):
-        # Проверяем, является ли это запросом на создание контента
+        if request.url.path == "/communities/invitations":
+            logger.error("Error in /communities/invitations route")
+            raise exc
         if any(segment.isdigit() for segment in request.url.path.split("/")):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -471,27 +471,40 @@ def test_invite_friend_to_community(authorized_client, test_community, test_user
 
 
 def test_get_user_invitations(authorized_client, test_invitation, test_user2, client):
-    # Логин как приглашенный пользователь
+    # تسجيل الدخول كمستخدم مدعو
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
     login_res = client.post("/login", data=login_data)
-    assert login_res.status_code == status.HTTP_200_OK
+    assert (
+        login_res.status_code == status.HTTP_200_OK
+    ), f"Login failed: {login_res.json()}"
     token = login_res.json().get("access_token")
+    assert token, "No token received after login"
 
-    # Получение приглашений пользователя
+    # الحصول على دعوات المستخدم
     headers = {"Authorization": f"Bearer {token}"}
     res = client.get("/communities/invitations", headers=headers)
-    assert res.status_code == status.HTTP_200_OK
+
+    print(f"Response status code: {res.status_code}")
+    print(f"Response content: {res.content}")
+
+    if res.status_code != status.HTTP_200_OK:
+        print(f"Headers sent: {headers}")
+        print(f"Full response: {res.json()}")
+
+    assert (
+        res.status_code == status.HTTP_200_OK
+    ), f"Expected 200, got {res.status_code}. Response: {res.content}"
+
     invitations = res.json()
-    assert isinstance(invitations, list)
-    # Если есть тестовое приглашение, проверяем его наличие в результатах
+    assert isinstance(invitations, list), f"Expected a list, got {type(invitations)}"
+
     if test_invitation:
-        assert len(invitations) > 0
+        assert len(invitations) > 0, "Expected at least one invitation, got none"
         assert any(
             invitation["id"] == test_invitation["id"] for invitation in invitations
-        )
+        ), "Test invitation not found in response"
     else:
-        # Если тестового приглашения нет, список может быть пустым
-        assert len(invitations) == 0
+        assert len(invitations) == 0, f"Expected no invitations, got {len(invitations)}"
 
 
 def test_accept_invitation(authorized_client, test_invitation, test_user2, client):

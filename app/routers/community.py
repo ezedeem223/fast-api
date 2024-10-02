@@ -355,6 +355,7 @@ async def get_user_invitations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    logger.info(f"Fetching invitations for user {current_user.id}")
     try:
         invitations = (
             db.query(models.CommunityInvitation)
@@ -370,7 +371,9 @@ async def get_user_invitations(
             .all()
         )
 
-        logger.debug(f"Fetched invitations: {invitations}")
+        logger.info(f"Fetched {len(invitations)} invitations")
+        for inv in invitations:
+            logger.debug(f"Invitation: {inv.__dict__}")
 
         result = []
         for inv in invitations:
@@ -391,9 +394,11 @@ async def get_user_invitations(
                 logger.error(f"Error converting invitation to schema: {str(e)}")
                 logger.error(f"Problematic invitation: {inv.__dict__}")
 
+        logger.info(f"Returning {len(result)} invitations")
         return result
     except Exception as e:
         logger.error(f"Error in get_user_invitations: {str(e)}")
+        logger.exception("Exception traceback:")
         return []
 
 
