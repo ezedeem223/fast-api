@@ -372,9 +372,25 @@ async def get_user_invitations(
         )
 
         logger.info(f"Fetched {len(invitations)} invitations")
-        result = [
-            schemas.CommunityInvitationOut.model_validate(inv) for inv in invitations
-        ]
+        result = []
+        for inv in invitations:
+            try:
+                invitation_out = schemas.CommunityInvitationOut(
+                    id=inv.id,
+                    community_id=inv.community_id,
+                    inviter_id=inv.inviter_id,
+                    invitee_id=inv.invitee_id,
+                    status=inv.status,
+                    created_at=inv.created_at,
+                    community=schemas.CommunityOut.model_validate(inv.community),
+                    inviter=schemas.UserOut.model_validate(inv.inviter),
+                    invitee=schemas.UserOut.model_validate(inv.invitee),
+                )
+                result.append(invitation_out)
+            except Exception as e:
+                logger.error(f"Error converting invitation to schema: {str(e)}")
+                logger.error(f"Problematic invitation: {inv.__dict__}")
+
         logger.info(f"Returning {len(result)} invitations")
         return result
     except Exception as e:

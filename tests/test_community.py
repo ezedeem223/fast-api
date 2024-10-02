@@ -470,10 +470,10 @@ def test_invite_friend_to_community(authorized_client, test_community, test_user
     assert "created_at" in created_invitation
 
 
-def test_get_user_invitations(authorized_client, test_invitation, test_user2, client):
+def test_get_user_invitations(authorized_client, test_invitation, test_user2):
     # تسجيل الدخول كمستخدم مدعو
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
-    login_res = client.post("/login", data=login_data)
+    login_res = authorized_client.post("/login", data=login_data)
     assert (
         login_res.status_code == status.HTTP_200_OK
     ), f"Login failed: {login_res.json()}"
@@ -482,7 +482,7 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2, cl
 
     # الحصول على دعوات المستخدم
     headers = {"Authorization": f"Bearer {token}"}
-    res = client.get("/communities/invitations", headers=headers)
+    res = authorized_client.get("/communities/invitations", headers=headers)
 
     print(f"Response status code: {res.status_code}")
     print(f"Response content: {res.content}")
@@ -491,20 +491,27 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2, cl
         print(f"Headers sent: {headers}")
         print(f"Full response: {res.json()}")
 
-    assert (
-        res.status_code == status.HTTP_200_OK
-    ), f"Expected 200, got {res.status_code}. Response: {res.content}"
+    try:
+        assert (
+            res.status_code == status.HTTP_200_OK
+        ), f"Expected 200, got {res.status_code}. Response: {res.content}"
 
-    invitations = res.json()
-    assert isinstance(invitations, list), f"Expected a list, got {type(invitations)}"
+        invitations = res.json()
+        assert isinstance(
+            invitations, list
+        ), f"Expected a list, got {type(invitations)}"
 
-    if test_invitation:
-        assert len(invitations) > 0, "Expected at least one invitation, got none"
-        assert any(
-            invitation["id"] == test_invitation["id"] for invitation in invitations
-        ), "Test invitation not found in response"
-    else:
-        assert len(invitations) == 0, f"Expected no invitations, got {len(invitations)}"
+        if test_invitation:
+            assert len(invitations) > 0, "Expected at least one invitation, got none"
+            assert any(
+                invitation["id"] == test_invitation["id"] for invitation in invitations
+            ), "Test invitation not found in response"
+        else:
+            assert (
+                len(invitations) == 0
+            ), f"Expected no invitations, got {len(invitations)}"
+    except AssertionError as e:
+        pytest.fail(f"Assertion failed: {str(e)}\nFull response: {res.content}")
 
 
 def test_accept_invitation(authorized_client, test_invitation, test_user2, client):
