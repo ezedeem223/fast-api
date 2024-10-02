@@ -198,13 +198,15 @@ async def create_content(
     content_type = content.__class__.__name__.replace("Create", "")
     model = getattr(models, content_type)
 
-    content_dict = content.dict(exclude={"community_id"})
-    new_content = model(
-        **content_dict,
-        community_id=community_id,
-        owner_id=current_user.id if content_type == "Reel" else None,
-        author_id=current_user.id if content_type == "Article" else None,
-    )
+    content_dict = content.dict()
+    if content_type == "Reel":
+        new_content = model(
+            **content_dict, community_id=community_id, owner_id=current_user.id
+        )
+    else:  # Article
+        new_content = model(
+            **content_dict, community_id=community_id, author_id=current_user.id
+        )
 
     db.add(new_content)
     db.commit()

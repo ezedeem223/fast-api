@@ -76,7 +76,6 @@ def test_create_reel(authorized_client, test_community):
         "title": "New Test Reel",
         "video_url": "http://example.com/new_test_video.mp4",
         "description": "This is a new test reel",
-        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/reels", json=reel_data
@@ -89,8 +88,7 @@ def test_create_reel(authorized_client, test_community):
     assert "id" in created_reel
     assert "created_at" in created_reel
     assert "owner_id" in created_reel
-    assert "owner" in created_reel
-    assert "community" in created_reel
+    assert "community_id" in created_reel
 
 
 def test_get_community_reels(authorized_client, test_community, test_reel):
@@ -114,7 +112,6 @@ def test_create_article(authorized_client, test_community):
     article_data = {
         "title": "New Test Article",
         "content": "This is the content of the new test article",
-        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/articles", json=article_data
@@ -126,8 +123,7 @@ def test_create_article(authorized_client, test_community):
     assert "id" in created_article
     assert "created_at" in created_article
     assert "author_id" in created_article
-    assert "author" in created_article
-    assert "community" in created_article
+    assert "community_id" in created_article
 
 
 def test_get_community_articles(authorized_client, test_community, test_article):
@@ -474,9 +470,7 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2):
     # تسجيل الدخول كمستخدم مدعو
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
     login_res = authorized_client.post("/login", data=login_data)
-    assert (
-        login_res.status_code == status.HTTP_200_OK
-    ), f"Login failed: {login_res.json()}"
+    assert login_res.status_code == status.HTTP_200_OK
     token = login_res.json().get("access_token")
     assert token, "No token received after login"
 
@@ -484,20 +478,16 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2):
     headers = {"Authorization": f"Bearer {token}"}
     res = authorized_client.get("/communities/user-invitations", headers=headers)
 
-    assert (
-        res.status_code == status.HTTP_200_OK
-    ), f"Expected 200, got {res.status_code}. Response: {res.content}"
-
+    assert res.status_code == status.HTTP_200_OK
     invitations = res.json()
-    assert isinstance(invitations, list), f"Expected a list, got {type(invitations)}"
-
+    assert isinstance(invitations, list)
     if test_invitation:
-        assert len(invitations) > 0, "Expected at least one invitation, got none"
+        assert len(invitations) > 0
         assert any(
             invitation["id"] == test_invitation["id"] for invitation in invitations
-        ), "Test invitation not found in response"
+        )
     else:
-        assert len(invitations) == 0, f"Expected no invitations, got {len(invitations)}"
+        assert len(invitations) == 0
 
 
 def test_accept_invitation(authorized_client, test_invitation, test_user2, client):

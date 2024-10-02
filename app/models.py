@@ -284,20 +284,13 @@ class CommunityInvitation(Base):
 
 class Reel(Base):
     __tablename__ = "reels"
-
-    id = Column(Integer, primary_key=True, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     video_url = Column(String, nullable=False)
     description = Column(String)
-    created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-    owner_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    community_id = Column(
-        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
-    )
+    created_at = Column(DateTime, default=func.now())
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    community_id = Column(Integer, ForeignKey("communities.id"))
 
     owner = relationship("User", back_populates="reels")
     community = relationship("Community", back_populates="reels")
@@ -305,19 +298,12 @@ class Reel(Base):
 
 class Article(Base):
     __tablename__ = "articles"
-
-    id = Column(Integer, primary_key=True, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-    author_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    community_id = Column(
-        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
-    )
+    created_at = Column(DateTime, default=func.now())
+    author_id = Column(Integer, ForeignKey("users.id"))
+    community_id = Column(Integer, ForeignKey("communities.id"))
 
     author = relationship("User", back_populates="articles")
     community = relationship("Community", back_populates="articles")
