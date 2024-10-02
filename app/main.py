@@ -6,8 +6,11 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
+    Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from . import models
 from .database import engine, get_db
@@ -31,7 +34,7 @@ from .notifications import (
     ConnectionManager,
     send_real_time_notification,
 )
-from .oauth2 import get_current_user  # استيراد للتحقق من المستخدم
+from .oauth2 import get_current_user
 
 app = FastAPI()
 
@@ -50,6 +53,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# إضافة معالج الاستثناء المخصص
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/communities"):
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "Community not found"},
+        )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+    )
+
+
+# Include routers
 app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
@@ -89,7 +108,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
         await manager.disconnect(websocket)
 
 
-# حماية المسار المحمي باستخدام توثيق JWT
 @app.get("/protected-resource")
 def protected_resource(
     current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)

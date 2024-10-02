@@ -181,7 +181,6 @@ async def create_content(
             detail=f"Community with id: {community_id} not found",
         )
 
-    # Rest of the function remains the same
     if current_user not in community.members:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -374,7 +373,16 @@ async def get_user_invitations(
 
         logger.debug(f"Fetched invitations: {invitations}")
 
-        return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
+        result = []
+        for inv in invitations:
+            try:
+                invitation_out = schemas.CommunityInvitationOut.from_orm(inv)
+                result.append(invitation_out)
+            except Exception as e:
+                logger.error(f"Error converting invitation to schema: {str(e)}")
+                logger.error(f"Problematic invitation: {inv.__dict__}")
+
+        return result
     except Exception as e:
         logger.error(f"Error in get_user_invitations: {str(e)}")
         raise HTTPException(
