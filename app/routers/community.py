@@ -167,9 +167,9 @@ def leave_community(
 )
 async def create_content(
     community_id: int,
+    content: Union[schemas.ReelCreate, schemas.ArticleCreate],
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
 ):
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
