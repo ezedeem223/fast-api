@@ -6,7 +6,7 @@ from ..database import get_db
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/communities", tags=["Communities"])
+router = APIRouter()
 
 
 @router.post(
