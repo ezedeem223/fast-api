@@ -171,7 +171,7 @@ async def create_content(
     current_user: models.User = Depends(oauth2.get_current_user),
     content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
 ):
-    # Check if the community exists first
+    # التحقق من وجود المجتمع أولاً
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
     )
@@ -364,10 +364,14 @@ async def get_user_invitations(
                 models.CommunityInvitation.invitee_id == current_user.id,
                 models.CommunityInvitation.status == "pending",
             )
+            .options(
+                joinedload(models.CommunityInvitation.community),
+                joinedload(models.CommunityInvitation.inviter),
+                joinedload(models.CommunityInvitation.invitee),
+            )
             .all()
         )
 
-        # Log the invitations for debugging
         logger.debug(f"Fetched invitations: {invitations}")
 
         return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
