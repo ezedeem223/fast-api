@@ -30,10 +30,7 @@ from .routers import (
     vote,
 )
 from .config import settings
-from .notifications import (
-    ConnectionManager,
-    send_real_time_notification,
-)
+from .notifications import ConnectionManager, send_real_time_notification
 from .oauth2 import get_current_user
 
 app = FastAPI()
@@ -54,14 +51,15 @@ app.add_middleware(
 )
 
 
-# إضافة معالج الاستثناء المخصص
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     if request.url.path.startswith("/communities"):
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "Community not found"},
-        )
+        validation_errors = exc.errors()
+        if any(error["type"] == "value_error.missing" for error in validation_errors):
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={"detail": "Validation error", "errors": validation_errors},
+            )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors()},

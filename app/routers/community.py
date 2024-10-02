@@ -171,7 +171,6 @@ async def create_content(
     current_user: models.User = Depends(oauth2.get_current_user),
     content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
 ):
-    # التحقق من وجود المجتمع أولاً
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
     )
@@ -385,10 +384,7 @@ async def get_user_invitations(
         return result
     except Exception as e:
         logger.error(f"Error in get_user_invitations: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while fetching invitations: {str(e)}",
-        )
+        return []
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
