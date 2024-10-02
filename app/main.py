@@ -58,13 +58,13 @@ app.add_middleware(
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation error for request: {request.url}")
     logger.error(f"Error details: {exc.errors()}")
+    if request.url.path == "/communities/invitations":
+        logger.error("Error in /communities/invitations route")
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": exc.errors()},
+        )
     if request.url.path.startswith("/communities"):
-        if request.url.path == "/communities/invitations":
-            logger.error("Error in /communities/invitations route")
-            return JSONResponse(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                content={"detail": exc.errors()},
-            )
         if any(segment.isdigit() for segment in request.url.path.split("/")):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
