@@ -1,3 +1,4 @@
+import logging
 from fastapi import (
     FastAPI,
     WebSocket,
@@ -33,6 +34,8 @@ from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
 from .oauth2 import get_current_user
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
 # CORS settings
@@ -58,7 +61,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     if request.url.path.startswith("/communities"):
         if request.url.path == "/communities/invitations":
             logger.error("Error in /communities/invitations route")
-            raise exc
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={"detail": exc.errors()},
+            )
         if any(segment.isdigit() for segment in request.url.path.split("/")):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,

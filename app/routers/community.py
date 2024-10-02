@@ -372,9 +372,6 @@ async def get_user_invitations(
         )
 
         logger.info(f"Fetched {len(invitations)} invitations")
-        for inv in invitations:
-            logger.debug(f"Invitation: {inv.__dict__}")
-
         result = []
         for inv in invitations:
             try:
@@ -399,7 +396,7 @@ async def get_user_invitations(
     except Exception as e:
         logger.error(f"Error in get_user_invitations: {str(e)}")
         logger.exception("Exception traceback:")
-        return []
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
