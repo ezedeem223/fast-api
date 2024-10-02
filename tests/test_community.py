@@ -483,12 +483,15 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2, cl
     assert res.status_code == status.HTTP_200_OK
     invitations = res.json()
     assert isinstance(invitations, list)
-    # Проверяем, что список не пустой, если есть приглашение
+    # Если есть тестовое приглашение, проверяем его наличие в результатах
     if test_invitation:
         assert len(invitations) > 0
         assert any(
             invitation["id"] == test_invitation["id"] for invitation in invitations
         )
+    else:
+        # Если тестового приглашения нет, список может быть пустым
+        assert len(invitations) == 0
 
 
 def test_accept_invitation(authorized_client, test_invitation, test_user2, client):

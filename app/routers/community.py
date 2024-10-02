@@ -375,7 +375,17 @@ async def get_user_invitations(
         result = []
         for inv in invitations:
             try:
-                invitation_out = schemas.CommunityInvitationOut.from_orm(inv)
+                invitation_out = schemas.CommunityInvitationOut(
+                    id=inv.id,
+                    community_id=inv.community_id,
+                    inviter_id=inv.inviter_id,
+                    invitee_id=inv.invitee_id,
+                    status=inv.status,
+                    created_at=inv.created_at,
+                    community=schemas.CommunityOut.model_validate(inv.community),
+                    inviter=schemas.UserOut.model_validate(inv.inviter),
+                    invitee=schemas.UserOut.model_validate(inv.invitee),
+                )
                 result.append(invitation_out)
             except Exception as e:
                 logger.error(f"Error converting invitation to schema: {str(e)}")
