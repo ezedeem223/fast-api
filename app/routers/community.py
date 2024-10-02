@@ -198,18 +198,12 @@ async def create_content(
     content_type = content.__class__.__name__.replace("Create", "")
     model = getattr(models, content_type)
 
-    if content_type == "Article":
-        new_content = model(
-            author_id=current_user.id,
-            community_id=community_id,
-            **content.dict(exclude={"community_id"}),
-        )
-    else:
-        new_content = model(
-            owner_id=current_user.id,
-            community_id=community_id,
-            **content.dict(exclude={"community_id"}),
-        )
+    new_content = model(
+        **content.dict(),
+        community_id=community_id,
+        owner_id=current_user.id if content_type == "Reel" else None,
+        author_id=current_user.id if content_type == "Article" else None,
+    )
 
     db.add(new_content)
     db.commit()
@@ -359,37 +353,26 @@ def invite_friend_to_community(
     return schemas.CommunityInvitationOut.from_orm(new_invitation)
 
 
-@router.get("/invitations", response_model=List[schemas.CommunityInvitationOut])
+@router.get("/user-invitations", response_model=List[schemas.CommunityInvitationOut])
 async def get_user_invitations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    logger.info(f"Fetching invitations for user {current_user.id}")
-    try:
-        invitations = (
-            db.query(models.CommunityInvitation)
-            .filter(
-                models.CommunityInvitation.invitee_id == current_user.id,
-                models.CommunityInvitation.status == "pending",
-            )
-            .options(
-                joinedload(models.CommunityInvitation.community),
-                joinedload(models.CommunityInvitation.inviter),
-                joinedload(models.CommunityInvitation.invitee),
-            )
-            .all()
+    invitations = (
+        db.query(models.CommunityInvitation)
+        .filter(
+            models.CommunityInvitation.invitee_id == current_user.id,
+            models.CommunityInvitation.status == "pending",
         )
+        .options(
+            joinedload(models.CommunityInvitation.community),
+            joinedload(models.CommunityInvitation.inviter),
+            joinedload(models.CommunityInvitation.invitee),
+        )
+        .all()
+    )
 
-        logger.info(f"Fetched {len(invitations)} invitations")
-        result = [
-            schemas.CommunityInvitationOut.model_validate(inv) for inv in invitations
-        ]
-        logger.info(f"Returning {len(result)} invitations")
-        return result
-    except Exception as e:
-        logger.error(f"Error in get_user_invitations: {str(e)}")
-        logger.exception("Exception traceback:")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    return [schemas.CommunityInvitationOut.model_validate(inv) for inv in invitations]
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)

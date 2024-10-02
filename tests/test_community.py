@@ -482,10 +482,7 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2):
 
     # الحصول على دعوات المستخدم
     headers = {"Authorization": f"Bearer {token}"}
-    res = authorized_client.get("/communities/invitations", headers=headers)
-
-    print(f"Response status code: {res.status_code}")
-    print(f"Response content: {res.content}")
+    res = authorized_client.get("/communities/user-invitations", headers=headers)
 
     assert (
         res.status_code == status.HTTP_200_OK
