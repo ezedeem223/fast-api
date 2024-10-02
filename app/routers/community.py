@@ -166,8 +166,8 @@ def leave_community(
     response_model=schemas.ArticleOut,
 )
 async def create_content(
-    community_id: int,
-    content: Union[schemas.ReelCreate, schemas.ArticleCreate],
+    community_id: int = Path(...),
+    content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
@@ -207,7 +207,7 @@ async def create_content(
     db.refresh(new_content)
 
     response_schema = getattr(schemas, f"{content_type}Out")
-    return response_schema.from_orm(new_content)
+    return response_schema.model_validate(new_content)
 
 
 @router.get("/{community_id}/reels", response_model=List[schemas.ReelOut])
@@ -372,25 +372,9 @@ async def get_user_invitations(
         )
 
         logger.info(f"Fetched {len(invitations)} invitations")
-        result = []
-        for inv in invitations:
-            try:
-                invitation_out = schemas.CommunityInvitationOut(
-                    id=inv.id,
-                    community_id=inv.community_id,
-                    inviter_id=inv.inviter_id,
-                    invitee_id=inv.invitee_id,
-                    status=inv.status,
-                    created_at=inv.created_at,
-                    community=schemas.CommunityOut.model_validate(inv.community),
-                    inviter=schemas.UserOut.model_validate(inv.inviter),
-                    invitee=schemas.UserOut.model_validate(inv.invitee),
-                )
-                result.append(invitation_out)
-            except Exception as e:
-                logger.error(f"Error converting invitation to schema: {str(e)}")
-                logger.error(f"Problematic invitation: {inv.__dict__}")
-
+        result = [
+            schemas.CommunityInvitationOut.model_validate(inv) for inv in invitations
+        ]
         logger.info(f"Returning {len(result)} invitations")
         return result
     except Exception as e:
