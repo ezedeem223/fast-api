@@ -174,8 +174,6 @@ class MessageOut(BaseModel):
 # Article models
 class ArticleCreate(ArticleBase):
     community_id: int
-    title: str
-    content: str
 
 
 class Article(ArticleBase):
@@ -197,9 +195,6 @@ class ArticleOut(Article):
 # Reel models
 class ReelCreate(ReelBase):
     community_id: int
-    title: str
-    video_url: str
-    description: Optional[str] = None
 
 
 class Reel(ReelBase):

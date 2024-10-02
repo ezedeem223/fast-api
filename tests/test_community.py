@@ -72,6 +72,7 @@ def test_create_reel(authorized_client, test_community):
         "title": "New Test Reel",
         "video_url": "http://example.com/new_test_video.mp4",
         "description": "This is a new test reel",
+        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/reels", json=reel_data
@@ -81,6 +82,10 @@ def test_create_reel(authorized_client, test_community):
     assert created_reel["title"] == reel_data["title"]
     assert created_reel["video_url"] == reel_data["video_url"]
     assert created_reel["description"] == reel_data["description"]
+    assert "id" in created_reel
+    assert "created_at" in created_reel
+    assert "owner_id" in created_reel
+    assert "community" in created_reel
 
 
 def test_get_community_reels(authorized_client, test_community, test_reel):
@@ -104,6 +109,7 @@ def test_create_article(authorized_client, test_community):
     article_data = {
         "title": "New Test Article",
         "content": "This is the content of the new test article",
+        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/articles", json=article_data
@@ -112,6 +118,10 @@ def test_create_article(authorized_client, test_community):
     created_article = res.json()
     assert created_article["title"] == article_data["title"]
     assert created_article["content"] == article_data["content"]
+    assert "id" in created_article
+    assert "created_at" in created_article
+    assert "author_id" in created_article
+    assert "community" in created_article
 
 
 def test_get_community_articles(authorized_client, test_community, test_article):

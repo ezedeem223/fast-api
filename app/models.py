@@ -254,6 +254,7 @@ class Community(Base):
     articles = relationship(
         "Article", back_populates="community", cascade="all, delete-orphan"
     )
+
     invitations = relationship(
         "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
     )
