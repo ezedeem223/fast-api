@@ -350,6 +350,48 @@ def invite_friend_to_community(
     return schemas.CommunityInvitationOut.from_orm(new_invitation)
 
 
+@router.get("/user-invitations", response_model=List[schemas.CommunityInvitationOut])
+async def get_user_invitations(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    logger.info(f"Fetching invitations for user {current_user.id}")
+    invitations = (
+        db.query(models.CommunityInvitation)
+        .filter(
+            models.CommunityInvitation.invitee_id == current_user.id,
+            models.CommunityInvitation.status == "pending",
+        )
+        .options(
+            joinedload(models.CommunityInvitation.community).joinedload(
+                models.Community.owner
+            ),
+            joinedload(models.CommunityInvitation.inviter),
+            joinedload(models.CommunityInvitation.invitee),
+        )
+        .all()
+    )
+    logger.info(f"Found {len(invitations)} invitations")
+
+    result = []
+    for invitation in invitations:
+        invitation_dict = {
+            "id": invitation.id,
+            "community_id": invitation.community_id,
+            "inviter_id": invitation.inviter_id,
+            "invitee_id": invitation.invitee_id,
+            "status": invitation.status,
+            "created_at": invitation.created_at,
+            "community": schemas.CommunityOut.from_orm(invitation.community),
+            "inviter": schemas.UserOut.from_orm(invitation.inviter),
+            "invitee": schemas.UserOut.from_orm(invitation.invitee),
+        }
+        result.append(schemas.CommunityInvitationOut(**invitation_dict))
+
+    return result
+
+
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
 def accept_invitation(
     invitation_id: int,
