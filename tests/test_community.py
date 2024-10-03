@@ -6,6 +6,7 @@ from app.schemas import (
     ArticleOut,
     PostOut,
     CommunityInvitationOut,
+    UserOut,
 )
 import logging
 from fastapi.testclient import TestClient

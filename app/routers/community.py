@@ -355,27 +355,15 @@ async def get_user_invitations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    try:
-        invitations = (
-            db.query(models.CommunityInvitation)
-            .filter(
-                models.CommunityInvitation.invitee_id == current_user.id,
-                models.CommunityInvitation.status == "pending",
-            )
-            .options(
-                joinedload(models.CommunityInvitation.community),
-                joinedload(models.CommunityInvitation.inviter),
-                joinedload(models.CommunityInvitation.invitee),
-            )
-            .all()
+    invitations = (
+        db.query(models.CommunityInvitation)
+        .filter(
+            models.CommunityInvitation.invitee_id == current_user.id,
+            models.CommunityInvitation.status == "pending",
         )
-
-        logger.debug(f"Fetched invitations: {invitations}")
-
-        return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
-    except Exception as e:
-        logger.error(f"Error in get_user_invitations: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        .all()
+    )
+    return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)

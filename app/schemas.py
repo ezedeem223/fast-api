@@ -230,11 +230,15 @@ class CommunityInvitationOut(BaseModel):
     invitee_id: int
     status: str
     created_at: datetime
-    community: CommunityOut
-    inviter: UserOut
-    invitee: UserOut
+    community: Optional[CommunityOut]
+    inviter: Optional[UserOut]
+    invitee: Optional[UserOut]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+CommunityOut.model_rebuild()
+CommunityInvitationOut.model_rebuild()
 
 
 # 2FA models
@@ -255,6 +259,7 @@ CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
 PostOut.model_rebuild()
+CommunityInvitationOut.model_rebuild()
 
 # Example instances for testing
 if __name__ == "__main__":
@@ -281,7 +286,6 @@ if __name__ == "__main__":
                 members=[],
             ),
         )
-
         print("PostOut instance:", post_example)
 
     except ValidationError as e:
