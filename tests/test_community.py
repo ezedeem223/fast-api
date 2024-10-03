@@ -480,9 +480,7 @@ def test_get_user_invitations(authorized_client, test_invitation, test_user2, cl
 
     # Get user invitations
     headers = {"Authorization": f"Bearer {token}"}
-    res = client.get(
-        "/communities/user-invitations", headers=headers, allow_redirects=True
-    )
+    res = client.get("/communities/user-invitations", headers=headers)
 
     # Check status code and response content
     assert (

@@ -352,6 +352,7 @@ def invite_friend_to_community(
 
 @router.get("/user-invitations", response_model=List[schemas.CommunityInvitationOut])
 async def get_user_invitations(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
