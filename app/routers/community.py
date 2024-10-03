@@ -372,28 +372,10 @@ async def get_user_invitations(
 
         logger.debug(f"Fetched invitations: {invitations}")
 
-        result = []
-        for inv in invitations:
-            try:
-                invitation_out = schemas.CommunityInvitationOut(
-                    id=inv.id,
-                    community_id=inv.community_id,
-                    inviter_id=inv.inviter_id,
-                    invitee_id=inv.invitee_id,
-                    status=inv.status,
-                    created_at=inv.created_at,
-                    community=schemas.CommunityOut.model_validate(inv.community),
-                    inviter=schemas.UserOut.model_validate(inv.inviter),
-                    invitee=schemas.UserOut.model_validate(inv.invitee),
-                )
-                result.append(invitation_out)
-            except Exception as e:
-                logger.error(f"Error converting invitation to schema: {str(e)}")
-                logger.error(f"Problematic invitation: {inv.__dict__}")
-
-        return result
+        return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
     except Exception as e:
         logger.error(f"Error in get_user_invitations: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)

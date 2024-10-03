@@ -471,27 +471,41 @@ def test_invite_friend_to_community(authorized_client, test_community, test_user
 
 
 def test_get_user_invitations(authorized_client, test_invitation, test_user2, client):
-    # Логин как приглашенный пользователь
+    # Login as the invited user
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
     login_res = client.post("/login", data=login_data)
     assert login_res.status_code == status.HTTP_200_OK
     token = login_res.json().get("access_token")
 
-    # Получение приглашений пользователя
+    # Get user invitations
     headers = {"Authorization": f"Bearer {token}"}
     res = client.get("/communities/invitations", headers=headers)
-    assert res.status_code == status.HTTP_200_OK
+
+    # Check status code and response content
+    assert (
+        res.status_code == status.HTTP_200_OK
+    ), f"Expected 200, got {res.status_code}. Response: {res.text}"
+
     invitations = res.json()
-    assert isinstance(invitations, list)
-    # Если есть тестовое приглашение, проверяем его наличие в результатах
+    assert isinstance(invitations, list), f"Expected a list, got {type(invitations)}"
+
     if test_invitation:
-        assert len(invitations) > 0
+        assert len(invitations) > 0, "Expected at least one invitation"
         assert any(
-            invitation["id"] == test_invitation["id"] for invitation in invitations
-        )
-    else:
-        # Если тестового приглашения нет, список может быть пустым
-        assert len(invitations) == 0
+            inv["id"] == test_invitation["id"] for inv in invitations
+        ), "Test invitation not found in response"
+
+    # Validate invitation schema
+    for invitation in invitations:
+        assert "id" in invitation
+        assert "community_id" in invitation
+        assert "inviter_id" in invitation
+        assert "invitee_id" in invitation
+        assert "status" in invitation
+        assert "created_at" in invitation
+        assert "community" in invitation
+        assert "inviter" in invitation
+        assert "invitee" in invitation
 
 
 def test_accept_invitation(authorized_client, test_invitation, test_user2, client):
