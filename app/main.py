@@ -61,8 +61,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
     if request.url.path == "/communities/user-invitations":
         logger.info("Handling user-invitations request")
-        # Instead of redirecting, we'll pass the request to the correct endpoint
-        return await community.router.get_user_invitations(request)
+        # Instead of calling the route directly, we'll return the result of the function
+        db = next(get_db())
+        current_user = await oauth2.get_current_user(request)
+        return await community.get_user_invitations(request, db, current_user)
 
     if request.url.path.startswith("/communities"):
         logger.info(f"Community-related request: {request.url.path}")
