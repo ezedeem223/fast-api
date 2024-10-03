@@ -59,17 +59,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logger.error(f"ValidationError for request: {request.url.path}")
     logger.error(f"Error details: {exc.errors()}")
 
+    if request.url.path == "/communities/user-invitations":
+        logger.info("Handling user-invitations request")
+        # Instead of calling the route directly, we'll return a redirect response
+        return JSONResponse(
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            headers={"Location": "/communities/user-invitations"},
+            content={"detail": "Redirecting to user invitations"},
+        )
+
     if request.url.path.startswith("/communities"):
         logger.info(f"Community-related request: {request.url.path}")
         path_segments = request.url.path.split("/")
         logger.info(f"Path segments: {path_segments}")
 
-        if "user-invitations" in path_segments:
-            logger.info("Handling user-invitations request")
-            return await community.router.get_user_invitations(request)
-
-        if any(segment.isdigit() for segment in path_segments):
-            logger.info("Request contains a numeric segment, possibly a community ID")
+        if len(path_segments) > 2 and path_segments[2].isdigit():
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"detail": "Community not found"},
