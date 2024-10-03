@@ -230,10 +230,9 @@ class CommunityInvitationOut(BaseModel):
     invitee_id: int
     status: str
     created_at: datetime
-    community: Optional[CommunityOut]
-    inviter: Optional[UserOut]
-    invitee: Optional[UserOut]
-
+    community: "CommunityOut"
+    inviter: "UserOut"
+    invitee: "UserOut"
     model_config = ConfigDict(from_attributes=True)
 
 
