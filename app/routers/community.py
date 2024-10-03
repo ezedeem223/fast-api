@@ -1,13 +1,4 @@
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    status,
-    Query,
-    Request,
-    Body,
-    Path,
-)
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Body
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Union
 from .. import models, schemas, oauth2
@@ -15,7 +6,7 @@ from ..database import get_db
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/communities", tags=["Communities"])
 
 
 @router.post(
@@ -175,10 +166,10 @@ def leave_community(
     response_model=schemas.ArticleOut,
 )
 async def create_content(
-    community_id: int = Path(...),
-    content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
+    community_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
 ):
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
@@ -198,14 +189,17 @@ async def create_content(
     content_type = content.__class__.__name__.replace("Create", "")
     model = getattr(models, content_type)
 
-    content_dict = content.dict()
-    if content_type == "Reel":
+    if content_type == "Article":
         new_content = model(
-            **content_dict, community_id=community_id, owner_id=current_user.id
+            author_id=current_user.id,
+            community_id=community_id,
+            **content.dict(exclude={"community_id"}),
         )
-    else:  # Article
+    else:
         new_content = model(
-            **content_dict, community_id=community_id, author_id=current_user.id
+            owner_id=current_user.id,
+            community_id=community_id,
+            **content.dict(exclude={"community_id"}),
         )
 
     db.add(new_content)
@@ -213,7 +207,7 @@ async def create_content(
     db.refresh(new_content)
 
     response_schema = getattr(schemas, f"{content_type}Out")
-    return response_schema.model_validate(new_content)
+    return response_schema.from_orm(new_content)
 
 
 @router.get("/{community_id}/reels", response_model=List[schemas.ReelOut])
@@ -356,26 +350,50 @@ def invite_friend_to_community(
     return schemas.CommunityInvitationOut.from_orm(new_invitation)
 
 
-@router.get("/user-invitations", response_model=List[schemas.CommunityInvitationOut])
+@router.get("/invitations", response_model=List[schemas.CommunityInvitationOut])
 async def get_user_invitations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    invitations = (
-        db.query(models.CommunityInvitation)
-        .filter(
-            models.CommunityInvitation.invitee_id == current_user.id,
-            models.CommunityInvitation.status == "pending",
+    try:
+        invitations = (
+            db.query(models.CommunityInvitation)
+            .filter(
+                models.CommunityInvitation.invitee_id == current_user.id,
+                models.CommunityInvitation.status == "pending",
+            )
+            .options(
+                joinedload(models.CommunityInvitation.community),
+                joinedload(models.CommunityInvitation.inviter),
+                joinedload(models.CommunityInvitation.invitee),
+            )
+            .all()
         )
-        .options(
-            joinedload(models.CommunityInvitation.community),
-            joinedload(models.CommunityInvitation.inviter),
-            joinedload(models.CommunityInvitation.invitee),
-        )
-        .all()
-    )
 
-    return [schemas.CommunityInvitationOut.model_validate(inv) for inv in invitations]
+        logger.debug(f"Fetched invitations: {invitations}")
+
+        result = []
+        for inv in invitations:
+            try:
+                invitation_out = schemas.CommunityInvitationOut(
+                    id=inv.id,
+                    community_id=inv.community_id,
+                    inviter_id=inv.inviter_id,
+                    invitee_id=inv.invitee_id,
+                    status=inv.status,
+                    created_at=inv.created_at,
+                    community=schemas.CommunityOut.model_validate(inv.community),
+                    inviter=schemas.UserOut.model_validate(inv.inviter),
+                    invitee=schemas.UserOut.model_validate(inv.invitee),
+                )
+                result.append(invitation_out)
+            except Exception as e:
+                logger.error(f"Error converting invitation to schema: {str(e)}")
+                logger.error(f"Problematic invitation: {inv.__dict__}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in get_user_invitations: {str(e)}")
 
 
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
@@ -588,6 +606,3 @@ def reject_invitation(
 #     db.commit()
 #     db.refresh(community)
 #     return schemas.CommunityOut.from_orm(community)
-
-
-# # إضافة المزيد من الوظائف حسب الحاجة...

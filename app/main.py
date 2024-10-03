@@ -57,8 +57,8 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     if request.url.path.startswith("/communities"):
-        community_id = request.path_params.get("community_id")
-        if community_id and not community_id.isdigit():
+        # Проверяем, является ли это запросом на создание контента
+        if any(segment.isdigit() for segment in request.url.path.split("/")):
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"detail": "Community not found"},
@@ -66,15 +66,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": exc.errors()},
-    )
-
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(f"An error occurred: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "An internal server error occurred."},
     )
 
 
@@ -90,7 +81,7 @@ app.include_router(admin_dashboard.router)
 app.include_router(oauth.router)
 app.include_router(search.router)
 app.include_router(message.router)
-app.include_router(community.router, prefix="/communities", tags=["Communities"])
+app.include_router(community.router)
 app.include_router(p2fa.router)
 
 manager = ConnectionManager()
@@ -126,9 +117,3 @@ def protected_resource(
         "message": "You have access to this protected resource",
         "user_id": current_user.id,
     }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)

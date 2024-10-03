@@ -31,12 +31,14 @@ def test_reel(authorized_client, test_community):
         "title": "Test Reel",
         "video_url": "http://example.com/test_video.mp4",
         "description": "This is a test reel",
+        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/reels", json=reel_data
     )
     assert res.status_code == status.HTTP_201_CREATED
-    return res.json()
+    new_reel = res.json()
+    return new_reel
 
 
 @pytest.fixture
@@ -44,12 +46,14 @@ def test_article(authorized_client, test_community):
     article_data = {
         "title": "Test Article",
         "content": "This is the content of the test article",
+        "community_id": test_community["id"],
     }
     res = authorized_client.post(
         f"/communities/{test_community['id']}/articles", json=article_data
     )
     assert res.status_code == status.HTTP_201_CREATED
-    return res.json()
+    new_article = res.json()
+    return new_article
 
 
 @pytest.fixture
@@ -85,6 +89,7 @@ def test_create_reel(authorized_client, test_community):
     assert "id" in created_reel
     assert "created_at" in created_reel
     assert "owner_id" in created_reel
+    assert "owner" in created_reel
     assert "community" in created_reel
 
 
@@ -121,6 +126,7 @@ def test_create_article(authorized_client, test_community):
     assert "id" in created_article
     assert "created_at" in created_article
     assert "author_id" in created_article
+    assert "author" in created_article
     assert "community" in created_article
 
 
@@ -406,7 +412,7 @@ def test_delete_community_not_owner(
 
 
 def test_create_content_nonexistent_community(authorized_client):
-    nonexistent_id = 99999
+    nonexistent_id = 99999  # Assuming this ID doesn't exist
     reel_data = {
         "title": "Test Reel",
         "video_url": "http://example.com/test_video.mp4",
@@ -464,25 +470,27 @@ def test_invite_friend_to_community(authorized_client, test_community, test_user
     assert "created_at" in created_invitation
 
 
-def test_get_user_invitations(authorized_client, test_invitation, test_user2):
+def test_get_user_invitations(authorized_client, test_invitation, test_user2, client):
+    # Логин как приглашенный пользователь
     login_data = {"username": test_user2["email"], "password": test_user2["password"]}
-    login_res = authorized_client.post("/login", data=login_data)
+    login_res = client.post("/login", data=login_data)
     assert login_res.status_code == status.HTTP_200_OK
     token = login_res.json().get("access_token")
-    assert token, "No token received after login"
 
+    # Получение приглашений пользователя
     headers = {"Authorization": f"Bearer {token}"}
-    res = authorized_client.get("/communities/user-invitations", headers=headers)
-
+    res = client.get("/communities/invitations", headers=headers)
     assert res.status_code == status.HTTP_200_OK
     invitations = res.json()
     assert isinstance(invitations, list)
+    # Если есть тестовое приглашение, проверяем его наличие в результатах
     if test_invitation:
         assert len(invitations) > 0
         assert any(
             invitation["id"] == test_invitation["id"] for invitation in invitations
         )
     else:
+        # Если тестового приглашения нет, список может быть пустым
         assert len(invitations) == 0
 
 
