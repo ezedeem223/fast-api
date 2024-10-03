@@ -350,22 +350,6 @@ def invite_friend_to_community(
     return schemas.CommunityInvitationOut.from_orm(new_invitation)
 
 
-@router.get("/invitations", response_model=List[schemas.CommunityInvitationOut])
-async def get_user_invitations(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    invitations = (
-        db.query(models.CommunityInvitation)
-        .filter(
-            models.CommunityInvitation.invitee_id == current_user.id,
-            models.CommunityInvitation.status == "pending",
-        )
-        .all()
-    )
-    return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
-
-
 @router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
 def accept_invitation(
     invitation_id: int,
