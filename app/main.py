@@ -62,8 +62,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         logger.info("Handling user-invitations request")
         try:
             db = next(get_db())
-            current_user = await oauth2.get_current_user(request)
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or not auth_header.startswith("Bearer "):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authorization header",
+                )
+            token = auth_header.split(" ")[1]
+            current_user = oauth2.get_current_user(token, db)
             return await community.get_user_invitations(request, db, current_user)
+        except HTTPException as he:
+            logger.error(f"HTTP Exception in user-invitations: {str(he)}")
+            return JSONResponse(
+                status_code=he.status_code, content={"detail": he.detail}
+            )
         except Exception as e:
             logger.error(f"Error handling user-invitations: {str(e)}")
             return JSONResponse(
