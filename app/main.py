@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from . import models
+from . import models, oauth2
 from .database import engine, get_db
 from .routers import (
     post,
@@ -32,7 +32,6 @@ from .routers import (
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
-from .oauth2 import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +60,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
     if request.url.path == "/communities/user-invitations":
         logger.info("Handling user-invitations request")
-        # Instead of calling the route directly, we'll return the result of the function
-        db = next(get_db())
-        current_user = await oauth2.get_current_user(request)
-        return await community.get_user_invitations(request, db, current_user)
+        try:
+            db = next(get_db())
+            current_user = await oauth2.get_current_user(request)
+            return await community.get_user_invitations(request, db, current_user)
+        except Exception as e:
+            logger.error(f"Error handling user-invitations: {str(e)}")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": "Internal server error"},
+            )
 
     if request.url.path.startswith("/communities"):
         logger.info(f"Community-related request: {request.url.path}")
@@ -125,7 +130,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
 
 @app.get("/protected-resource")
 def protected_resource(
-    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
 ):
     return {
         "message": "You have access to this protected resource",
