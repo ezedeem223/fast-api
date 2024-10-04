@@ -5,28 +5,24 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Index,
-    Table,
     Enum,
     Text,
     DateTime,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import text
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.sql import func
 from .database import Base
-from sqlalchemy.orm import relationship
+import enum
 
-# Association table for many-to-many relationship between Community and User
-community_members = Table(
-    "community_members",
-    Base.metadata,
-    Column(
-        "community_id",
-        ForeignKey("communities.id", ondelete="CASCADE"),
-        primary_key=True,
-    ),
-    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-)
+
+class CommunityRole(enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    VIP = "vip"
+    MEMBER = "member"
 
 
 class Post(Base):
@@ -131,8 +127,8 @@ class User(Base):
     owned_communities = relationship(
         "Community", back_populates="owner", cascade="all, delete-orphan"
     )
-    member_of_communities = relationship(
-        "Community", secondary=community_members, back_populates="members"
+    community_memberships = relationship(
+        "CommunityMember", back_populates="user", cascade="all, delete-orphan"
     )
     blocks = relationship(
         "Block",
@@ -160,6 +156,13 @@ class User(Base):
         foreign_keys="[CommunityInvitation.invitee_id]",
         back_populates="invitee",
     )
+    role = Column(Enum(UserRole), default=UserRole.USER)
+
+
+class UserRole(enum.Enum):
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    USER = "user"
 
 
 class Vote(Base):
@@ -191,6 +194,16 @@ class Report(Base):
     reporter = relationship("User", back_populates="reports")
     post = relationship("Post", back_populates="reports")
     comment = relationship("Comment", back_populates="reports")
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    status = Column(Enum(ReportStatus), default=ReportStatus.PENDING)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolution_notes = Column(String, nullable=True)
+
+
+class ReportStatus(enum.Enum):
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
 
 
 class Follow(Base):
@@ -242,9 +255,7 @@ class Community(Base):
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
 
     owner = relationship("User", back_populates="owned_communities")
-    members = relationship(
-        "User", secondary=community_members, back_populates="member_of_communities"
-    )
+    members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
         "Post", back_populates="community", cascade="all, delete-orphan"
     )
@@ -258,9 +269,55 @@ class Community(Base):
         "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
     )
 
+    rules = relationship(
+        "CommunityRule", back_populates="community", cascade="all, delete-orphan"
+    )
+    is_active = Column(Boolean, default=True)
+
     @property
     def member_count(self):
         return len(self.members)
+
+
+class CommunityMember(Base):
+    __tablename__ = "community_members"
+    __table_args__ = {"extend_existing": True}
+
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    role = Column(Enum(CommunityRole), nullable=False, default=CommunityRole.MEMBER)
+    join_date = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    activity_score = Column(Integer, default=0)
+
+    user = relationship("User", back_populates="community_memberships")
+    community = relationship("Community", back_populates="members")
+
+
+class CommunityRule(Base):
+    __tablename__ = "community_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+    rule = Column(String, nullable=False)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at = Column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        onupdate=text("now()"),
+    )
+
+    community = relationship("Community", back_populates="rules")
 
 
 class CommunityInvitation(Base):

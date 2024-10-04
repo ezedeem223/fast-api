@@ -1,4 +1,5 @@
 from passlib.context import CryptContext
+import re
 
 # إعداد التشفير باستخدام bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -29,3 +30,10 @@ def verify(plain_password: str, hashed_password: str) -> bool:
         bool: True if the passwords match, False otherwise.
     """
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def check_content_against_rules(content: str, rules: List[str]) -> bool:
+    for rule in rules:
+        if re.search(rule, content, re.IGNORECASE):
+            return False
+    return True

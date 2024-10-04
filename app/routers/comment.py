@@ -4,6 +4,7 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List
 from ..notifications import send_email_notification
+from ..utils import check_content_against_rules
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -13,7 +14,7 @@ async def create_comment(
     background_tasks: BackgroundTasks,
     comment: schemas.CommentCreate,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     if not current_user.is_verified:
         raise HTTPException(
@@ -26,10 +27,24 @@ async def create_comment(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
 
+    # التحقق من قواعد المجتمع
+    if post.community_id:
+        community = (
+            db.query(models.Community)
+            .filter(models.Community.id == post.community_id)
+            .first()
+        )
+        rules = [rule.rule for rule in community.rules]
+        if not check_content_against_rules(comment.content, rules):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Comment content violates community rules",
+            )
+
     new_comment = models.Comment(
         owner_id=current_user.id,
         post_id=comment.post_id,
-        **comment.model_dump(),  # تم التغيير هنا
+        **comment.model_dump(),
     )
     db.add(new_comment)
     db.commit()
@@ -51,7 +66,7 @@ async def create_comment(
 def get_comments(
     post_id: int,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
@@ -68,7 +83,7 @@ def get_comments(
 def report_comment(
     report: schemas.ReportCreate,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     if report.post_id:
         post = db.query(models.Post).filter(models.Post.id == report.post_id).first()

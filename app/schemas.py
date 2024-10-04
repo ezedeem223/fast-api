@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, conint, ValidationError, ConfigDict, constr
 from datetime import datetime
 from typing import Optional, List, ForwardRef
+from enum import Enum
 
 
 # Base models
@@ -54,7 +55,7 @@ class UserLogin(UserBase):
 class UserOut(UserBase):
     id: int
     created_at: datetime
-
+    role: UserRole
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -93,7 +94,39 @@ class CommunityOut(CommunityBase):
     owner_id: int
     owner: UserOut
     member_count: int
-    members: List[UserOut]
+    members: List[CommunityMemberOut]
+    rules: List[CommunityRuleOut] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityOverview(BaseModel):
+    id: int
+    name: str
+    description: str
+    member_count: int
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityRuleBase(BaseModel):
+    rule: str
+
+
+class CommunityRuleCreate(CommunityRuleBase):
+    pass
+
+
+class CommunityRuleUpdate(CommunityRuleBase):
+    pass
+
+
+class CommunityRuleOut(CommunityRuleBase):
+    id: int
+    community_id: int
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -148,6 +181,29 @@ class Report(ReportBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserRoleUpdate(BaseModel):
+    role: UserRole
+
+
+class ReportUpdate(BaseModel):
+    status: ReportStatus
+    resolution_notes: Optional[str] = None
+
+
+class ReportOut(BaseModel):
+    id: int
+    report_reason: str
+    post_id: Optional[int]
+    comment_id: Optional[int]
+    reporter_id: int
+    created_at: datetime
+    status: ReportStatus
+    reviewed_by: Optional[int]
+    resolution_notes: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Message models
 class MessageCreate(MessageBase):
     recipient_id: int
@@ -167,6 +223,34 @@ class Message(MessageBase):
 class MessageOut(BaseModel):
     message: Message
     count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityRole(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    VIP = "vip"
+    MEMBER = "member"
+
+
+class CommunityMemberBase(BaseModel):
+    role: CommunityRole
+    activity_score: int
+
+
+class CommunityMemberCreate(CommunityMemberBase):
+    user_id: int
+
+
+class CommunityMemberUpdate(CommunityMemberBase):
+    pass
+
+
+class CommunityMemberOut(CommunityMemberBase):
+    user: UserOut
+    join_date: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -251,6 +335,18 @@ class Verify2FARequest(BaseModel):
 
 class Verify2FAResponse(BaseModel):
     message: str
+
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    USER = "user"
+
+
+class ReportStatus(str, Enum):
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
 
 
 # Resolve forward references

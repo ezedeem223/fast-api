@@ -20,6 +20,7 @@ from cachetools import cached, TTLCache
 import os
 from pathlib import Path
 import requests
+from ..utils import check_content_against_rules
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
@@ -64,7 +65,7 @@ def share_on_facebook(content: str):
 @router.get("/", response_model=List[schemas.PostOut])
 def get_posts(
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
     limit: int = 10,
     skip: int = 0,
     search: Optional[str] = "",
@@ -87,7 +88,7 @@ def create_posts(
     background_tasks: BackgroundTasks,
     post: schemas.PostCreate,
     db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
     if not current_user.is_verified:
         raise HTTPException(
@@ -99,11 +100,29 @@ def create_posts(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Content cannot be empty"
         )
 
+    # التحقق من قواعد المجتمع
+    if post.community_id:
+        community = (
+            db.query(models.Community)
+            .filter(models.Community.id == post.community_id)
+            .first()
+        )
+        if not community:
+            raise HTTPException(status_code=404, detail="Community not found")
+
+        rules = [rule.rule for rule in community.rules]
+        if not check_content_against_rules(post.content, rules):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Post content violates community rules",
+            )
+
     new_post = models.Post(
         owner_id=current_user.id,
         title=post.title,
         content=post.content,
         is_safe_content=True,
+        community_id=post.community_id,
     )
     db.add(new_post)
     db.commit()

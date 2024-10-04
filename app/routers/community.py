@@ -458,147 +458,204 @@ def reject_invitation(
     return {"message": "Invitation rejected successfully"}
 
 
-# @router.get("/{community_id}/members", response_model=List[schemas.UserOut])
-# def get_community_members(
-#     community_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(oauth2.get_current_user),
-#     skip: int = Query(0, ge=0),
-#     limit: int = Query(20, ge=1, le=100),
-# ):
-#     community = (
-#         db.query(models.Community).filter(models.Community.id == community_id).first()
-#     )
-#     if not community:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Community with id: {community_id} was not found",
-#         )
+@router.put(
+    "/{community_id}/members/{user_id}/role", response_model=schemas.CommunityMemberOut
+)
+def update_member_role(
+    community_id: int,
+    user_id: int,
+    role_update: schemas.CommunityMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
 
-#     members = community.members[skip : skip + limit]
-#     return [schemas.UserOut.from_orm(member) for member in members]
+    if community.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the community owner can update roles"
+        )
 
+    member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == user_id,
+        )
+        .first()
+    )
 
-# @router.post("/{community_id}/remove-member/{user_id}", status_code=status.HTTP_200_OK)
-# def remove_community_member(
-#     community_id: int,
-#     user_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(oauth2.get_current_user),
-# ):
-#     community = (
-#         db.query(models.Community).filter(models.Community.id == community_id).first()
-#     )
-#     if not community:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Community with id: {community_id} was not found",
-#         )
+    if not member:
+        raise HTTPException(
+            status_code=404, detail="Member not found in this community"
+        )
 
-#     if community.owner_id != current_user.id:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Only the community owner can remove members",
-#         )
+    if role_update.role == models.CommunityRole.OWNER:
+        raise HTTPException(status_code=400, detail="Cannot set a member as owner")
 
-#     user_to_remove = db.query(models.User).filter(models.User.id == user_id).first()
-#     if not user_to_remove:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"User with id: {user_id} was not found",
-#         )
+    member.role = role_update.role
+    db.commit()
+    db.refresh(member)
 
-#     if user_to_remove not in community.members:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="User is not a member of this community",
-#         )
-
-#     if user_to_remove.id == community.owner_id:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="Cannot remove the community owner",
-#         )
-
-#     community.members.remove(user_to_remove)
-#     db.commit()
-#     return {"message": f"User {user_id} has been removed from the community"}
+    return schemas.CommunityMemberOut.from_orm(member)
 
 
-# @router.get("/{community_id}/stats", response_model=schemas.CommunityStats)
-# def get_community_stats(
-#     community_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(oauth2.get_current_user),
-# ):
-#     community = (
-#         db.query(models.Community).filter(models.Community.id == community_id).first()
-#     )
-#     if not community:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Community with id: {community_id} was not found",
-#         )
+@router.get("/{community_id}/members", response_model=List[schemas.CommunityMemberOut])
+def get_community_members(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
 
-#     member_count = len(community.members)
-#     post_count = (
-#         db.query(models.Post).filter(models.Post.community_id == community_id).count()
-#     )
-#     reel_count = (
-#         db.query(models.Reel).filter(models.Reel.community_id == community_id).count()
-#     )
-#     article_count = (
-#         db.query(models.Article)
-#         .filter(models.Article.community_id == community_id)
-#         .count()
-#     )
+    members = (
+        db.query(models.CommunityMember)
+        .filter(models.CommunityMember.community_id == community_id)
+        .all()
+    )
 
-#     return schemas.CommunityStats(
-#         member_count=member_count,
-#         post_count=post_count,
-#         reel_count=reel_count,
-#         article_count=article_count,
-#     )
+    return [schemas.CommunityMemberOut.from_orm(member) for member in members]
 
 
-# @router.put(
-#     "/{community_id}/change-owner/{new_owner_id}", response_model=schemas.CommunityOut
-# )
-# def change_community_owner(
-#     community_id: int,
-#     new_owner_id: int,
-#     db: Session = Depends(get_db),
-#     current_user: models.User = Depends(oauth2.get_current_user),
-# ):
-#     community = (
-#         db.query(models.Community).filter(models.Community.id == community_id).first()
-#     )
-#     if not community:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"Community with id: {community_id} was not found",
-#         )
+@router.post("/{community_id}/update-activity")
+def update_member_activity(
+    community_id: int,
+    user_id: int,
+    activity_score: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
 
-#     if community.owner_id != current_user.id:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Only the current owner can transfer ownership",
-#         )
+    member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == user_id,
+        )
+        .first()
+    )
 
-#     new_owner = db.query(models.User).filter(models.User.id == new_owner_id).first()
-#     if not new_owner:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND,
-#             detail=f"User with id: {new_owner_id} was not found",
-#         )
+    if not member:
+        raise HTTPException(
+            status_code=404, detail="Member not found in this community"
+        )
 
-#     if new_owner not in community.members:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="New owner must be a member of the community",
-#         )
+    member.activity_score += activity_score
 
-#     community.owner_id = new_owner_id
-#     db.commit()
-#     db.refresh(community)
-#     return schemas.CommunityOut.from_orm(community)
+    # Check if member should be promoted to VIP
+    if member.activity_score >= 1000 and member.role == models.CommunityRole.MEMBER:
+        member.role = models.CommunityRole.VIP
+
+    db.commit()
+    db.refresh(member)
+
+    return {"message": "Activity score updated successfully"}
+
+
+@router.post("/{community_id}/rules", response_model=schemas.CommunityRuleOut)
+def add_community_rule(
+    community_id: int,
+    rule: schemas.CommunityRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if community.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the community owner can add rules"
+        )
+
+    new_rule = models.CommunityRule(community_id=community_id, **rule.dict())
+    db.add(new_rule)
+    db.commit()
+    db.refresh(new_rule)
+    return new_rule
+
+
+@router.put("/{community_id}/rules/{rule_id}", response_model=schemas.CommunityRuleOut)
+def update_community_rule(
+    community_id: int,
+    rule_id: int,
+    rule: schemas.CommunityRuleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if community.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the community owner can update rules"
+        )
+
+    db_rule = (
+        db.query(models.CommunityRule)
+        .filter(
+            models.CommunityRule.id == rule_id,
+            models.CommunityRule.community_id == community_id,
+        )
+        .first()
+    )
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    for key, value in rule.dict().items():
+        setattr(db_rule, key, value)
+
+    db.commit()
+    db.refresh(db_rule)
+    return db_rule
+
+
+@router.delete("/{community_id}/rules/{rule_id}", status_code=204)
+def delete_community_rule(
+    community_id: int,
+    rule_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    if community.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the community owner can delete rules"
+        )
+
+    db_rule = (
+        db.query(models.CommunityRule)
+        .filter(
+            models.CommunityRule.id == rule_id,
+            models.CommunityRule.community_id == community_id,
+        )
+        .first()
+    )
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    db.delete(db_rule)
+    db.commit()
+    return Response(status_code=204)
