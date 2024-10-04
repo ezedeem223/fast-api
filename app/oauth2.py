@@ -81,25 +81,12 @@ def get_current_user(
     )
 
     try:
-        payload = jwt.decode(
-            token, settings.rsa_public_key, algorithms=[settings.algorithm]
-        )
-        user_id: str = payload.get("user_id")
-        if user_id is None:
-            raise credentials_exception
-        token_data = TokenData(id=user_id)
-    except JWTError as e:
-        logger.error(f"JWT Error: {str(e)}")
-        raise credentials_exception
-
-    try:
+        token_data = verify_access_token(token, credentials_exception)
         user = db.query(models.User).filter(models.User.id == token_data.id).first()
         if user is None:
+            logger.warning(f"User not found for id: {token_data.id}")
             raise credentials_exception
         return user
     except Exception as e:
-        logger.error(f"Database Error in get_current_user: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        )
+        logger.error(f"Error in get_current_user: {str(e)}")
+        raise credentials_exception
