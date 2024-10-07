@@ -8,6 +8,11 @@ from sqlalchemy import (
     Enum,
     Text,
     DateTime,
+    UniqueConstraint,
+    Date,
+    Float,
+    Table,
+    JSON,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import text
@@ -15,6 +20,14 @@ from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.sql import func
 from .database import Base
 import enum
+from datetime import date
+
+community_tags = Table(
+    "community_tags",
+    Base.metadata,
+    Column("community_id", Integer, ForeignKey("communities.id")),
+    Column("tag_id", Integer, ForeignKey("tags.id")),
+)
 
 
 class CommunityRole(enum.Enum):
@@ -23,6 +36,18 @@ class CommunityRole(enum.Enum):
     MODERATOR = "moderator"
     VIP = "vip"
     MEMBER = "member"
+
+
+class PrivacyLevel(enum.Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+    CUSTOM = "custom"
+
+
+class ReportStatus(enum.Enum):
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
 
 
 class Post(Base):
@@ -79,6 +104,12 @@ class Comment(Base):
     )
 
 
+class UserRole(enum.Enum):
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    USER = "user"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -92,6 +123,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
+    is_2fa_enabled = Column(Boolean, default=False)
 
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -157,12 +189,35 @@ class User(Base):
         back_populates="invitee",
     )
     role = Column(Enum(UserRole), default=UserRole.USER)
+    profile_image = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    location = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    joined_at = Column(DateTime, server_default=func.now())
+    privacy_level = Column(Enum(PrivacyLevel), default=PrivacyLevel.PUBLIC)
+    custom_privacy = Column(JSON, default={})
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    login_sessions = relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    failed_login_attempts = Column(Integer, default=0)
+    account_locked_until = Column(DateTime(timezone=True), nullable=True)
 
 
-class UserRole(enum.Enum):
-    ADMIN = "admin"
-    MODERATOR = "moderator"
-    USER = "user"
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    session_id = Column(String, unique=True, index=True)
+    ip_address = Column(String)
+    user_agent = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_activity = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user = relationship("User", back_populates="login_sessions")
 
 
 class Vote(Base):
@@ -190,20 +245,16 @@ class Report(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
-
-    reporter = relationship("User", back_populates="reports")
-    post = relationship("Post", back_populates="reports")
-    comment = relationship("Comment", back_populates="reports")
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
     status = Column(Enum(ReportStatus), default=ReportStatus.PENDING)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(String, nullable=True)
 
-
-class ReportStatus(enum.Enum):
-    PENDING = "pending"
-    REVIEWED = "reviewed"
-    RESOLVED = "resolved"
+    reporter = relationship(
+        "User", foreign_keys=[reporter_id], back_populates="reports"
+    )
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    post = relationship("Post", back_populates="reports")
+    comment = relationship("Comment", back_populates="reports")
 
 
 class Follow(Base):
@@ -273,10 +324,37 @@ class Community(Base):
         "CommunityRule", back_populates="community", cascade="all, delete-orphan"
     )
     is_active = Column(Boolean, default=True)
+    statistics = relationship(
+        "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
+    )
+    category_id = Column(Integer, ForeignKey("categories.id"))
+    category = relationship("Category", back_populates="communities")
+    tags = relationship("Tag", secondary=community_tags, back_populates="communities")
 
     @property
     def member_count(self):
         return len(self.members)
+
+
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String)
+
+    communities = relationship("Community", back_populates="category")
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+
+    communities = relationship(
+        "Community", secondary=community_tags, back_populates="tags"
+    )
 
 
 class CommunityMember(Base):
@@ -297,6 +375,28 @@ class CommunityMember(Base):
 
     user = relationship("User", back_populates="community_memberships")
     community = relationship("Community", back_populates="members")
+
+
+class CommunityStatistics(Base):
+    __tablename__ = "community_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+    date = Column(Date, nullable=False)
+    member_count = Column(Integer, default=0)
+    post_count = Column(Integer, default=0)
+    comment_count = Column(Integer, default=0)
+    active_users = Column(Integer, default=0)
+    total_reactions = Column(Integer, default=0)
+    average_posts_per_user = Column(Float, default=0.0)
+
+    community = relationship("Community", back_populates="statistics")
+
+    __table_args__ = (
+        UniqueConstraint("community_id", "date", name="uix_community_date"),
+    )
 
 
 class CommunityRule(Base):

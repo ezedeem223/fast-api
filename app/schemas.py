@@ -1,7 +1,42 @@
 from pydantic import BaseModel, EmailStr, conint, ValidationError, ConfigDict, constr
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List, ForwardRef
 from enum import Enum
+
+
+class PrivacyLevel(str, Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+    CUSTOM = "custom"
+
+
+class UserPrivacyUpdate(BaseModel):
+    privacy_level: PrivacyLevel
+    custom_privacy: Optional[dict] = None
+
+
+class UserProfileUpdate(BaseModel):
+    profile_image: Optional[HttpUrl] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[HttpUrl] = None
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    email: str
+    profile_image: Optional[str] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+    joined_at: datetime
+    post_count: int
+    follower_count: int
+    following_count: int
+    community_count: int
+    media_count: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Base models
@@ -55,8 +90,11 @@ class UserLogin(UserBase):
 class UserOut(UserBase):
     id: int
     created_at: datetime
-    role: UserRole
+    role: "UserRole"
+    is_2fa_enabled: bool
     model_config = ConfigDict(from_attributes=True)
+    privacy_level: PrivacyLevel
+    custom_privacy: Optional[dict] = None
 
 
 # Token models
@@ -80,12 +118,15 @@ CommunityOutRef = ForwardRef("CommunityOut")
 
 
 class CommunityCreate(CommunityBase):
-    pass
+    category_id: int
+    tags: List[int] = []
 
 
 class CommunityUpdate(BaseModel):
     name: Optional[constr(min_length=1)] = None
     description: Optional[str] = None
+    category_id: Optional[int] = None
+    tags: Optional[List[int]] = None
 
 
 class CommunityOut(CommunityBase):
@@ -94,8 +135,60 @@ class CommunityOut(CommunityBase):
     owner_id: int
     owner: UserOut
     member_count: int
-    members: List[CommunityMemberOut]
-    rules: List[CommunityRuleOut] = []
+    members: List["CommunityMemberOut"]
+    rules: List["CommunityRuleOut"] = []
+    category: "Category"
+    tags: List["Tag"]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class Category(CategoryBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TagBase(BaseModel):
+    name: str
+
+
+class TagCreate(TagBase):
+    pass
+
+
+class Tag(TagBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityStatisticsBase(BaseModel):
+    date: date
+    member_count: int
+    post_count: int
+    comment_count: int
+    active_users: int
+    total_reactions: int
+    average_posts_per_user: float
+
+
+class CommunityStatisticsCreate(CommunityStatisticsBase):
+    pass
+
+
+class CommunityStatistics(CommunityStatisticsBase):
+    id: int
+    community_id: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -182,11 +275,11 @@ class Report(ReportBase):
 
 
 class UserRoleUpdate(BaseModel):
-    role: UserRole
+    role: "UserRole"
 
 
 class ReportUpdate(BaseModel):
-    status: ReportStatus
+    status: "ReportStatus"
     resolution_notes: Optional[str] = None
 
 
@@ -197,7 +290,7 @@ class ReportOut(BaseModel):
     comment_id: Optional[int]
     reporter_id: int
     created_at: datetime
-    status: ReportStatus
+    status: "ReportStatus"
     reviewed_by: Optional[int]
     resolution_notes: Optional[str]
 
@@ -314,14 +407,10 @@ class CommunityInvitationOut(BaseModel):
     invitee_id: int
     status: str
     created_at: datetime
-    community: "CommunityOut"
-    inviter: "UserOut"
-    invitee: "UserOut"
+    community: CommunityOutRef
+    inviter: UserOut
+    invitee: UserOut
     model_config = ConfigDict(from_attributes=True)
-
-
-CommunityOut.model_rebuild()
-CommunityInvitationOut.model_rebuild()
 
 
 # 2FA models
@@ -349,6 +438,35 @@ class ReportStatus(str, Enum):
     RESOLVED = "resolved"
 
 
+class UserSessionCreate(BaseModel):
+    session_id: str
+    ip_address: str
+    user_agent: str
+
+
+class UserSessionOut(UserSessionCreate):
+    id: int
+    user_id: int
+    created_at: datetime
+    last_activity: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class EmailSchema(BaseModel):
+    email: EmailStr
+
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str
+
+
 # Resolve forward references
 CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
@@ -367,7 +485,12 @@ if __name__ == "__main__":
             created_at=datetime.now(),
             owner_id=1,
             community_id=1,
-            owner=UserOut(id=1, email="test@example.com", created_at=datetime.now()),
+            owner=UserOut(
+                id=1,
+                email="test@example.com",
+                created_at=datetime.now(),
+                role=UserRole.USER,
+            ),
             community=CommunityOut(
                 id=1,
                 name="Sample Community",
@@ -375,10 +498,15 @@ if __name__ == "__main__":
                 created_at=datetime.now(),
                 owner_id=1,
                 owner=UserOut(
-                    id=1, email="owner@example.com", created_at=datetime.now()
+                    id=1,
+                    email="owner@example.com",
+                    created_at=datetime.now(),
+                    role=UserRole.ADMIN,
                 ),
                 member_count=1,
                 members=[],
+                category=Category(id=1, name="Sample Category"),
+                tags=[Tag(id=1, name="Sample Tag")],
             ),
         )
         print("PostOut instance:", post_example)

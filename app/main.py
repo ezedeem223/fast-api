@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from . import models, oauth2
-from .database import engine, get_db
+from .database import engine, get_db, SessionLocal
 from .routers import (
     post,
     user,
@@ -33,6 +33,7 @@ from .routers import (
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
+from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +152,26 @@ def protected_resource(
         "message": "You have access to this protected resource",
         "user_id": current_user.id,
     }
+
+
+# New function to update all communities statistics
+def update_all_communities_statistics():
+    db = SessionLocal()
+    try:
+        communities = db.query(models.Community).all()
+        for community in communities:
+            community.router.update_community_statistics(db, community.id)
+    finally:
+        db.close()
+
+
+# Initialize and start the scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(update_all_communities_statistics, "cron", hour=0)
+scheduler.start()
+
+
+# Shutdown event to stop the scheduler when the app shuts down
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown()

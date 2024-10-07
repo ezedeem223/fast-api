@@ -83,3 +83,16 @@ manager = ConnectionManager()
 
 async def send_real_time_notification(websocket: WebSocket, user_id: int, data: str):
     await manager.send_personal_message(f"User {user_id} says: {data}", websocket)
+
+
+async def send_login_notification(email: str, ip_address: str, user_agent: str):
+    subject = "New Login to Your Account"
+    body = f"""
+    We detected a new login to your account:
+    
+    IP Address: {ip_address}
+    Device: {user_agent}
+    
+    If this wasn't you, please secure your account immediately.
+    """
+    await send_email_notification(to=email, subject=subject, body=body)

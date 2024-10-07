@@ -11,7 +11,7 @@ from fastapi import (
     File,
 )
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_, cast
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List, Optional
@@ -21,6 +21,8 @@ import os
 from pathlib import Path
 import requests
 from ..utils import check_content_against_rules
+from sqlalchemy.dialects.postgresql import JSONB
+
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
@@ -70,16 +72,35 @@ def get_posts(
     skip: int = 0,
     search: Optional[str] = "",
 ):
-    posts = (
+    posts_query = (
         db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
         .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
         .group_by(models.Post.id)
         .filter(models.Post.title.contains(search))
-        .limit(limit)
-        .offset(skip)
-        .all()
     )
 
+    # Filter posts based on privacy settings
+    posts_query = posts_query.join(
+        models.User, models.User.id == models.Post.owner_id
+    ).filter(
+        or_(
+            models.User.privacy_level == models.PrivacyLevel.PUBLIC,
+            models.User.id == current_user.id,
+            and_(
+                models.User.privacy_level == models.PrivacyLevel.CUSTOM,
+                or_(
+                    models.User.id == current_user.id,
+                    current_user.id.in_(
+                        func.json_array_elements_text(
+                            cast(models.User.custom_privacy["allowed_users"], JSONB)
+                        )
+                    ),
+                ),
+            ),
+        )
+    )
+
+    posts = posts_query.limit(limit).offset(skip).all()
     return [schemas.PostOut(post=post, votes=votes) for post, votes in posts]
 
 

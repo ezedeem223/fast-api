@@ -43,6 +43,22 @@ def create_access_token(data: dict):
         raise
 
 
+def get_current_session(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        session_id: str = payload.get("session_id")
+        if session_id is None:
+            raise credentials_exception
+        return session_id
+    except JWTError:
+        raise credentials_exception
+
+
 def verify_access_token(token: str, credentials_exception):
     try:
         logger.debug(f"Token to verify: {token[:20]}...")

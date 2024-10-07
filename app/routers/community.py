@@ -4,6 +4,11 @@ from typing import List, Union
 from .. import models, schemas, oauth2
 from ..database import get_db
 import logging
+from datetime import date, timedelta
+from sqlalchemy import func
+from fastapi.responses import HTMLResponse, StreamingResponse
+import csv
+from io import StringIO
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["Communities"])
@@ -17,8 +22,28 @@ def create_community(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    new_community = models.Community(owner_id=current_user.id, **community.dict())
+    new_community = models.Community(
+        owner_id=current_user.id, **community.dict(exclude={"tags"})
+    )
     new_community.members.append(current_user)
+
+    # إضافة التصنيف
+    if community.category_id:
+        category = (
+            db.query(models.Category)
+            .filter(models.Category.id == community.category_id)
+            .first()
+        )
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        new_community.category = category
+
+    # إضافة الوسوم
+    for tag_id in community.tags:
+        tag = db.query(models.Tag).filter(models.Tag.id == tag_id).first()
+        if tag:
+            new_community.tags.append(tag)
+
     db.add(new_community)
     db.commit()
     db.refresh(new_community)
@@ -74,11 +99,34 @@ def update_community(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to perform requested action",
         )
-    community_query.update(
-        updated_community.dict(exclude_unset=True), synchronize_session=False
-    )
+
+    update_data = updated_community.dict(exclude_unset=True)
+
+    # تحديث التصنيف
+    if "category_id" in update_data:
+        category = (
+            db.query(models.Category)
+            .filter(models.Category.id == update_data["category_id"])
+            .first()
+        )
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        community.category = category
+        del update_data["category_id"]
+
+    # تحديث الوسوم
+    if "tags" in update_data:
+        community.tags.clear()
+        for tag_id in update_data["tags"]:
+            tag = db.query(models.Tag).filter(models.Tag.id == tag_id).first()
+            if tag:
+                community.tags.append(tag)
+        del update_data["tags"]
+
+    community_query.update(update_data, synchronize_session=False)
     db.commit()
-    return schemas.CommunityOut.from_orm(community_query.first())
+    db.refresh(community)
+    return schemas.CommunityOut.from_orm(community)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -659,3 +707,348 @@ def delete_community_rule(
     db.delete(db_rule)
     db.commit()
     return Response(status_code=204)
+
+
+def update_community_statistics(db: Session, community_id: int):
+    today = date.today()
+
+    stats = (
+        db.query(models.CommunityStatistics)
+        .filter(
+            models.CommunityStatistics.community_id == community_id,
+            models.CommunityStatistics.date == today,
+        )
+        .first()
+    )
+
+    if not stats:
+        stats = models.CommunityStatistics(community_id=community_id, date=today)
+        db.add(stats)
+
+    stats.member_count = (
+        db.query(models.CommunityMember)
+        .filter(models.CommunityMember.community_id == community_id)
+        .count()
+    )
+
+    stats.post_count = (
+        db.query(models.Post)
+        .filter(
+            models.Post.community_id == community_id,
+            func.date(models.Post.created_at) == today,
+        )
+        .count()
+    )
+
+    stats.comment_count = (
+        db.query(models.Comment)
+        .join(models.Post)
+        .filter(
+            models.Post.community_id == community_id,
+            func.date(models.Comment.created_at) == today,
+        )
+        .count()
+    )
+
+    stats.active_users = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.last_active_at >= today - timedelta(days=30),
+        )
+        .count()
+    )
+
+    # إضافة إحصائيات جديدة
+    stats.total_reactions = (
+        db.query(func.count(models.Vote.id))
+        .join(models.Post)
+        .filter(
+            models.Post.community_id == community_id,
+            func.date(models.Vote.created_at) == today,
+        )
+        .scalar()
+    )
+
+    if stats.active_users > 0:
+        stats.average_posts_per_user = stats.post_count / stats.active_users
+    else:
+        stats.average_posts_per_user = 0
+
+    db.commit()
+    return stats
+
+
+def get_community_statistics(
+    db: Session, community_id: int, start_date: date, end_date: date
+):
+    return (
+        db.query(models.CommunityStatistics)
+        .filter(
+            models.CommunityStatistics.community_id == community_id,
+            models.CommunityStatistics.date.between(start_date, end_date),
+        )
+        .all()
+    )
+
+
+# أضف هذه النقاط النهائية
+
+
+@router.get(
+    "/{community_id}/statistics", response_model=List[schemas.CommunityStatistics]
+)
+def get_community_statistics_endpoint(
+    community_id: int,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community_member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not community_member:
+        raise HTTPException(
+            status_code=403, detail="You are not a member of this community"
+        )
+
+    stats = get_community_statistics(db, community_id, start_date, end_date)
+    return stats
+
+
+@router.post(
+    "/{community_id}/update-statistics", response_model=schemas.CommunityStatistics
+)
+def update_community_statistics_endpoint(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community_member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == current_user.id,
+            models.CommunityMember.role.in_(
+                [models.CommunityRole.ADMIN, models.CommunityRole.MODERATOR]
+            ),
+        )
+        .first()
+    )
+    if not community_member:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to update statistics"
+        )
+
+    stats = update_community_statistics(db, community_id)
+    return stats
+
+
+@router.get("/{community_id}/statistics-chart", response_class=HTMLResponse)
+async def get_community_statistics_chart(
+    community_id: int,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community_member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not community_member:
+        raise HTTPException(
+            status_code=403, detail="You are not a member of this community"
+        )
+
+    stats = get_community_statistics(db, community_id, start_date, end_date)
+
+    # Prepare data for Chart.js
+    labels = [stat.date.strftime("%Y-%m-%d") for stat in stats]
+    member_counts = [stat.member_count for stat in stats]
+    post_counts = [stat.post_count for stat in stats]
+    comment_counts = [stat.comment_count for stat in stats]
+    active_users = [stat.active_users for stat in stats]
+    total_reactions = [stat.total_reactions for stat in stats]
+    average_posts = [stat.average_posts_per_user for stat in stats]
+
+    html_content = f"""
+    <html>
+        <head>
+            <title>Community Statistics</title>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        </head>
+        <body>
+            <canvas id="communityStatsChart" width="800" height="400"></canvas>
+            <script>
+                var ctx = document.getElementById('communityStatsChart').getContext('2d');
+                var chart = new Chart(ctx, {{
+                    type: 'line',
+                    data: {{
+                        labels: {labels},
+                        datasets: [
+                            {{
+                                label: 'Member Count',
+                                data: {member_counts},
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1
+                            }},
+                            {{
+                                label: 'Post Count',
+                                data: {post_counts},
+                                borderColor: 'rgb(255, 99, 132)',
+                                tension: 0.1
+                            }},
+                            {{
+                                label: 'Comment Count',
+                                data: {comment_counts},
+                                borderColor: 'rgb(54, 162, 235)',
+                                tension: 0.1
+                            }},
+                            {{
+                                label: 'Active Users',
+                                data: {active_users},
+                                borderColor: 'rgb(255, 206, 86)',
+                                tension: 0.1
+                            }},
+                            {{
+                                label: 'Total Reactions',
+                                data: {total_reactions},
+                                borderColor: 'rgb(153, 102, 255)',
+                                tension: 0.1
+                            }},
+                            {{
+                                label: 'Average Posts per User',
+                                data: {average_posts},
+                                borderColor: 'rgb(255, 159, 64)',
+                                tension: 0.1
+                            }}
+                        ]
+                    }},
+                    options: {{
+                        responsive: true,
+                        title: {{
+                            display: true,
+                            text: 'Community Statistics'
+                        }}
+                    }}
+                }});
+            </script>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@router.get("/{community_id}/export-statistics")
+async def export_community_statistics(
+    community_id: int,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    community_member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == current_user.id,
+            models.CommunityMember.role.in_(
+                [models.CommunityRole.ADMIN, models.CommunityRole.MODERATOR]
+            ),
+        )
+        .first()
+    )
+    if not community_member:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to export statistics"
+        )
+
+    stats = get_community_statistics(db, community_id, start_date, end_date)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Date",
+            "Member Count",
+            "Post Count",
+            "Comment Count",
+            "Active Users",
+            "Total Reactions",
+            "Average Posts per User",
+        ]
+    )
+    for stat in stats:
+        writer.writerow(
+            [
+                stat.date,
+                stat.member_count,
+                stat.post_count,
+                stat.comment_count,
+                stat.active_users,
+                stat.total_reactions,
+                stat.average_posts_per_user,
+            ]
+        )
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=community_{community_id}_statistics.csv"
+        },
+    )
+
+
+@router.post("/categories/", response_model=schemas.Category)
+def create_category(
+    category: schemas.CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if not current_user.role == "ADMIN":
+        raise HTTPException(status_code=403, detail="Only admins can create categories")
+    db_category = models.Category(**category.dict())
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+
+@router.get("/categories/", response_model=List[schemas.Category])
+def get_categories(db: Session = Depends(get_db)):
+    categories = db.query(models.Category).all()
+    return categories
+
+
+@router.post("/tags/", response_model=schemas.Tag)
+def create_tag(
+    tag: schemas.TagCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if not current_user.role == "ADMIN":
+        raise HTTPException(status_code=403, detail="Only admins can create tags")
+    db_tag = models.Tag(**tag.dict())
+    db.add(db_tag)
+    db.commit()
+    db.refresh(db_tag)
+    return db_tag
+
+
+@router.get("/tags/", response_model=List[schemas.Tag])
+def get_tags(db: Session = Depends(get_db)):
+    tags = db.query(models.Tag).all()
+    return tags
