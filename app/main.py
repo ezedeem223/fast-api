@@ -30,6 +30,8 @@ from .routers import (
     p2fa,
     vote,
     moderator,
+    support,
+    business,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -117,6 +119,9 @@ app.include_router(message.router)
 app.include_router(community.router)
 app.include_router(p2fa.router)
 app.include_router(moderator.router)
+app.include_router(support.router)
+app.include_router(business.router)
+
 
 manager = ConnectionManager()
 

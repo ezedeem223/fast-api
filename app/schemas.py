@@ -4,6 +4,43 @@ from typing import Optional, List, ForwardRef
 from enum import Enum
 
 
+class BusinessRegistration(BaseModel):
+    business_name: str
+    business_registration_number: str
+    bank_account_info: str
+
+
+class BusinessVerificationUpdate(BaseModel):
+    id_document: UploadFile
+    passport: UploadFile
+    business_document: UploadFile
+    selfie: UploadFile
+
+
+class BusinessUserOut(UserOut):
+    business_name: str
+    business_registration_number: str
+    verification_status: VerificationStatus
+    is_verified_business: bool
+
+
+class BusinessTransactionCreate(BaseModel):
+    client_user_id: int
+    amount: float
+
+
+class BusinessTransactionOut(BaseModel):
+    id: int
+    business_user: UserOut
+    client_user: UserOut
+    amount: float
+    commission: float
+    status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PrivacyLevel(str, Enum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -20,6 +57,8 @@ class UserProfileUpdate(BaseModel):
     bio: Optional[str] = None
     location: Optional[str] = None
     website: Optional[HttpUrl] = None
+    skills: Optional[List[str]] = None
+    interests: Optional[List[str]] = None
 
 
 class UserProfileOut(BaseModel):
@@ -35,6 +74,54 @@ class UserProfileOut(BaseModel):
     following_count: int
     community_count: int
     media_count: int
+    skills: Optional[List[str]] = None
+    interests: Optional[List[str]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserStatisticsOut(BaseModel):
+    date: date
+    post_count: int
+    comment_count: int
+    like_count: int
+    view_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserAnalytics(BaseModel):
+    total_posts: int
+    total_comments: int
+    total_likes: int
+    total_views: int
+    daily_statistics: List[UserStatisticsOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketCreate(BaseModel):
+    subject: str
+    description: str
+
+
+class TicketResponse(BaseModel):
+    id: int
+    content: str
+    created_at: datetime
+    user: UserOut
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Ticket(BaseModel):
+    id: int
+    subject: str
+    description: str
+    status: TicketStatus
+    created_at: datetime
+    updated_at: datetime
+    responses: List[TicketResponse]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -78,6 +165,28 @@ class ReelBase(BaseModel):
     description: Optional[str] = None
 
 
+class UISettings(BaseModel):
+    theme: Optional[str] = "light"
+    language: Optional[str] = "en"
+    font_size: Optional[str] = "medium"
+
+
+class NotificationsSettings(BaseModel):
+    email_notifications: bool = True
+    push_notifications: bool = True
+    newsletter: bool = True
+
+
+class UserSettings(BaseModel):
+    ui_settings: UISettings
+    notifications_settings: NotificationsSettings
+
+
+class UserSettingsUpdate(BaseModel):
+    ui_settings: Optional[UISettings]
+    notifications_settings: Optional[NotificationsSettings]
+
+
 # User models
 class UserCreate(UserBase):
     password: str
@@ -95,6 +204,10 @@ class UserOut(UserBase):
     model_config = ConfigDict(from_attributes=True)
     privacy_level: PrivacyLevel
     custom_privacy: Optional[dict] = None
+    ui_settings: Optional[UISettings]
+    notifications_settings: Optional[NotificationsSettings]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Token models
@@ -241,6 +354,11 @@ class Post(PostBase):
 
 class PostOut(Post):
     community: Optional[CommunityOutRef]
+    id: int
+    created_at: datetime
+    owner_id: int
+    owner: UserOut
+    privacy_level: PrivacyLevel
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -465,6 +583,15 @@ class EmailSchema(BaseModel):
 class PasswordReset(BaseModel):
     token: str
     new_password: str
+
+
+class UserContentOut(BaseModel):
+    posts: List[PostOut]
+    comments: List[Comment]
+    articles: List[ArticleOut]
+    reels: List[ReelOut]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Resolve forward references

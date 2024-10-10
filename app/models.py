@@ -13,6 +13,7 @@ from sqlalchemy import (
     Float,
     Table,
     JSON,
+    ARRAY,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import text
@@ -21,6 +22,7 @@ from sqlalchemy.sql import func
 from .database import Base
 import enum
 from datetime import date
+from sqlalchemy.dialects.postgresql import JSONB
 
 community_tags = Table(
     "community_tags",
@@ -30,7 +32,18 @@ community_tags = Table(
 )
 
 
-class CommunityRole(enum.Enum):
+class UserType(str, enum.Enum):
+    PERSONAL = "personal"
+    BUSINESS = "business"
+
+
+class VerificationStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class CommunityRole(str, enum.Enum):
     OWNER = "owner"
     ADMIN = "admin"
     MODERATOR = "moderator"
@@ -38,76 +51,28 @@ class CommunityRole(enum.Enum):
     MEMBER = "member"
 
 
-class PrivacyLevel(enum.Enum):
+class PrivacyLevel(str, enum.Enum):
     PUBLIC = "public"
     PRIVATE = "private"
     CUSTOM = "custom"
 
 
-class ReportStatus(enum.Enum):
+class ReportStatus(str, enum.Enum):
     PENDING = "pending"
     REVIEWED = "reviewed"
     RESOLVED = "resolved"
 
 
-class Post(Base):
-    __tablename__ = "posts"
-
-    id = Column(Integer, primary_key=True, nullable=False)
-    title = Column(String, nullable=False)
-    content = Column(String, nullable=False)
-    published = Column(Boolean, server_default="True", nullable=False)
-    created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-    owner_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    community_id = Column(
-        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True
-    )
-
-    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
-
-    owner = relationship("User", back_populates="posts")
-    comments = relationship(
-        "Comment", back_populates="post", cascade="all, delete-orphan"
-    )
-    community = relationship("Community", back_populates="posts")
-    reports = relationship(
-        "Report", back_populates="post", cascade="all, delete-orphan"
-    )
-
-    is_safe_content = Column(Boolean, default=True)
-    is_short_video = Column(Boolean, default=False)
-
-
-class Comment(Base):
-    __tablename__ = "comments"
-
-    id = Column(Integer, primary_key=True, nullable=False)
-    content = Column(String, nullable=False)
-    post_id = Column(
-        Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
-    )
-    owner_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-
-    owner = relationship("User", back_populates="comments")
-    post = relationship("Post", back_populates="comments")
-    reports = relationship(
-        "Report", back_populates="comment", cascade="all, delete-orphan"
-    )
-
-
-class UserRole(enum.Enum):
+class UserRole(str, enum.Enum):
     ADMIN = "admin"
     MODERATOR = "moderator"
     USER = "user"
+
+
+class TicketStatus(str, enum.Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    CLOSED = "closed"
 
 
 class User(Base):
@@ -124,6 +89,33 @@ class User(Base):
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
     is_2fa_enabled = Column(Boolean, default=False)
+    role = Column(Enum(UserRole), default=UserRole.USER)
+    profile_image = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    location = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    joined_at = Column(DateTime, server_default=func.now())
+    privacy_level = Column(Enum(PrivacyLevel), default=PrivacyLevel.PUBLIC)
+    custom_privacy = Column(JSON, default={})
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    account_locked_until = Column(DateTime(timezone=True), nullable=True)
+    skills = Column(ARRAY(String), nullable=True)
+    interests = Column(ARRAY(String), nullable=True)
+    ui_settings = Column(JSONB, default={})
+    notifications_settings = Column(JSONB, default={})
+    user_type = Column(Enum(UserType), default=UserType.PERSONAL)
+    business_name = Column(String, nullable=True)
+    business_registration_number = Column(String, nullable=True)
+    bank_account_info = Column(String, nullable=True)
+    id_document_url = Column(String, nullable=True)
+    passport_url = Column(String, nullable=True)
+    business_document_url = Column(String, nullable=True)
+    selfie_url = Column(String, nullable=True)
+    verification_status = Column(
+        Enum(VerificationStatus), default=VerificationStatus.PENDING
+    )
+    is_verified_business = Column(Boolean, default=False)
 
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -188,20 +180,79 @@ class User(Base):
         foreign_keys="[CommunityInvitation.invitee_id]",
         back_populates="invitee",
     )
-    role = Column(Enum(UserRole), default=UserRole.USER)
-    profile_image = Column(String, nullable=True)
-    bio = Column(Text, nullable=True)
-    location = Column(String, nullable=True)
-    website = Column(String, nullable=True)
-    joined_at = Column(DateTime, server_default=func.now())
-    privacy_level = Column(Enum(PrivacyLevel), default=PrivacyLevel.PUBLIC)
-    custom_privacy = Column(JSON, default={})
-    last_login = Column(DateTime(timezone=True), nullable=True)
     login_sessions = relationship(
         "UserSession", back_populates="user", cascade="all, delete-orphan"
     )
-    failed_login_attempts = Column(Integer, default=0)
-    account_locked_until = Column(DateTime(timezone=True), nullable=True)
+    statistics = relationship("UserStatistics", back_populates="user")
+    support_tickets = relationship("SupportTicket", back_populates="user")
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    title = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    published = Column(Boolean, server_default="True", nullable=False)
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True
+    )
+    is_safe_content = Column(Boolean, default=True)
+    is_short_video = Column(Boolean, default=False)
+
+    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
+
+    owner = relationship("User", back_populates="posts")
+    comments = relationship(
+        "Comment", back_populates="post", cascade="all, delete-orphan"
+    )
+    community = relationship("Community", back_populates="posts")
+    reports = relationship(
+        "Report", back_populates="post", cascade="all, delete-orphan"
+    )
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    content = Column(String, nullable=False)
+    post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    owner = relationship("User", back_populates="comments")
+    post = relationship("Post", back_populates="comments")
+    reports = relationship(
+        "Report", back_populates="comment", cascade="all, delete-orphan"
+    )
+
+
+class BusinessTransaction(Base):
+    __tablename__ = "business_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    business_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    client_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    amount = Column(Float, nullable=False)
+    commission = Column(Float, nullable=False)
+    status = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    business_user = relationship("User", foreign_keys=[business_user_id])
+    client_user = relationship("User", foreign_keys=[client_user_id])
 
 
 class UserSession(Base):
@@ -304,6 +355,8 @@ class Community(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    is_active = Column(Boolean, default=True)
+    category_id = Column(Integer, ForeignKey("categories.id"))
 
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
@@ -319,15 +372,12 @@ class Community(Base):
     invitations = relationship(
         "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
     )
-
     rules = relationship(
         "CommunityRule", back_populates="community", cascade="all, delete-orphan"
     )
-    is_active = Column(Boolean, default=True)
     statistics = relationship(
         "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
     )
-    category_id = Column(Integer, ForeignKey("categories.id"))
     category = relationship("Category", back_populates="communities")
     tags = relationship("Tag", secondary=community_tags, back_populates="communities")
 
@@ -496,3 +546,50 @@ class Block(Base):
     blocked = relationship(
         "User", foreign_keys=[blocked_id], back_populates="blocked_by"
     )
+
+
+class UserStatistics(Base):
+    __tablename__ = "user_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    date = Column(Date, nullable=False)
+    post_count = Column(Integer, default=0)
+    comment_count = Column(Integer, default=0)
+    like_count = Column(Integer, default=0)
+    view_count = Column(Integer, default=0)
+
+    user = relationship("User", back_populates="statistics")
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    subject = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(Enum(TicketStatus), default=TicketStatus.OPEN)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="support_tickets")
+    responses = relationship(
+        "TicketResponse", back_populates="ticket", cascade="all, delete-orphan"
+    )
+
+
+class TicketResponse(Base):
+    __tablename__ = "ticket_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    ticket = relationship("SupportTicket", back_populates="responses")
+    user = relationship("User")
+
+
+User.statistics = relationship("UserStatistics", back_populates="user")

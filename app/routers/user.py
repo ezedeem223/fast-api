@@ -9,14 +9,15 @@ from fastapi import (
     UploadFile,
     File,
 )
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_
 from .. import models, schemas, utils, oauth2
 from ..database import get_db
 from ..notifications import send_email_notification
 from typing import List, Optional
 from pydantic import HttpUrl
 import pyotp
+from datetime import timedelta
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -92,6 +93,102 @@ async def verify_user(
     )
 
     return {"info": "Verification document uploaded and user verified successfully."}
+
+
+@router.get("/my-content", response_model=schemas.UserContentOut)
+async def get_user_content(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this content",
+        )
+
+    # استعلام المنشورات مع مراعاة الخصوصية
+    posts_query = db.query(models.Post).filter(models.Post.owner_id == current_user.id)
+
+    # إذا كانت إعدادات الخصوصية مخصصة، نطبق القيود المخصصة
+    if current_user.privacy_level == models.PrivacyLevel.CUSTOM:
+        allowed_users = current_user.custom_privacy.get("allowed_users", [])
+        posts_query = posts_query.filter(
+            or_(
+                models.Post.privacy_level == models.PrivacyLevel.PUBLIC,
+                models.Post.id.in_(allowed_users),
+            )
+        )
+    elif current_user.privacy_level == models.PrivacyLevel.PRIVATE:
+        # إذا كان الملف الشخصي خاص، نعرض جميع المنشورات للمستخدم نفسه
+        pass
+    else:  # PUBLIC
+        # نعرض جميع المنشورات العامة
+        posts_query = posts_query.filter(
+            models.Post.privacy_level == models.PrivacyLevel.PUBLIC
+        )
+
+    posts = (
+        posts_query.options(joinedload(models.Post.owner))
+        .order_by(models.Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    # استعلامات التعليقات والمقالات والفيديوهات القصيرة تبقى كما هي
+    comments = (
+        db.query(models.Comment)
+        .filter(models.Comment.owner_id == current_user.id)
+        .options(joinedload(models.Comment.post))
+        .order_by(models.Comment.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    articles = (
+        db.query(models.Article)
+        .filter(models.Article.author_id == current_user.id)
+        .options(joinedload(models.Article.author))
+        .order_by(models.Article.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    reels = (
+        db.query(models.Reel)
+        .filter(models.Reel.owner_id == current_user.id)
+        .options(joinedload(models.Reel.owner))
+        .order_by(models.Reel.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return schemas.UserContentOut(
+        posts=[schemas.PostOut.from_orm(post) for post in posts],
+        comments=[schemas.Comment.from_orm(comment) for comment in comments],
+        articles=[schemas.ArticleOut.from_orm(article) for article in articles],
+        reels=[schemas.ReelOut.from_orm(reel) for reel in reels],
+    )
+
+
+@router.get("/my-content", response_model=schemas.UserContentOut)
+async def get_user_content(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    # التحقق من أن المستخدم يطلب محتواه الخاص فقط
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this content",
+        )
 
 
 @router.put("/profile", response_model=schemas.UserProfileOut)
@@ -344,3 +441,101 @@ def logout_all_devices(
     ).delete()
     db.commit()
     return {"message": "Logged out from all other devices"}
+
+
+@router.get("/users/similar-interests", response_model=List[schemas.UserOut])
+def get_users_with_similar_interests(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    limit: int = 10,
+):
+    if not current_user.interests:
+        raise HTTPException(status_code=400, detail="User has no interests set")
+
+    similar_users = (
+        db.query(models.User)
+        .filter(models.User.id != current_user.id)
+        .filter(models.User.interests.overlap(current_user.interests))
+        .order_by(
+            func.array_length(
+                func.array_intersect(models.User.interests, current_user.interests), 1
+            ).desc()
+        )
+        .limit(limit)
+        .all()
+    )
+    return similar_users
+
+
+@router.get("/analytics", response_model=schemas.UserAnalytics)
+async def get_user_analytics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    days: int = Query(30, ge=1, le=365),
+):
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+
+    daily_stats = (
+        db.query(models.UserStatistics)
+        .filter(
+            models.UserStatistics.user_id == current_user.id,
+            models.UserStatistics.date.between(start_date, end_date),
+        )
+        .all()
+    )
+
+    totals = (
+        db.query(
+            func.sum(models.UserStatistics.post_count).label("total_posts"),
+            func.sum(models.UserStatistics.comment_count).label("total_comments"),
+            func.sum(models.UserStatistics.like_count).label("total_likes"),
+            func.sum(models.UserStatistics.view_count).label("total_views"),
+        )
+        .filter(models.UserStatistics.user_id == current_user.id)
+        .first()
+    )
+
+    return schemas.UserAnalytics(
+        total_posts=totals.total_posts or 0,
+        total_comments=totals.total_comments or 0,
+        total_likes=totals.total_likes or 0,
+        total_views=totals.total_views or 0,
+        daily_statistics=daily_stats,
+    )
+
+
+@router.get("/settings", response_model=schemas.UserSettings)
+async def get_user_settings(
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    return schemas.UserSettings(
+        ui_settings=schemas.UISettings(**current_user.ui_settings),
+        notifications_settings=schemas.NotificationsSettings(
+            **current_user.notifications_settings
+        ),
+    )
+
+
+@router.put("/settings", response_model=schemas.UserSettings)
+async def update_user_settings(
+    settings: schemas.UserSettingsUpdate,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
+):
+    if settings.ui_settings:
+        current_user.ui_settings.update(settings.ui_settings.dict(exclude_unset=True))
+    if settings.notifications_settings:
+        current_user.notifications_settings.update(
+            settings.notifications_settings.dict(exclude_unset=True)
+        )
+
+    db.commit()
+    db.refresh(current_user)
+
+    return schemas.UserSettings(
+        ui_settings=schemas.UISettings(**current_user.ui_settings),
+        notifications_settings=schemas.NotificationsSettings(
+            **current_user.notifications_settings
+        ),
+    )
