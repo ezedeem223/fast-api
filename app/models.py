@@ -32,7 +32,7 @@ community_tags = Table(
 )
 
 
-class UserType(str, enum.Enum):
+class UserType(enum.Enum):
     PERSONAL = "personal"
     BUSINESS = "business"
 
@@ -112,6 +112,7 @@ class User(Base):
     passport_url = Column(String, nullable=True)
     business_document_url = Column(String, nullable=True)
     selfie_url = Column(String, nullable=True)
+    hide_read_status = Column(Boolean, default=False)
     verification_status = Column(
         Enum(VerificationStatus), default=VerificationStatus.PENDING
     )
@@ -333,7 +334,19 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    content = Column(String, nullable=False)
+    content = Column(Text, nullable=True)
+    replied_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    quoted_message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    audio_url = Column(String, nullable=True)
+    duration = Column(Float, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    is_current_location = Column(Boolean, default=False)
+    location_name = Column(String, nullable=True)
+    is_edited = Column(Boolean, default=False)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
     timestamp = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -343,6 +356,12 @@ class Message(Base):
     )
     receiver = relationship(
         "User", foreign_keys=[receiver_id], back_populates="received_messages"
+    )
+    replied_to = relationship(
+        "Message", remote_side=[id], foreign_keys=[replied_to_id], backref="replies"
+    )
+    quoted_message = relationship(
+        "Message", remote_side=[id], foreign_keys=[quoted_message_id], backref="quotes"
     )
 
 

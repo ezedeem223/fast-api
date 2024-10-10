@@ -147,6 +147,16 @@ class ReportBase(BaseModel):
 
 class MessageBase(BaseModel):
     content: constr(max_length=1000)
+    audio_url: Optional[str] = None
+    duration: Optional[float] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    is_current_location: Optional[bool] = False
+    location_name: Optional[str] = None
+    replied_to_id: Optional[int] = None
+    quoted_message_id: Optional[int] = None
+    is_read: bool = False
+    read_at: Optional[datetime] = None
 
 
 class ArticleBase(BaseModel):
@@ -190,6 +200,10 @@ class UserSettingsUpdate(BaseModel):
 # User models
 class UserCreate(UserBase):
     password: str
+
+
+class UserUpdate(BaseModel):
+    hide_read_status: Optional[bool] = None
 
 
 class UserLogin(UserBase):
@@ -417,7 +431,7 @@ class ReportOut(BaseModel):
 
 # Message models
 class MessageCreate(MessageBase):
-    recipient_id: int
+    receiver_id: int
 
 
 class Message(MessageBase):
@@ -425,10 +439,15 @@ class Message(MessageBase):
     sender_id: int
     receiver_id: int
     timestamp: datetime
-    sender: Optional[UserOut]
-    receiver: Optional[UserOut]
+    replied_to: Optional["Message"] = None
+    quoted_message: Optional["Message"] = None
+    is_edited: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MessageUpdate(BaseModel):
+    content: str
 
 
 class MessageOut(BaseModel):
@@ -595,6 +614,7 @@ class UserContentOut(BaseModel):
 
 
 # Resolve forward references
+Message.update_forward_refs()
 CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
