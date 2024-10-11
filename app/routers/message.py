@@ -7,9 +7,11 @@ from fastapi import (
     File,
     BackgroundTasks,
     Form,
+    Query,
 )
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import or_, and_, func
+from typing import List, Optional
 from .. import models, schemas, oauth2, notifications
 from ..database import get_db
 from fastapi.responses import FileResponse
@@ -17,6 +19,7 @@ import clamd
 import os
 from uuid import uuid4
 from datetime import datetime, timedelta
+import emoji
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
@@ -25,16 +28,22 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 EDIT_DELETE_WINDOW = 60
 
 
+def generate_conversation_id(user1_id: int, user2_id: int) -> str:
+    sorted_ids = sorted([user1_id, user2_id])
+    return f"{sorted_ids[0]}_{sorted_ids[1]}"
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Message)
-def create_message(
+async def create_message(
     message: schemas.MessageCreate,
+    file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    if not message.content.strip():
+    if not message.content and not file and not message.sticker_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Message content cannot be empty",
+            detail="Message must have content, file, or sticker",
         )
 
     recipient = (
@@ -42,8 +51,7 @@ def create_message(
     )
     if not recipient:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recipient not found",
+            status_code=status.HTTP_404_NOT_FOUND, detail="Recipient not found"
         )
 
     block = (
@@ -54,37 +62,141 @@ def create_message(
         )
         .first()
     )
-
     if block:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can't send messages to this user",
         )
 
-    # التحقق من وجود الرسالة المرد عليها أو المقتبسة
-    if message.replied_to_id:
-        replied_to = (
-            db.query(models.Message)
-            .filter(models.Message.id == message.replied_to_id)
+    conversation_id = generate_conversation_id(current_user.id, message.receiver_id)
+    new_message = models.Message(
+        sender_id=current_user.id,
+        receiver_id=message.receiver_id,
+        conversation_id=conversation_id,
+        content=message.content,
+        message_type=schemas.MessageType.TEXT,
+    )
+
+    if message.content and emoji.emoji_count(message.content) > 0:
+        new_message.has_emoji = True
+
+    if file:
+        file_location = f"static/messages/{file.filename}"
+        with open(file_location, "wb+") as file_object:
+            file_object.write(await file.read())
+        new_message.file_url = file_location
+        new_message.message_type = (
+            schemas.MessageType.IMAGE
+            if file.content_type.startswith("image")
+            else schemas.MessageType.FILE
+        )
+
+    if message.sticker_id:
+        sticker = (
+            db.query(models.Sticker)
+            .filter(
+                models.Sticker.id == message.sticker_id, models.Sticker.approved == True
+            )
             .first()
         )
-        if not replied_to:
-            raise HTTPException(status_code=404, detail="Replied to message not found")
+        if not sticker:
+            raise HTTPException(
+                status_code=404, detail="Sticker not found or not approved"
+            )
+        new_message.sticker_id = sticker.id
+        new_message.message_type = schemas.MessageType.STICKER
 
-    if message.quoted_message_id:
-        quoted_message = (
-            db.query(models.Message)
-            .filter(models.Message.id == message.quoted_message_id)
-            .first()
-        )
-        if not quoted_message:
-            raise HTTPException(status_code=404, detail="Quoted message not found")
-
-    new_message = models.Message(sender_id=current_user.id, **message.dict())
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
     return new_message
+
+
+@router.get("/search", response_model=schemas.MessageSearchResponse)
+async def search_messages(
+    query: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    message_type: Optional[schemas.MessageType] = None,
+    conversation_id: Optional[str] = None,
+    sort_order: schemas.SortOrder = schemas.SortOrder.DESC,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+):
+    message_query = db.query(models.Message).filter(
+        or_(
+            models.Message.sender_id == current_user.id,
+            models.Message.receiver_id == current_user.id,
+        )
+    )
+
+    if query:
+        message_query = message_query.filter(models.Message.content.ilike(f"%{query}%"))
+
+    if start_date:
+        message_query = message_query.filter(models.Message.timestamp >= start_date)
+
+    if end_date:
+        message_query = message_query.filter(models.Message.timestamp <= end_date)
+
+    if message_type:
+        message_query = message_query.filter(
+            models.Message.message_type == message_type
+        )
+
+    if conversation_id:
+        message_query = message_query.filter(
+            models.Message.conversation_id == conversation_id
+        )
+
+    total = message_query.count()
+
+    if sort_order == schemas.SortOrder.ASC:
+        message_query = message_query.order_by(models.Message.timestamp.asc())
+    else:
+        message_query = message_query.order_by(models.Message.timestamp.desc())
+
+    messages = message_query.offset(skip).limit(limit).all()
+
+    return schemas.MessageSearchResponse(total=total, messages=messages)
+
+
+@router.get("/conversations", response_model=List[schemas.Message])
+async def get_conversations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    subquery = (
+        db.query(
+            models.Message.conversation_id,
+            func.max(models.Message.timestamp).label("last_message_time"),
+        )
+        .filter(
+            or_(
+                models.Message.sender_id == current_user.id,
+                models.Message.receiver_id == current_user.id,
+            )
+        )
+        .group_by(models.Message.conversation_id)
+        .subquery()
+    )
+
+    conversations = (
+        db.query(models.Message)
+        .join(
+            subquery,
+            and_(
+                models.Message.conversation_id == subquery.c.conversation_id,
+                models.Message.timestamp == subquery.c.last_message_time,
+            ),
+        )
+        .order_by(subquery.c.last_message_time.desc())
+        .all()
+    )
+
+    return conversations
 
 
 @router.get("/", response_model=List[schemas.Message])
@@ -180,7 +292,11 @@ async def send_file(
         )
 
     new_message = models.Message(
-        sender_id=current_user.id, receiver_id=recipient_id, content=file_location
+        sender_id=current_user.id,
+        receiver_id=recipient_id,
+        content=file_location,
+        message_type=schemas.MessageType.FILE,
+        file_url=file_location,
     )
     db.add(new_message)
     db.commit()
@@ -188,7 +304,6 @@ async def send_file(
 
     background_tasks.add_task(
         notifications.schedule_email_notification,
-        background_tasks=background_tasks,
         to=recipient.email,
         subject="New File Received",
         body=f"You have received a file from {current_user.email}.",
@@ -213,7 +328,7 @@ def download_file(
 ):
     message = (
         db.query(models.Message)
-        .filter(models.Message.content == f"static/messages/{file_name}")
+        .filter(models.Message.file_url == f"static/messages/{file_name}")
         .first()
     )
     if not message or (
@@ -252,6 +367,7 @@ def send_location(
         is_current_location=location.is_current_location,
         location_name=location.location_name,
         content="Shared location",
+        message_type=schemas.MessageType.TEXT,
     )
     db.add(new_message)
     db.commit()
@@ -282,6 +398,7 @@ async def create_audio_message(
         receiver_id=receiver_id,
         audio_url=file_path,
         duration=duration,
+        message_type=schemas.MessageType.FILE,
     )
     db.add(new_message)
     db.commit()
@@ -299,7 +416,6 @@ def get_message(
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    # التحقق من أن المستخدم الحالي هو المرسل أو المستقبل
     if message.sender_id != current_user.id and message.receiver_id != current_user.id:
         raise HTTPException(
             status_code=403, detail="Not authorized to view this message"
@@ -325,7 +441,7 @@ async def update_message(
             status_code=403, detail="Not authorized to edit this message"
         )
 
-    time_difference = datetime.now() - message.timestamp
+    time_difference = datetime.now(timezone.utc) - message.timestamp
     if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
         raise HTTPException(status_code=400, detail="Edit window has expired")
 
@@ -334,7 +450,6 @@ async def update_message(
     db.commit()
     db.refresh(message)
 
-    # إرسال إشعار للمستقبل
     recipient = (
         db.query(models.User).filter(models.User.id == message.receiver_id).first()
     )
@@ -363,14 +478,13 @@ async def delete_message(
             status_code=403, detail="Not authorized to delete this message"
         )
 
-    time_difference = datetime.now() - message.timestamp
+    time_difference = datetime.now(timezone.utc) - message.timestamp
     if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
         raise HTTPException(status_code=400, detail="Delete window has expired")
 
     db.delete(message)
     db.commit()
 
-    # إرسال إشعار للمستقبل
     recipient = (
         db.query(models.User).filter(models.User.id == message.receiver_id).first()
     )
@@ -401,7 +515,7 @@ async def mark_message_as_read(
 
     if not message.is_read:
         message.is_read = True
-        message.read_at = datetime.now()
+        message.read_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(message)
 

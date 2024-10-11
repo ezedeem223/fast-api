@@ -32,6 +32,9 @@ from .routers import (
     moderator,
     support,
     business,
+    sticker,
+    call,
+    screen_share,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -121,6 +124,9 @@ app.include_router(p2fa.router)
 app.include_router(moderator.router)
 app.include_router(support.router)
 app.include_router(business.router)
+app.include_router(sticker.router)
+app.include_router(call.router)
+app.include_router(screen_share.router)
 
 
 manager = ConnectionManager()

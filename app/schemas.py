@@ -1,7 +1,92 @@
-from pydantic import BaseModel, EmailStr, conint, ValidationError, ConfigDict, constr
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    conint,
+    ValidationError,
+    ConfigDict,
+    constr,
+    HttpUrl,
+)
 from datetime import datetime, date
 from typing import Optional, List, ForwardRef
 from enum import Enum
+
+
+class ScreenShareStatus(str, Enum):
+    ACTIVE = "active"
+    ENDED = "ended"
+    FAILED = "failed"
+
+
+class ScreenShareStart(BaseModel):
+    call_id: int
+
+
+class ScreenShareEnd(BaseModel):
+    session_id: int
+
+
+class ScreenShareUpdate(BaseModel):
+    status: ScreenShareStatus
+    error_message: Optional[str] = None
+
+
+class ScreenShareSessionOut(BaseModel):
+    id: int
+    call_id: int
+    sharer_id: int
+    start_time: datetime
+    end_time: Optional[datetime]
+    status: ScreenShareStatus
+    error_message: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CallType(str, Enum):
+    AUDIO = "audio"
+    VIDEO = "video"
+
+
+class CallStatus(str, Enum):
+    PENDING = "pending"
+    ONGOING = "ongoing"
+    ENDED = "ended"
+
+
+class CallCreate(BaseModel):
+    receiver_id: int
+    call_type: CallType
+
+
+class CallUpdate(BaseModel):
+    status: CallStatus
+    current_screen_share_id: Optional[int] = None
+
+
+class CallOut(BaseModel):
+    id: int
+    caller_id: int
+    receiver_id: int
+    call_type: CallType
+    status: CallStatus
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    current_screen_share: Optional[ScreenShareSessionOut] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MessageType(str, Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    FILE = "file"
+    STICKER = "sticker"
+
+
+class SortOrder(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 class BusinessRegistration(BaseModel):
@@ -157,6 +242,8 @@ class MessageBase(BaseModel):
     quoted_message_id: Optional[int] = None
     is_read: bool = False
     read_at: Optional[datetime] = None
+    message_type: MessageType
+    file_url: Optional[str]
 
 
 class ArticleBase(BaseModel):
@@ -442,8 +529,23 @@ class Message(MessageBase):
     replied_to: Optional["Message"] = None
     quoted_message: Optional["Message"] = None
     is_edited: bool = False
+    conversation_id: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MessageSearch(BaseModel):
+    query: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    message_type: Optional[MessageType] = None
+    conversation_id: Optional[str] = None
+    sort_order: SortOrder = SortOrder.DESC
+
+
+class MessageSearchResponse(BaseModel):
+    total: int
+    messages: List[Message]
 
 
 class MessageUpdate(BaseModel):
@@ -609,6 +711,77 @@ class UserContentOut(BaseModel):
     comments: List[Comment]
     articles: List[ArticleOut]
     reels: List[ReelOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StickerPackBase(BaseModel):
+    name: str
+
+
+class StickerPackCreate(StickerPackBase):
+    pass
+
+
+class StickerPack(StickerPackBase):
+    id: int
+    creator_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StickerBase(BaseModel):
+    name: str
+    image_url: str
+
+
+class StickerCreate(StickerBase):
+    pack_id: int
+    category_ids: List[int]
+
+
+class Sticker(StickerBase):
+    id: int
+    pack_id: int
+    created_at: datetime
+    approved: bool
+    categories: List[StickerCategory]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StickerPackWithStickers(StickerPack):
+    stickers: List[Sticker]
+
+
+class StickerCategoryBase(BaseModel):
+    name: str
+
+
+class StickerCategoryCreate(StickerCategoryBase):
+    pass
+
+
+class StickerCategory(StickerCategoryBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StickerReportBase(BaseModel):
+    sticker_id: int
+    reason: str
+
+
+class StickerReportCreate(StickerReportBase):
+    pass
+
+
+class StickerReport(StickerReportBase):
+    id: int
+    reporter_id: int
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
