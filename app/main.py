@@ -35,6 +35,7 @@ from .routers import (
     sticker,
     call,
     screen_share,
+    session,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -127,6 +128,7 @@ app.include_router(business.router)
 app.include_router(sticker.router)
 app.include_router(call.router)
 app.include_router(screen_share.router)
+app.include_router(session.router)
 
 
 manager = ConnectionManager()
@@ -135,6 +137,11 @@ manager = ConnectionManager()
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
+
+
+@app.get("/")
+def root():
+    return {"message": "Welcome to the secure messaging API"}
 
 
 @app.websocket("/ws/{user_id}")

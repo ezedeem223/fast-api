@@ -12,7 +12,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from typing import List, Optional
-from .. import models, schemas, oauth2, notifications
+from .. import models, schemas, oauth2, notifications, crypto
 from ..database import get_db
 from fastapi.responses import FileResponse
 import clamd

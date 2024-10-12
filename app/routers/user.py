@@ -11,7 +11,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
-from .. import models, schemas, utils, oauth2
+from .. import models, schemas, utils, oauth2, crypto
 from ..database import get_db
 from ..notifications import send_email_notification
 from typing import List, Optional
@@ -28,21 +28,48 @@ async def create_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
 ):
-    hashed_password = utils.hash(user.password)
-    user.password = hashed_password
+    # التحقق من وجود المستخدم
+    existing_user = (
+        db.query(models.User).filter(models.User.email == user.email).first()
+    )
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
 
-    new_user = models.User(**user.model_dump())
+    # تشفير كلمة المرور
+    hashed_password = utils.hash(user.password)
+
+    # إنشاء مستخدم جديد
+    new_user = models.User(
+        email=user.email,
+        hashed_password=hashed_password,
+        public_key=user.public_key,
+        **user.model_dump(exclude={"password", "public_key"}),
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    await send_email_notification(
+    # إرسال إشعار بالبريد الإلكتروني
+    background_tasks.add_task(
+        send_email_notification,
         to=new_user.email,
         subject="New User Created",
         body=f"A new user with email {new_user.email} has been created.",
     )
 
     return new_user
+
+
+@router.put("/public-key", response_model=schemas.UserOut)
+def update_public_key(
+    key_update: schemas.UserPublicKeyUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    current_user.public_key = key_update.public_key
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.get("/{id}", response_model=schemas.UserOut)

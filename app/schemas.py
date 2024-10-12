@@ -12,6 +12,12 @@ from typing import Optional, List, ForwardRef
 from enum import Enum
 
 
+class VerificationStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class ScreenShareStatus(str, Enum):
     ACTIVE = "active"
     ENDED = "ended"
@@ -230,8 +236,13 @@ class ReportBase(BaseModel):
     report_reason: str
 
 
+class UserPublicKeyUpdate(BaseModel):
+    public_key: str
+
+
 class MessageBase(BaseModel):
-    content: constr(max_length=1000)
+    encrypted_content: str
+    message_type: MessageType
     audio_url: Optional[str] = None
     duration: Optional[float] = None
     latitude: Optional[float] = None
@@ -242,7 +253,6 @@ class MessageBase(BaseModel):
     quoted_message_id: Optional[int] = None
     is_read: bool = False
     read_at: Optional[datetime] = None
-    message_type: MessageType
     file_url: Optional[str]
 
 
@@ -287,6 +297,7 @@ class UserSettingsUpdate(BaseModel):
 # User models
 class UserCreate(UserBase):
     password: str
+    public_key: str
 
 
 class UserUpdate(BaseModel):
@@ -307,8 +318,35 @@ class UserOut(UserBase):
     custom_privacy: Optional[dict] = None
     ui_settings: Optional[UISettings]
     notifications_settings: Optional[NotificationsSettings]
+    public_key: Optional[str] = None  # إضافة حقل المفتاح العام
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InitialKeyExchange(BaseModel):
+    user_id: int
+    public_key: str
+
+
+class KeyExchange(BaseModel):
+    public_key: str
+
+
+class DecryptedMessage(BaseModel):
+    id: int
+    sender_id: int
+    receiver_id: int
+    content: str
+    timestamp: datetime
+    message_type: MessageType
+    is_read: bool
+    read_at: Optional[datetime]
+    conversation_id: str
+
+
+class SessionKeyUpdate(BaseModel):
+    session_id: int
+    new_public_key: str
 
 
 # Token models
@@ -438,6 +476,26 @@ class CommunityRuleOut(CommunityRuleBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EncryptedSessionCreate(BaseModel):
+    other_user_id: int
+
+
+class EncryptedSessionOut(BaseModel):
+    id: int
+    user_id: int
+    other_user_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EncryptedSessionUpdate(BaseModel):
+    root_key: str
+    chain_key: str
+    next_header_key: str
+    ratchet_key: str
+
+
 # Post models
 class PostCreate(PostBase):
     community_id: Optional[int] = None
@@ -519,12 +577,15 @@ class ReportOut(BaseModel):
 # Message models
 class MessageCreate(MessageBase):
     receiver_id: int
+    encrypted_content: str  # محتوى مشفر بدلاً من النص العادي
+    message_type: MessageType
 
 
 class Message(MessageBase):
     id: int
     sender_id: int
     receiver_id: int
+    encrypted_content: str  # محتوى مشفر
     timestamp: datetime
     replied_to: Optional["Message"] = None
     quoted_message: Optional["Message"] = None

@@ -14,6 +14,7 @@ from sqlalchemy import (
     Table,
     JSON,
     ARRAY,
+    LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import text
@@ -151,6 +152,8 @@ class User(Base):
         Enum(VerificationStatus), default=VerificationStatus.PENDING
     )
     is_verified_business = Column(Boolean, default=False)
+    hashed_password = Column(String, nullable=False)
+    public_key = Column(LargeBinary)
 
     # Relationships будут добавлены позже
 
@@ -279,6 +282,7 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    encrypted_content = Column(LargeBinary, nullable=False)
     content = Column(Text, nullable=True)
     replied_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
     quoted_message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
@@ -309,6 +313,20 @@ class Message(Base):
     )
 
     # Relationships будут добавлены позже
+
+
+class EncryptedSession(Base):
+    __tablename__ = "encrypted_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    other_user_id = Column(Integer, ForeignKey("users.id"))
+    root_key = Column(LargeBinary)
+    chain_key = Column(LargeBinary)
+    next_header_key = Column(LargeBinary)
+    ratchet_key = Column(LargeBinary)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Community(Base):
@@ -815,3 +833,10 @@ Call.receiver = relationship(
 )
 call = relationship("Call", back_populates="screen_share_sessions")
 Call.screen_share_sessions = relationship("ScreenShareSession", back_populates="call")
+
+
+# user = relationship("User", foreign_keys=[user_id], back_populates="encrypted_sessions")
+# other_user = relationship("User", foreign_keys=[other_user_id])
+# encrypted_sessions = relationship(
+#     "EncryptedSession", foreign_keys=[EncryptedSession.user_id], back_populates="user"
+# )
