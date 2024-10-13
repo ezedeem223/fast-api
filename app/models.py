@@ -301,6 +301,7 @@ class Message(Base):
     timestamp = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
+    link_preview = Column(JSON, nullable=True)
 
     __table_args__ = (
         Index(
@@ -327,6 +328,12 @@ class EncryptedSession(Base):
     ratchet_key = Column(LargeBinary)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # user = relationship("User", foreign_keys=[user_id], back_populates="encrypted_sessions")
+    # other_user = relationship("User", foreign_keys=[other_user_id])
+    # encrypted_sessions = relationship(
+    #     "EncryptedSession", foreign_keys=[EncryptedSession.user_id], back_populates="user"
+    # )
 
 
 class Community(Base):
@@ -603,6 +610,39 @@ class ScreenShareSession(Base):
     error_message = Column(String, nullable=True)
 
 
+class MessageAttachment(Base):
+    __tablename__ = "message_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"))
+    file_url = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    message = relationship("Message", back_populates="attachments")
+
+
+class ConversationStatistics(Base):
+    __tablename__ = "conversation_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String, index=True)
+    total_messages = Column(Integer, default=0)
+    total_time = Column(Integer, default=0)  # في الثواني
+    last_message_at = Column(DateTime(timezone=True), server_default=func.now())
+    user1_id = Column(Integer, ForeignKey("users.id"))
+    user2_id = Column(Integer, ForeignKey("users.id"))
+    total_files = Column(Integer, default=0)
+    total_emojis = Column(Integer, default=0)
+    total_stickers = Column(Integer, default=0)
+    total_response_time = Column(Float, default=0.0)
+    total_responses = Column(Integer, default=0)
+    average_response_time = Column(Float, default=0.0)
+
+    user1 = relationship("User", foreign_keys=[user1_id])
+    user2 = relationship("User", foreign_keys=[user2_id])
+
+
 # Теперь добавим отношения
 User.posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
 User.comments = relationship(
@@ -681,6 +721,7 @@ User.incoming_calls = relationship(
 )
 User.screen_shares = relationship("ScreenShareSession", back_populates="sharer")
 
+
 Post.owner = relationship("User", back_populates="posts")
 Post.comments = relationship(
     "Comment", back_populates="post", cascade="all, delete-orphan"
@@ -737,7 +778,9 @@ Message.quoted_message = relationship(
     foreign_keys=[Message.quoted_message_id],
     backref="quotes",
 )
-
+attachments = relationship(
+    "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
+)
 Community.owner = relationship("User", back_populates="owned_communities")
 Community.members = relationship("CommunityMember", back_populates="community")
 Community.posts = relationship(

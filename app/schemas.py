@@ -240,6 +240,23 @@ class UserPublicKeyUpdate(BaseModel):
     public_key: str
 
 
+class MessageAttachmentBase(BaseModel):
+    file_url: str
+    file_type: str
+
+
+class MessageAttachmentCreate(MessageAttachmentBase):
+    pass
+
+
+class MessageAttachment(MessageAttachmentBase):
+    id: int
+    message_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class MessageBase(BaseModel):
     encrypted_content: str
     message_type: MessageType
@@ -579,6 +596,7 @@ class MessageCreate(MessageBase):
     receiver_id: int
     encrypted_content: str  # محتوى مشفر بدلاً من النص العادي
     message_type: MessageType
+    attachments: List[MessageAttachmentCreate] = []
 
 
 class Message(MessageBase):
@@ -591,6 +609,7 @@ class Message(MessageBase):
     quoted_message: Optional["Message"] = None
     is_edited: bool = False
     conversation_id: str
+    link_preview: Optional[LinkPreview] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -618,6 +637,37 @@ class MessageOut(BaseModel):
     count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationStatisticsBase(BaseModel):
+    total_messages: int
+    total_time: int
+    last_message_at: datetime
+
+
+class ConversationStatisticsCreate(ConversationStatisticsBase):
+    conversation_id: str
+    user1_id: int
+    user2_id: int
+
+
+class ConversationStatistics(ConversationStatisticsBase):
+    id: int
+    conversation_id: str
+    user1_id: int
+    user2_id: int
+    total_files: int
+    total_emojis: int
+    total_stickers: int
+    average_response_time: float
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LinkPreview(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image: Optional[str] = None
+    url: str
 
 
 class CommunityRole(str, Enum):

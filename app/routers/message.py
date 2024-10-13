@@ -17,15 +17,19 @@ from ..database import get_db
 from fastapi.responses import FileResponse
 import clamd
 import os
+import re
 from uuid import uuid4
 from datetime import datetime, timedelta
 import emoji
+from ..link_preview import extract_link_preview
+
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
 AUDIO_DIR = "static/audio_messages"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 EDIT_DELETE_WINDOW = 60
+UPLOAD_DIR = "static/messages"
 
 
 def generate_conversation_id(user1_id: int, user2_id: int) -> str:
@@ -36,14 +40,15 @@ def generate_conversation_id(user1_id: int, user2_id: int) -> str:
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Message)
 async def create_message(
     message: schemas.MessageCreate,
-    file: Optional[UploadFile] = File(None),
+    files: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    if not message.content and not file and not message.sticker_id:
+    if not message.content and not files and not message.sticker_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Message must have content, file, or sticker",
+            detail="Message must have content, files, or sticker",
         )
 
     recipient = (
@@ -80,16 +85,25 @@ async def create_message(
     if message.content and emoji.emoji_count(message.content) > 0:
         new_message.has_emoji = True
 
-    if file:
-        file_location = f"static/messages/{file.filename}"
-        with open(file_location, "wb+") as file_object:
-            file_object.write(await file.read())
-        new_message.file_url = file_location
-        new_message.message_type = (
-            schemas.MessageType.IMAGE
-            if file.content_type.startswith("image")
-            else schemas.MessageType.FILE
-        )
+    if files:
+        new_message.message_type = schemas.MessageType.FILE
+        for file in files:
+            file_extension = os.path.splitext(file.filename)[1]
+            unique_filename = f"{uuid.uuid4()}{file_extension}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+            with open(file_path, "wb") as buffer:
+                buffer.write(await file.read())
+
+            attachment = models.MessageAttachment(
+                file_url=file_path, file_type=file.content_type
+            )
+            new_message.attachments.append(attachment)
+
+        if all(file.content_type.startswith("image") for file in files):
+            new_message.message_type = schemas.MessageType.IMAGE
 
     if message.sticker_id:
         sticker = (
@@ -106,9 +120,66 @@ async def create_message(
         new_message.sticker_id = sticker.id
         new_message.message_type = schemas.MessageType.STICKER
 
+    urls = re.findall(
+        r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
+        message.content,
+    )
+
+    if urls:
+        # استخدام مهمة خلفية لاستخراج معاينة الرابط
+        background_tasks.add_task(update_link_preview, db, new_message.id, urls[0])
+
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+
+    # تحديث إحصائيات المحادثة
+    conversation_stats = (
+        db.query(models.ConversationStatistics)
+        .filter(models.ConversationStatistics.conversation_id == conversation_id)
+        .first()
+    )
+
+    if not conversation_stats:
+        conversation_stats = models.ConversationStatistics(
+            conversation_id=conversation_id,
+            user1_id=min(current_user.id, message.receiver_id),
+            user2_id=max(current_user.id, message.receiver_id),
+        )
+        db.add(conversation_stats)
+
+    conversation_stats.total_messages += 1
+    conversation_stats.last_message_at = func.now()
+
+    # تحديث إحصائيات إضافية
+    if files:
+        conversation_stats.total_files += len(files)
+    if new_message.has_emoji:
+        conversation_stats.total_emojis += 1
+    if new_message.message_type == schemas.MessageType.STICKER:
+        conversation_stats.total_stickers += 1
+
+    # حساب متوسط وقت الرد
+    last_message = (
+        db.query(models.Message)
+        .filter(
+            models.Message.conversation_id == conversation_id,
+            models.Message.id != new_message.id,
+        )
+        .order_by(models.Message.created_at.desc())
+        .first()
+    )
+
+    if last_message:
+        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
+        conversation_stats.total_response_time += time_diff
+        conversation_stats.total_responses += 1
+        conversation_stats.average_response_time = (
+            conversation_stats.total_response_time / conversation_stats.total_responses
+        )
+
+    db.commit()
+
     return new_message
 
 
@@ -560,3 +631,38 @@ async def get_unread_messages_count(
         .count()
     )
     return unread_count
+
+
+@router.get(
+    "/statistics/{conversation_id}", response_model=schemas.ConversationStatistics
+)
+async def get_conversation_statistics(
+    conversation_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    stats = (
+        db.query(models.ConversationStatistics)
+        .filter(
+            models.ConversationStatistics.conversation_id == conversation_id,
+            or_(
+                models.ConversationStatistics.user1_id == current_user.id,
+                models.ConversationStatistics.user2_id == current_user.id,
+            ),
+        )
+        .first()
+    )
+
+    if not stats:
+        raise HTTPException(status_code=404, detail="Conversation statistics not found")
+
+    return stats
+
+
+def update_link_preview(db: Session, message_id: int, url: str):
+    link_preview = extract_link_preview(url)
+    if link_preview:
+        db.query(models.Message).filter(models.Message.id == message_id).update(
+            {"link_preview": link_preview}
+        )
+        db.commit()
