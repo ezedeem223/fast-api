@@ -110,6 +110,15 @@ class ScreenShareStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ReactionType(enum.Enum):
+    LIKE = "like"
+    LOVE = "love"
+    HAHA = "haha"
+    WOW = "wow"
+    SAD = "sad"
+    ANGRY = "angry"
+
+
 class Hashtag(Base):
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
@@ -123,6 +132,30 @@ user_hashtag_follows = Table(
     Column("user_id", Integer, ForeignKey("users.id")),
     Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
 )
+
+
+class Reaction(Base):
+    __tablename__ = "reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=True)
+    comment_id = Column(
+        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+    )
+    reaction_type = Column(Enum(ReactionType), nullable=False)
+
+    user = relationship("User", back_populates="reactions")
+    post = relationship("Post", back_populates="reactions")
+    comment = relationship("Comment", back_populates="reactions")
+
+    __table_args__ = (
+        Index("ix_reactions_user_id", user_id),
+        Index("ix_reactions_post_id", post_id),
+        Index("ix_reactions_comment_id", comment_id),
+    )
 
 
 # Определение моделей
@@ -185,6 +218,9 @@ class User(Base):
     followers_sort_preference = Column(String, default="date")
     post_count = Column(Integer, default=0)
     interaction_count = Column(Integer, default=0)
+    followers_count = Column(Integer, default=0)
+    following_count = Column(Integer, default=0)
+    followers_growth = Column(ARRAY(Integer), default=list)
 
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -267,6 +303,9 @@ class User(Base):
     followed_hashtags = relationship(
         "Hashtag", secondary=user_hashtag_follows, back_populates="followers"
     )
+    reactions = relationship(
+        "Reaction", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Post(Base):
@@ -306,6 +345,9 @@ class Post(Base):
         Column("post_id", Integer, ForeignKey("posts.id")),
         Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
     )
+    reactions = relationship(
+        "Reaction", back_populates="post", cascade="all, delete-orphan"
+    )
 
 
 class Comment(Base):
@@ -319,15 +361,48 @@ class Comment(Base):
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    parent_id = Column(
+        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
     )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    is_edited = Column(Boolean, default=False)
+    edited_at = Column(DateTime(timezone=True), nullable=True)
+    is_deleted = Column(Boolean, default=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
     reports = relationship(
         "Report", back_populates="comment", cascade="all, delete-orphan"
     )
+    parent = relationship("Comment", remote_side=[id], back_populates="replies")
+    replies = relationship("Comment", back_populates="parent")
+    edit_history = relationship(
+        "CommentEditHistory", back_populates="comment", cascade="all, delete-orphan"
+    )
+    reactions = relationship(
+        "Reaction", back_populates="comment", cascade="all, delete-orphan"
+    )
+
+
+class CommentEditHistory(Base):
+    __tablename__ = "comment_edit_history"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    comment_id = Column(
+        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False
+    )
+    previous_content = Column(String, nullable=False)
+    edited_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    comment = relationship("Comment", back_populates="edit_history")
+
+    # Добавление индекса для улучшения производительности
+    __table_args__ = (Index("ix_comment_edit_history_comment_id", "comment_id"),)
 
 
 class BusinessTransaction(Base):
@@ -415,6 +490,7 @@ class Follow(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
+    is_mutual = Column(Boolean, default=False)
 
     follower = relationship(
         "User", back_populates="following", foreign_keys=[follower_id]
@@ -833,7 +909,10 @@ class ScreenShareSession(Base):
     sharer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
-    status = Column(SQLAlchemyEnum(ScreenShareStatus, name="screen_share_status_enum"), default=ScreenShareStatus.ACTIVE)
+    status = Column(
+        SQLAlchemyEnum(ScreenShareStatus, name="screen_share_status_enum"),
+        default=ScreenShareStatus.ACTIVE,
+    )
     error_message = Column(String, nullable=True)
 
     call = relationship("Call", back_populates="screen_share_sessions")

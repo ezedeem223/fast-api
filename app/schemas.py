@@ -12,6 +12,35 @@ from typing import Optional, List, ForwardRef, Dict
 from enum import Enum
 
 
+class ReactionType(str, Enum):
+    LIKE = "like"
+    LOVE = "love"
+    HAHA = "haha"
+    WOW = "wow"
+    SAD = "sad"
+    ANGRY = "angry"
+
+
+class ReactionBase(BaseModel):
+    reaction_type: ReactionType
+
+
+class ReactionCreate(ReactionBase):
+    pass
+
+
+class Reaction(ReactionBase):
+    id: int
+    user_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReactionCount(BaseModel):
+    reaction_type: ReactionType
+    count: int
+
+
 class HashtagBase(BaseModel):
     name: str
 
@@ -127,6 +156,13 @@ class BusinessRegistration(BaseModel):
     business_name: str
     business_registration_number: str
     bank_account_info: str
+
+
+class FollowStatistics(BaseModel):
+    followers_count: int
+    following_count: int
+    daily_growth: Dict[date, int]
+    interaction_rate: float
 
 
 class BusinessVerificationUpdate(BaseModel):
@@ -586,6 +622,8 @@ class PostOut(Post):
     owner_id: int
     owner: UserOut
     privacy_level: PrivacyLevel
+    reactions: List[Reaction] = []
+    reaction_counts: List[ReactionCount] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -593,6 +631,25 @@ class PostOut(Post):
 # Comment models
 class CommentCreate(CommentBase):
     post_id: int
+    parent_id: Optional[int] = None
+
+
+class CommentOut(BaseModel):
+    # ... (существующие поля)
+    reactions: List[Reaction] = []
+    reaction_counts: List[ReactionCount] = []
+
+
+class CommentUpdate(CommentBase):
+    pass
+
+
+class CommentEditHistoryOut(BaseModel):
+    id: int
+    previous_content: str
+    edited_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Comment(CommentBase):
@@ -600,7 +657,13 @@ class Comment(CommentBase):
     created_at: datetime
     owner_id: int
     post_id: int
-    owner: UserOut
+    parent_id: Optional[int]
+    is_edited: bool
+    edited_at: Optional[datetime]
+    is_deleted: bool
+    deleted_at: Optional[datetime]
+    edit_history: List[CommentEditHistoryOut] = []
+    replies: List["Comment"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -954,6 +1017,7 @@ CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
 PostOut.model_rebuild()
+Comment.update_forward_refs()
 CommunityInvitationOut.model_rebuild()
 
 # Example instances for testing

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, func
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List
 from ..notifications import send_email_notification
 from ..cache import cache
+from datetime import datetime, timedelta
+
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
 
@@ -46,7 +48,22 @@ async def follow_user(
     new_follow = models.Follow(follower_id=current_user.id, followed_id=user_id)
     db.add(new_follow)
 
+    # التحقق من المتابعة المتبادلة
+    mutual_follow = (
+        db.query(models.Follow)
+        .filter(
+            models.Follow.follower_id == user_id,
+            models.Follow.followed_id == current_user.id,
+        )
+        .first()
+    )
+
+    if mutual_follow:
+        new_follow.is_mutual = True
+        mutual_follow.is_mutual = True
+
     user_to_follow.followers_count += 1
+    current_user.following_count += 1
 
     db.commit()
 
@@ -88,9 +105,22 @@ async def unfollow_user(
             detail="User to unfollow not found",
         )
 
+    if follow.is_mutual:
+        mutual_follow = (
+            db.query(models.Follow)
+            .filter(
+                models.Follow.follower_id == user_id,
+                models.Follow.followed_id == current_user.id,
+            )
+            .first()
+        )
+        if mutual_follow:
+            mutual_follow.is_mutual = False
+
     db.delete(follow)
 
     user_unfollowed.followers_count -= 1
+    current_user.following_count -= 1
 
     db.commit()
 
@@ -142,6 +172,7 @@ async def get_followers(
                 follow_date=follow.created_at,
                 post_count=follow.follower.post_count,
                 interaction_count=follow.follower.interaction_count,
+                is_mutual=follow.is_mutual,
             )
             for follow in followers
         ],
@@ -186,8 +217,60 @@ async def get_following(
                 username=follow.followed.username,
                 email=follow.followed.email,
                 follow_date=follow.created_at,
+                is_mutual=follow.is_mutual,
             )
             for follow in following
         ],
         "total_count": total_count,
     }
+
+
+@router.get("/statistics", response_model=schemas.FollowStatistics)
+def get_follow_statistics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    # حساب نمو المتابعين في الأيام الـ 30 الماضية
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    daily_growth = (
+        db.query(func.date(models.Follow.created_at), func.count())
+        .filter(models.Follow.followed_id == current_user.id)
+        .filter(models.Follow.created_at >= thirty_days_ago)
+        .group_by(func.date(models.Follow.created_at))
+        .all()
+    )
+
+    # حساب معدل التفاعل (يمكن تعديله حسب تعريفك للتفاعل)
+    interaction_rate = (
+        db.query(func.count(models.Post.id) + func.count(models.Comment.id))
+        .filter(
+            (models.Post.owner_id == current_user.id)
+            | (models.Comment.owner_id == current_user.id)
+        )
+        .scalar()
+        / current_user.followers_count
+        if current_user.followers_count > 0
+        else 0
+    )
+
+    return {
+        "followers_count": current_user.followers_count,
+        "following_count": current_user.following_count,
+        "daily_growth": dict(daily_growth),
+        "interaction_rate": interaction_rate,
+    }
+
+
+@router.get("/mutual", response_model=List[schemas.UserOut])
+def get_mutual_followers(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    mutual_followers = (
+        db.query(models.User)
+        .join(models.Follow, models.User.id == models.Follow.follower_id)
+        .filter(models.Follow.followed_id == current_user.id)
+        .filter(models.Follow.is_mutual == True)
+        .all()
+    )
+    return mutual_followers

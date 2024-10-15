@@ -64,44 +64,78 @@ def share_on_facebook(content: str):
         )
 
 
-@router.get("/", response_model=List[schemas.PostOut])
-def get_posts(
+@router.get("/{id}", response_model=schemas.PostOut)
+def get_post(
+    id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    limit: int = 10,
-    skip: int = 0,
-    search: Optional[str] = "",
 ):
-    posts_query = (
-        db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
-        .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
-        .group_by(models.Post.id)
-        .filter(models.Post.title.contains(search))
-    )
-
-    # Filter posts based on privacy settings
-    posts_query = posts_query.join(
-        models.User, models.User.id == models.Post.owner_id
-    ).filter(
-        or_(
-            models.User.privacy_level == models.PrivacyLevel.PUBLIC,
-            models.User.id == current_user.id,
-            and_(
-                models.User.privacy_level == models.PrivacyLevel.CUSTOM,
-                or_(
-                    models.User.id == current_user.id,
-                    current_user.id.in_(
-                        func.json_array_elements_text(
-                            cast(models.User.custom_privacy["allowed_users"], JSONB)
-                        )
-                    ),
-                ),
-            ),
+    post_query = (
+        db.query(models.Post)
+        .options(
+            joinedload(models.Post.comments).joinedload(models.Comment.replies),
+            joinedload(models.Post.reactions),
         )
+        .filter(models.Post.id == id)
     )
 
-    posts = posts_query.limit(limit).offset(skip).all()
-    return [schemas.PostOut(post=post, votes=votes) for post, votes in posts]
+    post = post_query.first()
+
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"post with id: {id} was not found",
+        )
+
+    # Получение реакций для поста
+    reaction_counts = (
+        db.query(
+            models.Reaction.reaction_type, func.count(models.Reaction.id).label("count")
+        )
+        .filter(models.Reaction.post_id == id)
+        .group_by(models.Reaction.reaction_type)
+        .all()
+    )
+
+    # Организация комментариев в древовидную структуру
+    comments = []
+    comments_dict = {}
+
+    for comment in post.comments:
+        comment_dict = comment.__dict__
+        comment_dict["replies"] = []
+        comment_dict["reactions"] = [
+            schemas.Reaction(id=r.id, user_id=r.user_id, reaction_type=r.reaction_type)
+            for r in comment.reactions
+        ]
+        comment_dict["reaction_counts"] = get_comment_reaction_counts(comment.id, db)
+        comments_dict[comment.id] = comment_dict
+        if comment.parent_id is None:
+            comments.append(comment_dict)
+        else:
+            parent = comments_dict.get(comment.parent_id)
+            if parent:
+                parent["replies"].append(comment_dict)
+
+    post_out = schemas.PostOut(
+        id=post.id,
+        title=post.title,
+        content=post.content,
+        created_at=post.created_at,
+        owner_id=post.owner_id,
+        owner=post.owner,
+        reactions=[
+            schemas.Reaction(id=r.id, user_id=r.user_id, reaction_type=r.reaction_type)
+            for r in post.reactions
+        ],
+        reaction_counts=[
+            schemas.ReactionCount(reaction_type=r.reaction_type, count=r.count)
+            for r in reaction_counts
+        ],
+        comments=comments,
+    )
+
+    return post_out
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     mail_from: EmailStr
     mail_port: int
     mail_server: str
-
+    COMMENT_EDIT_WINDOW_MINUTES: int = 15
     # # أضف الحقول الجديدة هنا
     # facebook_access_token: "default_facebook_client_secret"
     # facebook_app_id: "default_facebook_client_secret"
