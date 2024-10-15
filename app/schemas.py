@@ -8,8 +8,36 @@ from pydantic import (
     HttpUrl,
 )
 from datetime import datetime, date
-from typing import Optional, List, ForwardRef
+from typing import Optional, List, ForwardRef, Dict
 from enum import Enum
+
+
+class HashtagBase(BaseModel):
+    name: str
+
+
+class HashtagCreate(HashtagBase):
+    pass
+
+
+class Hashtag(HashtagBase):
+    id: int
+    followers_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SortOption(str, Enum):
+    DATE = "date"
+    USERNAME = "username"
+    POST_COUNT = "post_count"
+    INTERACTION_COUNT = "interaction_count"
+
+
+class UserFollowersSettings(BaseModel):
+    followers_visibility: str
+    followers_custom_visibility: Optional[Dict[str, List[int]]] = None
+    followers_sort_preference: SortOption
 
 
 class VerificationStatus(str, Enum):
@@ -220,6 +248,7 @@ class Ticket(BaseModel):
 # Base models
 class UserBase(BaseModel):
     email: EmailStr
+    interests: Optional[List[str]] = None
 
 
 class PostBase(BaseModel):
@@ -314,11 +343,15 @@ class UserSettingsUpdate(BaseModel):
 # User models
 class UserCreate(UserBase):
     password: str
+    email: EmailStr
     public_key: str
 
 
 class UserUpdate(BaseModel):
     hide_read_status: Optional[bool] = None
+    phone_number: Optional[str] = None
+    followers_settings: Optional[UserFollowersSettings] = None
+    followed_hashtags: List[int] = []
 
 
 class UserLogin(UserBase):
@@ -328,6 +361,7 @@ class UserLogin(UserBase):
 class UserOut(UserBase):
     id: int
     created_at: datetime
+    email: EmailStr
     role: "UserRole"
     is_2fa_enabled: bool
     model_config = ConfigDict(from_attributes=True)
@@ -336,7 +370,8 @@ class UserOut(UserBase):
     ui_settings: Optional[UISettings]
     notifications_settings: Optional[NotificationsSettings]
     public_key: Optional[str] = None  # إضافة حقل المفتاح العام
-
+    followers_count: int
+    is_verified: bool
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -410,6 +445,21 @@ class CommunityOut(CommunityBase):
     tags: List["Tag"]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FollowerOut(BaseModel):
+    id: int
+    username: str
+    follow_date: datetime
+    post_count: int
+    interaction_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FollowersListOut(BaseModel):
+    followers: List[FollowerOut]
+    total_count: int
 
 
 class CategoryBase(BaseModel):
@@ -516,6 +566,7 @@ class EncryptedSessionUpdate(BaseModel):
 # Post models
 class PostCreate(PostBase):
     community_id: Optional[int] = None
+    hashtags: List[str] = []
 
 
 class Post(PostBase):

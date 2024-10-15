@@ -10,7 +10,7 @@ from fastapi import (
     File,
 )
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, desc, asc
 from .. import models, schemas, utils, oauth2, crypto
 from ..database import get_db
 from ..notifications import send_email_notification
@@ -18,6 +18,8 @@ from typing import List, Optional
 from pydantic import HttpUrl
 import pyotp
 from datetime import timedelta
+from ..cache import cache
+
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -58,6 +60,88 @@ async def create_user(
     )
 
     return new_user
+
+
+@router.get("/users/{user_id}/followers", response_model=schemas.FollowersListOut)
+@cache(expire=300)
+async def get_user_followers(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    sort_by: schemas.SortOption = Query(schemas.SortOption.DATE),
+    order: str = Query("desc", enum=["asc", "desc"]),
+    skip: int = 0,
+    limit: int = 100,
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.followers_visibility == "private" and user.id != current_user.id:
+        raise HTTPException(status_code=403, detail="Followers list is private")
+
+    if user.followers_visibility == "custom":
+        if (
+            user.id != current_user.id
+            and current_user.id
+            not in user.followers_custom_visibility.get("allowed_users", [])
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to view this followers list",
+            )
+
+    query = (
+        db.query(models.Follow)
+        .join(models.User, models.User.id == models.Follow.follower_id)
+        .filter(models.Follow.followed_id == user_id)
+    )
+
+    if sort_by == schemas.SortOption.DATE:
+        order_column = models.Follow.created_at
+    elif sort_by == schemas.SortOption.USERNAME:
+        order_column = models.User.username
+    elif sort_by == schemas.SortOption.POST_COUNT:
+        order_column = models.User.post_count
+    elif sort_by == schemas.SortOption.INTERACTION_COUNT:
+        order_column = models.User.interaction_count
+
+    if order == "desc":
+        query = query.order_by(desc(order_column))
+    else:
+        query = query.order_by(asc(order_column))
+
+    total_count = query.count()
+    followers = query.offset(skip).limit(limit).all()
+
+    return {
+        "followers": [
+            schemas.FollowerOut(
+                id=follow.follower.id,
+                username=follow.follower.username,
+                follow_date=follow.created_at,
+                post_count=follow.follower.post_count,
+                interaction_count=follow.follower.interaction_count,
+            )
+            for follow in followers
+        ],
+        "total_count": total_count,
+    }
+
+
+@router.put(
+    "/users/me/followers-settings", response_model=schemas.UserFollowersSettings
+)
+async def update_followers_settings(
+    settings: schemas.UserFollowersSettings,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    current_user.followers_visibility = settings.followers_visibility
+    current_user.followers_custom_visibility = settings.followers_custom_visibility
+    current_user.followers_sort_preference = settings.followers_sort_preference
+    db.commit()
+    return settings
 
 
 @router.put("/public-key", response_model=schemas.UserOut)
@@ -470,28 +554,58 @@ def logout_all_devices(
     return {"message": "Logged out from all other devices"}
 
 
-@router.get("/users/similar-interests", response_model=List[schemas.UserOut])
-def get_users_with_similar_interests(
+@router.get("/suggested-follows", response_model=List[schemas.UserOut])
+def get_suggested_follows(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     limit: int = 10,
 ):
+    """
+    Get suggested users to follow based on shared interests and connections.
+    """
     if not current_user.interests:
-        raise HTTPException(status_code=400, detail="User has no interests set")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User has no interests set"
+        )
 
-    similar_users = (
-        db.query(models.User)
+    # Get users with similar interests
+    similar_interests = (
+        db.query(models.User.id)
         .filter(models.User.id != current_user.id)
         .filter(models.User.interests.overlap(current_user.interests))
+        .subquery()
+    )
+
+    # Get users who are followed by users that the current user follows
+    followed_by_current_user = (
+        db.query(models.Follow.followed_id)
+        .filter(models.Follow.follower_id == current_user.id)
+        .subquery()
+    )
+    followers_of_followed = (
+        db.query(models.Follow.follower_id)
+        .filter(models.Follow.followed_id.in_(followed_by_current_user))
+        .subquery()
+    )
+
+    suggested_users = (
+        db.query(models.User)
+        .outerjoin(similar_interests, models.User.id == similar_interests.c.id)
+        .outerjoin(
+            followers_of_followed, models.User.id == followers_of_followed.c.follower_id
+        )
+        .filter(models.User.id != current_user.id)
+        .filter(~models.User.id.in_(followed_by_current_user))
+        .group_by(models.User.id)
         .order_by(
-            func.array_length(
-                func.array_intersect(models.User.interests, current_user.interests), 1
-            ).desc()
+            func.count(similar_interests.c.id).desc(),
+            func.count(followers_of_followed.c.follower_id).desc(),
         )
         .limit(limit)
         .all()
     )
-    return similar_users
+
+    return suggested_users
 
 
 @router.get("/analytics", response_model=schemas.UserAnalytics)

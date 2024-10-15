@@ -145,6 +145,15 @@ def create_posts(
         is_safe_content=True,
         community_id=post.community_id,
     )
+
+    for hashtag_name in post.hashtags:
+        hashtag = (
+            db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
+        )
+        if not hashtag:
+            hashtag = models.Hashtag(name=hashtag_name)
+            db.add(hashtag)
+        new_post.hashtags.append(hashtag)
     db.add(new_post)
     db.commit()
     db.refresh(new_post)

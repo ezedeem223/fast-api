@@ -24,6 +24,7 @@ from .database import Base
 import enum
 from datetime import date
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Enum as SQLAlchemyEnum
 
 # Определение таблиц ассоциаций
 community_tags = Table(
@@ -42,7 +43,7 @@ sticker_category_association = Table(
 
 
 # Определение Enum классов
-class UserType(enum.Enum):
+class UserType(str, enum.Enum):
     PERSONAL = "personal"
     BUSINESS = "business"
 
@@ -103,10 +104,25 @@ class MessageType(str, enum.Enum):
     STICKER = "sticker"
 
 
-class ScreenShareStatus(enum.Enum):
+class ScreenShareStatus(str, enum.Enum):
     ACTIVE = "active"
     ENDED = "ended"
     FAILED = "failed"
+
+
+class Hashtag(Base):
+    __tablename__ = "hashtags"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+
+
+# إضافة جدول وسيط لربط المستخدمين بالهاشتاغات التي يتابعونها
+user_hashtag_follows = Table(
+    "user_hashtag_follows",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id")),
+    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+)
 
 
 # Определение моделей
@@ -115,7 +131,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, nullable=False)
     email = Column(String, nullable=False, unique=True)
-    password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=False)
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -124,13 +140,18 @@ class User(Base):
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
     is_2fa_enabled = Column(Boolean, default=False)
-    role = Column(Enum(UserRole), default=UserRole.USER)
+    role = Column(
+        SQLAlchemyEnum(UserRole, name="user_role_enum"), default=UserRole.USER
+    )
     profile_image = Column(String, nullable=True)
     bio = Column(Text, nullable=True)
     location = Column(String, nullable=True)
     website = Column(String, nullable=True)
     joined_at = Column(DateTime, server_default=func.now())
-    privacy_level = Column(Enum(PrivacyLevel), default=PrivacyLevel.PUBLIC)
+    privacy_level = Column(
+        SQLAlchemyEnum(PrivacyLevel, name="privacy_level_enum"),
+        default=PrivacyLevel.PUBLIC,
+    )
     custom_privacy = Column(JSON, default={})
     last_login = Column(DateTime(timezone=True), nullable=True)
     failed_login_attempts = Column(Integer, default=0)
@@ -139,7 +160,9 @@ class User(Base):
     interests = Column(ARRAY(String), nullable=True)
     ui_settings = Column(JSONB, default={})
     notifications_settings = Column(JSONB, default={})
-    user_type = Column(Enum(UserType), default=UserType.PERSONAL)
+    user_type = Column(
+        SQLAlchemyEnum(UserType, name="user_type_enum"), default=UserType.PERSONAL
+    )
     business_name = Column(String, nullable=True)
     business_registration_number = Column(String, nullable=True)
     bank_account_info = Column(String, nullable=True)
@@ -149,13 +172,101 @@ class User(Base):
     selfie_url = Column(String, nullable=True)
     hide_read_status = Column(Boolean, default=False)
     verification_status = Column(
-        Enum(VerificationStatus), default=VerificationStatus.PENDING
+        SQLAlchemyEnum(VerificationStatus, name="verification_status_enum"),
+        default=VerificationStatus.PENDING,
     )
     is_verified_business = Column(Boolean, default=False)
-    hashed_password = Column(String, nullable=False)
     public_key = Column(LargeBinary)
+    followers_visibility = Column(
+        SQLAlchemyEnum("public", "private", "custom", name="followers_visibility_enum"),
+        default="public",
+    )
+    followers_custom_visibility = Column(JSON, default={})
+    followers_sort_preference = Column(String, default="date")
+    post_count = Column(Integer, default=0)
+    interaction_count = Column(Integer, default=0)
 
-    # Relationships будут добавлены позже
+    posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
+    comments = relationship(
+        "Comment", back_populates="owner", cascade="all, delete-orphan"
+    )
+    reports = relationship(
+        "Report", back_populates="reporter", cascade="all, delete-orphan"
+    )
+    followers = relationship(
+        "Follow",
+        back_populates="followed",
+        foreign_keys="[Follow.followed_id]",
+        cascade="all, delete-orphan",
+    )
+    following = relationship(
+        "Follow",
+        back_populates="follower",
+        foreign_keys="[Follow.follower_id]",
+        cascade="all, delete-orphan",
+    )
+    sent_messages = relationship(
+        "Message",
+        foreign_keys="[Message.sender_id]",
+        back_populates="sender",
+        cascade="all, delete-orphan",
+    )
+    received_messages = relationship(
+        "Message",
+        foreign_keys="[Message.receiver_id]",
+        back_populates="receiver",
+        cascade="all, delete-orphan",
+    )
+    owned_communities = relationship(
+        "Community", back_populates="owner", cascade="all, delete-orphan"
+    )
+    community_memberships = relationship(
+        "CommunityMember", back_populates="user", cascade="all, delete-orphan"
+    )
+    blocks = relationship(
+        "Block",
+        foreign_keys="[Block.blocker_id]",
+        back_populates="blocker",
+        cascade="all, delete-orphan",
+    )
+    blocked_by = relationship(
+        "Block",
+        foreign_keys="[Block.blocked_id]",
+        back_populates="blocked",
+        cascade="all, delete-orphan",
+    )
+    reels = relationship("Reel", back_populates="owner", cascade="all, delete-orphan")
+    articles = relationship(
+        "Article", back_populates="author", cascade="all, delete-orphan"
+    )
+    sent_invitations = relationship(
+        "CommunityInvitation",
+        foreign_keys="[CommunityInvitation.inviter_id]",
+        back_populates="inviter",
+    )
+    received_invitations = relationship(
+        "CommunityInvitation",
+        foreign_keys="[CommunityInvitation.invitee_id]",
+        back_populates="invitee",
+    )
+    login_sessions = relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    statistics = relationship("UserStatistics", back_populates="user")
+    support_tickets = relationship("SupportTicket", back_populates="user")
+    sticker_packs = relationship("StickerPack", back_populates="creator")
+    outgoing_calls = relationship(
+        "Call", foreign_keys="[Call.caller_id]", back_populates="caller"
+    )
+    incoming_calls = relationship(
+        "Call", foreign_keys="[Call.receiver_id]", back_populates="receiver"
+    )
+    screen_shares = relationship("ScreenShareSession", back_populates="sharer")
+    encrypted_sessions = relationship("EncryptedSession", back_populates="user")
+    votes = relationship("Vote", back_populates="user")
+    followed_hashtags = relationship(
+        "Hashtag", secondary=user_hashtag_follows, back_populates="followers"
+    )
 
 
 class Post(Base):
@@ -177,9 +288,24 @@ class Post(Base):
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
 
-    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
+    owner = relationship("User", back_populates="posts")
+    comments = relationship(
+        "Comment", back_populates="post", cascade="all, delete-orphan"
+    )
+    community = relationship("Community", back_populates="posts")
+    reports = relationship(
+        "Report", back_populates="post", cascade="all, delete-orphan"
+    )
+    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan")
 
-    # Relationships будут добавлены позже
+    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
+    hashtags = relationship("Hashtag", secondary="post_hashtags")
+    post_hashtags = Table(
+        "post_hashtags",
+        Base.metadata,
+        Column("post_id", Integer, ForeignKey("posts.id")),
+        Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+    )
 
 
 class Comment(Base):
@@ -197,7 +323,11 @@ class Comment(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Relationships будут добавлены позже
+    owner = relationship("User", back_populates="comments")
+    post = relationship("Post", back_populates="comments")
+    reports = relationship(
+        "Report", back_populates="comment", cascade="all, delete-orphan"
+    )
 
 
 class BusinessTransaction(Base):
@@ -211,7 +341,8 @@ class BusinessTransaction(Base):
     status = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships будут добавлены позже
+    business_user = relationship("User", foreign_keys=[business_user_id])
+    client_user = relationship("User", foreign_keys=[client_user_id])
 
 
 class UserSession(Base):
@@ -227,7 +358,7 @@ class UserSession(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # Relationships будут добавлены позже
+    user = relationship("User", back_populates="login_sessions")
 
 
 class Vote(Base):
@@ -238,6 +369,9 @@ class Vote(Base):
     post_id = Column(
         Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
     )
+
+    user = relationship("User", back_populates="votes")
+    post = relationship("Post", back_populates="votes")
 
 
 class Report(Base):
@@ -255,11 +389,19 @@ class Report(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
-    status = Column(Enum(ReportStatus), default=ReportStatus.PENDING)
+    status = Column(
+        SQLAlchemyEnum(ReportStatus, name="report_status_enum"),
+        default=ReportStatus.PENDING,
+    )
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(String, nullable=True)
 
-    # Relationships будут добавлены позже
+    reporter = relationship(
+        "User", foreign_keys=[reporter_id], back_populates="reports"
+    )
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    post = relationship("Post", back_populates="reports")
+    comment = relationship("Comment", back_populates="reports")
 
 
 class Follow(Base):
@@ -274,7 +416,12 @@ class Follow(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Relationships будут добавлены позже
+    follower = relationship(
+        "User", back_populates="following", foreign_keys=[follower_id]
+    )
+    followed = relationship(
+        "User", back_populates="followers", foreign_keys=[followed_id]
+    )
 
 
 class Message(Base):
@@ -294,7 +441,11 @@ class Message(Base):
     location_name = Column(String, nullable=True)
     is_edited = Column(Boolean, default=False)
     is_read = Column(Boolean, default=False)
-    message_type = Column(Enum(MessageType), nullable=False, default=MessageType.TEXT)
+    message_type = Column(
+        SQLAlchemyEnum(MessageType, name="message_type_enum"),
+        nullable=False,
+        default=MessageType.TEXT,
+    )
     file_url = Column(String, nullable=True)
     conversation_id = Column(String, index=True)
     read_at = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -303,17 +454,32 @@ class Message(Base):
     )
     link_preview = Column(JSON, nullable=True)
 
-    __table_args__ = (
-        Index(
-            "idx_message_content",
-            "content",
-            postgresql_ops={"content": "gin_trgm_ops"},
-            postgresql_using="gin",
-        ),
-        Index("idx_message_timestamp", "timestamp"),
+    sender = relationship(
+        "User", foreign_keys=[sender_id], back_populates="sent_messages"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="received_messages"
+    )
+    replied_to = relationship(
+        "Message", remote_side=[id], foreign_keys=[replied_to_id], backref="replies"
+    )
+    quoted_message = relationship(
+        "Message", remote_side=[id], foreign_keys=[quoted_message_id], backref="quotes"
+    )
+    attachments = relationship(
+        "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
     )
 
-    # Relationships будут добавлены позже
+
+__table_args__ = (
+    Index(
+        "idx_message_content",
+        "content",
+        postgresql_ops={"content": "gin_trgm_ops"},
+        postgresql_using="gin",
+    ),
+    Index("idx_message_timestamp", "timestamp"),
+)
 
 
 class EncryptedSession(Base):
@@ -329,11 +495,10 @@ class EncryptedSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # user = relationship("User", foreign_keys=[user_id], back_populates="encrypted_sessions")
-    # other_user = relationship("User", foreign_keys=[other_user_id])
-    # encrypted_sessions = relationship(
-    #     "EncryptedSession", foreign_keys=[EncryptedSession.user_id], back_populates="user"
-    # )
+    user = relationship(
+        "User", back_populates="encrypted_sessions", foreign_keys=[user_id]
+    )
+    other_user = relationship("User", foreign_keys=[other_user_id])
 
 
 class Community(Base):
@@ -348,7 +513,28 @@ class Community(Base):
     is_active = Column(Boolean, default=True)
     category_id = Column(Integer, ForeignKey("categories.id"))
 
-    # Relationships будут добавлены позже
+    owner = relationship("User", back_populates="owned_communities")
+    members = relationship("CommunityMember", back_populates="community")
+    posts = relationship(
+        "Post", back_populates="community", cascade="all, delete-orphan"
+    )
+    reels = relationship(
+        "Reel", back_populates="community", cascade="all, delete-orphan"
+    )
+    articles = relationship(
+        "Article", back_populates="community", cascade="all, delete-orphan"
+    )
+    invitations = relationship(
+        "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
+    )
+    rules = relationship(
+        "CommunityRule", back_populates="community", cascade="all, delete-orphan"
+    )
+    statistics = relationship(
+        "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
+    )
+    category = relationship("Category", back_populates="communities")
+    tags = relationship("Tag", secondary=community_tags, back_populates="communities")
 
     @property
     def member_count(self):
@@ -362,7 +548,7 @@ class Category(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String)
 
-    # Relationships будут добавлены позже
+    communities = relationship("Community", back_populates="category")
 
 
 class Tag(Base):
@@ -371,7 +557,9 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
 
-    # Relationships будут добавлены позже
+    communities = relationship(
+        "Community", secondary=community_tags, back_populates="tags"
+    )
 
 
 class CommunityMember(Base):
@@ -384,13 +572,18 @@ class CommunityMember(Base):
     user_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    role = Column(Enum(CommunityRole), nullable=False, default=CommunityRole.MEMBER)
+    role = Column(
+        SQLAlchemyEnum(CommunityRole, name="community_role_enum"),
+        nullable=False,
+        default=CommunityRole.MEMBER,
+    )
     join_date = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     activity_score = Column(Integer, default=0)
 
-    # Relationships будут добавлены позже
+    user = relationship("User", back_populates="community_memberships")
+    community = relationship("Community", back_populates="members")
 
 
 class CommunityStatistics(Base):
@@ -408,11 +601,11 @@ class CommunityStatistics(Base):
     total_reactions = Column(Integer, default=0)
     average_posts_per_user = Column(Float, default=0.0)
 
+    community = relationship("Community", back_populates="statistics")
+
     __table_args__ = (
         UniqueConstraint("community_id", "date", name="uix_community_date"),
     )
-
-    # Relationships будут добавлены позже
 
 
 class CommunityRule(Base):
@@ -433,7 +626,7 @@ class CommunityRule(Base):
         onupdate=text("now()"),
     )
 
-    # Relationships будут добавлены позже
+    community = relationship("Community", back_populates="rules")
 
 
 class CommunityInvitation(Base):
@@ -446,7 +639,13 @@ class CommunityInvitation(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships будут добавлены позже
+    community = relationship("Community", back_populates="invitations")
+    inviter = relationship(
+        "User", foreign_keys=[inviter_id], back_populates="sent_invitations"
+    )
+    invitee = relationship(
+        "User", foreign_keys=[invitee_id], back_populates="received_invitations"
+    )
 
 
 class Reel(Base):
@@ -466,7 +665,8 @@ class Reel(Base):
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
     )
 
-    # Relationships будут добавлены позже
+    owner = relationship("User", back_populates="reels")
+    community = relationship("Community", back_populates="reels")
 
 
 class Article(Base):
@@ -485,6 +685,9 @@ class Article(Base):
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
     )
 
+    author = relationship("User", back_populates="articles")
+    community = relationship("Community", back_populates="articles")
+
 
 class Block(Base):
     __tablename__ = "blocks"
@@ -498,7 +701,10 @@ class Block(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
 
-    # Relationships будут добавлены позже
+    blocker = relationship("User", foreign_keys=[blocker_id], back_populates="blocks")
+    blocked = relationship(
+        "User", foreign_keys=[blocked_id], back_populates="blocked_by"
+    )
 
 
 class UserStatistics(Base):
@@ -512,7 +718,7 @@ class UserStatistics(Base):
     like_count = Column(Integer, default=0)
     view_count = Column(Integer, default=0)
 
-    # Relationships будут добавлены позже
+    user = relationship("User", back_populates="statistics")
 
 
 class SupportTicket(Base):
@@ -522,11 +728,17 @@ class SupportTicket(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     subject = Column(String, nullable=False)
     description = Column(Text, nullable=False)
-    status = Column(Enum(TicketStatus), default=TicketStatus.OPEN)
+    status = Column(
+        SQLAlchemyEnum(TicketStatus, name="ticket_status_enum"),
+        default=TicketStatus.OPEN,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationships будут добавлены позже
+    user = relationship("User", back_populates="support_tickets")
+    responses = relationship(
+        "TicketResponse", back_populates="ticket", cascade="all, delete-orphan"
+    )
 
 
 class TicketResponse(Base):
@@ -538,7 +750,8 @@ class TicketResponse(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships будут добавлены позже
+    ticket = relationship("SupportTicket", back_populates="responses")
+    user = relationship("User")
 
 
 class StickerPack(Base):
@@ -549,7 +762,8 @@ class StickerPack(Base):
     creator_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships будут добавлены позже
+    creator = relationship("User", back_populates="sticker_packs")
+    stickers = relationship("Sticker", back_populates="pack")
 
 
 class Sticker(Base):
@@ -562,7 +776,11 @@ class Sticker(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     approved = Column(Boolean, default=False)
 
-    # Relationships будут добавлены позже
+    pack = relationship("StickerPack", back_populates="stickers")
+    categories = relationship(
+        "StickerCategory", secondary=sticker_category_association, backref="stickers"
+    )
+    reports = relationship("StickerReport", back_populates="sticker")
 
 
 class StickerCategory(Base):
@@ -581,7 +799,8 @@ class StickerReport(Base):
     reason = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationships будут добавлены позже
+    sticker = relationship("Sticker", back_populates="reports")
+    reporter = relationship("User")
 
 
 class Call(Base):
@@ -590,12 +809,20 @@ class Call(Base):
     id = Column(Integer, primary_key=True, index=True)
     caller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    call_type = Column(Enum(CallType))
-    status = Column(Enum(CallStatus), default=CallStatus.PENDING)
+    call_type = Column(SQLAlchemyEnum(CallType, name="call_type_enum"))
+    status = Column(
+        SQLAlchemyEnum(CallStatus, name="call_status_enum"), default=CallStatus.PENDING
+    )
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
 
-    # Relationships будут добавлены позже
+    caller = relationship(
+        "User", foreign_keys=[caller_id], back_populates="outgoing_calls"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="incoming_calls"
+    )
+    screen_share_sessions = relationship("ScreenShareSession", back_populates="call")
 
 
 class ScreenShareSession(Base):
@@ -606,8 +833,11 @@ class ScreenShareSession(Base):
     sharer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
-    status = Column(Enum(ScreenShareStatus), default=ScreenShareStatus.ACTIVE)
+    status = Column(SQLAlchemyEnum(ScreenShareStatus, name="screen_share_status_enum"), default=ScreenShareStatus.ACTIVE)
     error_message = Column(String, nullable=True)
+
+    call = relationship("Call", back_populates="screen_share_sessions")
+    sharer = relationship("User", back_populates="screen_shares")
 
 
 class MessageAttachment(Base):
@@ -628,7 +858,7 @@ class ConversationStatistics(Base):
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
-    total_time = Column(Integer, default=0)  # في الثواني
+    total_time = Column(Integer, default=0)  # в секундах
     last_message_at = Column(DateTime(timezone=True), server_default=func.now())
     user1_id = Column(Integer, ForeignKey("users.id"))
     user2_id = Column(Integer, ForeignKey("users.id"))
@@ -641,245 +871,3 @@ class ConversationStatistics(Base):
 
     user1 = relationship("User", foreign_keys=[user1_id])
     user2 = relationship("User", foreign_keys=[user2_id])
-
-
-# Теперь добавим отношения
-User.posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
-User.comments = relationship(
-    "Comment", back_populates="owner", cascade="all, delete-orphan"
-)
-User.reports = relationship(
-    "Report", back_populates="reporter", cascade="all, delete-orphan"
-)
-User.follows = relationship(
-    "Follow",
-    foreign_keys=[Follow.follower_id],
-    back_populates="follower",
-    cascade="all, delete-orphan",
-)
-User.followed_by = relationship(
-    "Follow",
-    foreign_keys=[Follow.followed_id],
-    back_populates="followed",
-    cascade="all, delete-orphan",
-)
-User.sent_messages = relationship(
-    "Message",
-    foreign_keys=[Message.sender_id],
-    back_populates="sender",
-    cascade="all, delete-orphan",
-)
-User.received_messages = relationship(
-    "Message",
-    foreign_keys=[Message.receiver_id],
-    back_populates="receiver",
-    cascade="all, delete-orphan",
-)
-User.owned_communities = relationship(
-    "Community", back_populates="owner", cascade="all, delete-orphan"
-)
-User.community_memberships = relationship(
-    "CommunityMember", back_populates="user", cascade="all, delete-orphan"
-)
-User.blocks = relationship(
-    "Block",
-    foreign_keys=[Block.blocker_id],
-    back_populates="blocker",
-    cascade="all, delete-orphan",
-)
-User.blocked_by = relationship(
-    "Block",
-    foreign_keys=[Block.blocked_id],
-    back_populates="blocked",
-    cascade="all, delete-orphan",
-)
-User.reels = relationship("Reel", back_populates="owner", cascade="all, delete-orphan")
-User.articles = relationship(
-    "Article", back_populates="author", cascade="all, delete-orphan"
-)
-User.sent_invitations = relationship(
-    "CommunityInvitation",
-    foreign_keys=[CommunityInvitation.inviter_id],
-    back_populates="inviter",
-)
-User.received_invitations = relationship(
-    "CommunityInvitation",
-    foreign_keys=[CommunityInvitation.invitee_id],
-    back_populates="invitee",
-)
-User.login_sessions = relationship(
-    "UserSession", back_populates="user", cascade="all, delete-orphan"
-)
-User.statistics = relationship("UserStatistics", back_populates="user")
-User.support_tickets = relationship("SupportTicket", back_populates="user")
-User.sticker_packs = relationship("StickerPack", back_populates="creator")
-User.outgoing_calls = relationship(
-    "Call", foreign_keys=[Call.caller_id], back_populates="caller"
-)
-User.incoming_calls = relationship(
-    "Call", foreign_keys=[Call.receiver_id], back_populates="receiver"
-)
-User.screen_shares = relationship("ScreenShareSession", back_populates="sharer")
-
-
-Post.owner = relationship("User", back_populates="posts")
-Post.comments = relationship(
-    "Comment", back_populates="post", cascade="all, delete-orphan"
-)
-Post.community = relationship("Community", back_populates="posts")
-Post.reports = relationship(
-    "Report", back_populates="post", cascade="all, delete-orphan"
-)
-
-Comment.owner = relationship("User", back_populates="comments")
-Comment.post = relationship("Post", back_populates="comments")
-Comment.reports = relationship(
-    "Report", back_populates="comment", cascade="all, delete-orphan"
-)
-
-BusinessTransaction.business_user = relationship(
-    "User", foreign_keys=[BusinessTransaction.business_user_id]
-)
-BusinessTransaction.client_user = relationship(
-    "User", foreign_keys=[BusinessTransaction.client_user_id]
-)
-
-UserSession.user = relationship("User", back_populates="login_sessions")
-
-Report.reporter = relationship(
-    "User", foreign_keys=[Report.reporter_id], back_populates="reports"
-)
-Report.reviewer = relationship("User", foreign_keys=[Report.reviewed_by])
-Report.post = relationship("Post", back_populates="reports")
-Report.comment = relationship("Comment", back_populates="reports")
-
-Follow.follower = relationship(
-    "User", foreign_keys=[Follow.follower_id], back_populates="follows"
-)
-Follow.followed = relationship(
-    "User", foreign_keys=[Follow.followed_id], back_populates="followed_by"
-)
-
-Message.sender = relationship(
-    "User", foreign_keys=[Message.sender_id], back_populates="sent_messages"
-)
-Message.receiver = relationship(
-    "User", foreign_keys=[Message.receiver_id], back_populates="received_messages"
-)
-Message.replied_to = relationship(
-    "Message",
-    remote_side=[Message.id],
-    foreign_keys=[Message.replied_to_id],
-    backref="replies",
-)
-Message.quoted_message = relationship(
-    "Message",
-    remote_side=[Message.id],
-    foreign_keys=[Message.quoted_message_id],
-    backref="quotes",
-)
-attachments = relationship(
-    "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
-)
-Community.owner = relationship("User", back_populates="owned_communities")
-Community.members = relationship("CommunityMember", back_populates="community")
-Community.posts = relationship(
-    "Post", back_populates="community", cascade="all, delete-orphan"
-)
-Community.reels = relationship(
-    "Reel", back_populates="community", cascade="all, delete-orphan"
-)
-Community.articles = relationship(
-    "Article", back_populates="community", cascade="all, delete-orphan"
-)
-Community.invitations = relationship(
-    "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
-)
-Community.rules = relationship(
-    "CommunityRule", back_populates="community", cascade="all, delete-orphan"
-)
-Community.statistics = relationship(
-    "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
-)
-Community.category = relationship("Category", back_populates="communities")
-Community.tags = relationship(
-    "Tag", secondary=community_tags, back_populates="communities"
-)
-
-Category.communities = relationship("Community", back_populates="category")
-
-Tag.communities = relationship(
-    "Community", secondary=community_tags, back_populates="tags"
-)
-
-CommunityMember.user = relationship("User", back_populates="community_memberships")
-CommunityMember.community = relationship("Community", back_populates="members")
-
-CommunityStatistics.community = relationship("Community", back_populates="statistics")
-
-CommunityRule.community = relationship("Community", back_populates="rules")
-
-CommunityInvitation.community = relationship("Community", back_populates="invitations")
-CommunityInvitation.inviter = relationship(
-    "User",
-    foreign_keys=[CommunityInvitation.inviter_id],
-    back_populates="sent_invitations",
-)
-CommunityInvitation.invitee = relationship(
-    "User",
-    foreign_keys=[CommunityInvitation.invitee_id],
-    back_populates="received_invitations",
-)
-
-Reel.owner = relationship("User", back_populates="reels")
-Reel.community = relationship("Community", back_populates="reels")
-
-Article.author = relationship("User", back_populates="articles")
-Article.community = relationship("Community", back_populates="articles")
-
-Block.blocker = relationship(
-    "User", foreign_keys=[Block.blocker_id], back_populates="blocks"
-)
-Block.blocked = relationship(
-    "User", foreign_keys=[Block.blocked_id], back_populates="blocked_by"
-)
-
-UserStatistics.user = relationship("User", back_populates="statistics")
-
-SupportTicket.user = relationship("User", back_populates="support_tickets")
-SupportTicket.responses = relationship(
-    "TicketResponse", back_populates="ticket", cascade="all, delete-orphan"
-)
-
-TicketResponse.ticket = relationship("SupportTicket", back_populates="responses")
-TicketResponse.user = relationship("User")
-
-StickerPack.creator = relationship("User", back_populates="sticker_packs")
-StickerPack.stickers = relationship("Sticker", back_populates="pack")
-
-Sticker.pack = relationship("StickerPack", back_populates="stickers")
-Sticker.categories = relationship(
-    "StickerCategory", secondary=sticker_category_association, backref="stickers"
-)
-Sticker.reports = relationship("StickerReport", back_populates="sticker")
-
-StickerReport.sticker = relationship("Sticker", back_populates="reports")
-StickerReport.reporter = relationship("User")
-sharer = relationship("User", back_populates="screen_shares")
-
-
-Call.caller = relationship(
-    "User", foreign_keys=[Call.caller_id], back_populates="outgoing_calls"
-)
-Call.receiver = relationship(
-    "User", foreign_keys=[Call.receiver_id], back_populates="incoming_calls"
-)
-call = relationship("Call", back_populates="screen_share_sessions")
-Call.screen_share_sessions = relationship("ScreenShareSession", back_populates="call")
-
-
-# user = relationship("User", foreign_keys=[user_id], back_populates="encrypted_sessions")
-# other_user = relationship("User", foreign_keys=[other_user_id])
-# encrypted_sessions = relationship(
-#     "EncryptedSession", foreign_keys=[EncryptedSession.user_id], back_populates="user"
-# )
