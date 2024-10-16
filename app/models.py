@@ -353,6 +353,59 @@ class User(Base):
     )
 
 
+class IPBan(Base):
+    __tablename__ = "ip_bans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip_address = Column(String, unique=True, index=True, nullable=False)
+    reason = Column(String)
+    banned_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"))
+
+    created_by_user = relationship("User", back_populates="ip_bans_created")
+
+
+User.ip_bans_created = relationship("IPBan", back_populates="created_by_user")
+
+
+class BannedWord(Base):
+    __tablename__ = "banned_words"
+
+    id = Column(Integer, primary_key=True, index=True)
+    word = Column(String, unique=True, nullable=False)
+    severity = Column(Enum("warn", "ban", name="word_severity"), default="warn")
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    created_by_user = relationship("User", back_populates="banned_words_created")
+
+
+User.banned_words_created = relationship("BannedWord", back_populates="created_by_user")
+
+
+class BanStatistics(Base):
+    __tablename__ = "ban_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, nullable=False)
+    total_bans = Column(Integer, default=0)
+    ip_bans = Column(Integer, default=0)
+    word_bans = Column(Integer, default=0)
+    user_bans = Column(Integer, default=0)
+    most_common_reason = Column(String)
+    effectiveness_score = Column(Float)
+
+
+class BanReason(Base):
+    __tablename__ = "ban_reasons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reason = Column(String, nullable=False)
+    count = Column(Integer, default=1)
+    last_used = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Post(Base):
     __tablename__ = "posts"
 

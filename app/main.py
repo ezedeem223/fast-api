@@ -39,12 +39,15 @@ from .routers import (
     hashtag,
     reaction,
     statistics,
+    ip_ban,
+    banned_words,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.utils import train_content_classifier
 from .celery_worker import celery_app
+from .ip_utils import get_client_ip, is_ip_banned
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -142,6 +145,7 @@ app.include_router(session.router)
 app.include_router(hashtag.router)
 app.include_router(reaction.router)
 app.include_router(statistics.router)
+app.include_router(ip_ban.router)
 
 
 manager = ConnectionManager()
@@ -172,6 +176,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     except Exception as e:
         print(f"An error occurred: {e}")
         await manager.disconnect(websocket)
+
+
+@app.middleware("http")
+async def check_ip_ban(request: Request, call_next):
+    db = next(get_db())
+    client_ip = get_client_ip(request)
+    if is_ip_banned(db, client_ip):
+        return JSONResponse(
+            status_code=403, content={"detail": "Your IP address is banned"}
+        )
+    response = await call_next(request)
+    return response
 
 
 @app.get("/protected-resource")

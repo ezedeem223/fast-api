@@ -4,6 +4,9 @@ from sqlalchemy import pool
 from alembic import context
 from app.models import Base
 from app.config import settings
+from app.models import BannedWord
+
+target_metadata = [Base.metadata]
 
 config = context.config
 config.set_main_option(

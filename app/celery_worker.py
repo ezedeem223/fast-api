@@ -123,3 +123,42 @@ def some_other_task(data):
     """
     # قم بتنفيذ المهام هنا
     pass
+
+
+@celery_app.task
+def calculate_ban_effectiveness():
+    db = SessionLocal()
+    try:
+        # هذا مجرد مثال بسيط. قد تحتاج إلى تعديله بناءً على معايير محددة لتطبيقك
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        yesterday_stats = (
+            db.query(models.BanStatistics)
+            .filter(models.BanStatistics.date == yesterday)
+            .first()
+        )
+        if yesterday_stats:
+            total_content = db.query(
+                func.count(models.Post.id) + func.count(models.Comment.id)
+            ).scalar()
+            reported_content = (
+                db.query(func.count(models.Report.id))
+                .filter(models.Report.created_at >= yesterday)
+                .scalar()
+            )
+
+            effectiveness = (
+                1 - (reported_content / total_content) if total_content > 0 else 0
+            )
+            yesterday_stats.effectiveness_score = effectiveness
+            db.commit()
+    finally:
+        db.close()
+
+
+# إضافة المهمة إلى جدول celery
+celery_app.conf.beat_schedule["calculate-ban-effectiveness"] = {
+    "task": "app.celery_worker.calculate_ban_effectiveness",
+    "schedule": crontab(hour=0, minute=5),  # تشغيل في الساعة 00:05 كل يوم
+}

@@ -113,6 +113,33 @@ class AppealStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class WordSeverity(str, Enum):
+    warn = "warn"
+    ban = "ban"
+
+
+class BannedWordBase(BaseModel):
+    word: str
+    severity: WordSeverity = WordSeverity.warn
+
+
+class BannedWordCreate(BannedWordBase):
+    pass
+
+
+class BannedWordUpdate(BaseModel):
+    word: Optional[str] = None
+    severity: Optional[WordSeverity] = None
+
+
+class BannedWordOut(BannedWordBase):
+    id: int
+    created_by: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BlockAppealCreate(BaseModel):
     block_id: int
     reason: str
@@ -133,6 +160,24 @@ class BlockAppealOut(BaseModel):
 
 class BlockAppealReview(BaseModel):
     status: AppealStatus
+
+
+class IPBanBase(BaseModel):
+    ip_address: str
+    reason: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+
+class IPBanCreate(IPBanBase):
+    pass
+
+
+class IPBanOut(IPBanBase):
+    id: int
+    banned_at: datetime
+    created_by: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CallType(str, Enum):
@@ -243,6 +288,33 @@ class BlockLogOut(BaseModel):
     ended_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BanStatisticsOverview(BaseModel):
+    total_bans: int
+    ip_bans: int
+    word_bans: int
+    user_bans: int
+    average_effectiveness: float
+
+
+class BanReasonOut(BaseModel):
+    reason: str
+    count: int
+    last_used: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EffectivenessTrend(BaseModel):
+    date: date
+    effectiveness: float
+
+
+class BanTypeDistribution(BaseModel):
+    ip_bans: int
+    word_bans: int
+    user_bans: int
 
 
 class BlockedUserOut(BaseModel):

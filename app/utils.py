@@ -4,7 +4,7 @@ import qrcode
 import base64
 from io import BytesIO
 import os
-from fastapi import UploadFile
+from fastapi import UploadFile, Request
 import aiofiles
 from better_profanity import profanity
 import validators
@@ -16,6 +16,8 @@ import joblib
 import requests
 from urllib.parse import urlparse
 from textblob import TextBlob
+from sqlalchemy.orm import Session
+from . import models
 
 
 # إعداد التشفير باستخدام bcrypt
@@ -169,3 +171,84 @@ def is_valid_video_url(url: str) -> bool:
 def analyze_sentiment(text):
     analysis = TextBlob(text)
     return analysis.sentiment.polarity
+
+
+def get_client_ip(request: Request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host
+
+
+def is_ip_banned(db: Session, ip_address: str):
+    ban = db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
+    if ban:
+        if ban.expires_at and ban.expires_at < datetime.now():
+            db.delete(ban)
+            db.commit()
+            return False
+        return True
+    return False
+
+
+def detect_ip_evasion(db: Session, user_id: int, current_ip: str):
+    user_ips = (
+        db.query(models.UserSession.ip_address)
+        .filter(models.UserSession.user_id == user_id)
+        .distinct()
+        .all()
+    )
+    user_ips = [ip[0] for ip in user_ips]
+
+    for ip in user_ips:
+        if (
+            ip != current_ip
+            and ipaddress.ip_address(ip).is_private
+            != ipaddress.ip_address(current_ip).is_private
+        ):
+            return True
+    return False
+
+
+def update_banned_words_cache(db: Session):
+    banned_words = db.query(models.BannedWord).all()
+    # يمكنك تخزين هذه القائمة في ذاكرة التخزين المؤقت أو قاعدة بيانات في الذاكرة للوصول السريع
+    # مثال باستخدام متغير عام (ليس الحل الأمثل للإنتاج):
+    global BANNED_WORDS_CACHE
+    BANNED_WORDS_CACHE = {word.word: word.severity for word in banned_words}
+
+
+def update_ban_statistics(
+    db: Session, ban_type: str, reason: str, effectiveness: float
+):
+    today = date.today()
+
+    stats = (
+        db.query(models.BanStatistics)
+        .filter(models.BanStatistics.date == today)
+        .first()
+    )
+    if not stats:
+        stats = models.BanStatistics(date=today)
+        db.add(stats)
+
+    stats.total_bans += 1
+    setattr(stats, f"{ban_type}_bans", getattr(stats, f"{ban_type}_bans") + 1)
+
+    # Обновление наиболее распространенной причины бана
+    ban_reason = (
+        db.query(models.BanReason).filter(models.BanReason.reason == reason).first()
+    )
+    if ban_reason:
+        ban_reason.count += 1
+        ban_reason.last_used = datetime.now()
+    else:
+        new_reason = models.BanReason(reason=reason)
+        db.add(new_reason)
+
+    # Обновление эффективности бана
+    stats.effectiveness_score = (
+        stats.effectiveness_score * (stats.total_bans - 1) + effectiveness
+    ) / stats.total_bans
+
+    db.commit()

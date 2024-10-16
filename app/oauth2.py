@@ -2,11 +2,12 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from . import schemas, database, models
 from sqlalchemy.orm import Session
-from fastapi import Depends, status, HTTPException
+from fastapi import Depends, status, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
 from typing import Optional
+from .ip_utils import get_client_ip, is_ip_banned, detect_ip_evasion
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,13 +89,19 @@ def verify_access_token(token: str, credentials_exception):
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(database.get_db),
+    request: Request = None,
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    client_ip = get_client_ip(request)
+    if is_ip_banned(db, client_ip):
+        raise HTTPException(status_code=403, detail="Your IP address is banned")
 
     try:
         payload = jwt.decode(
@@ -112,6 +119,14 @@ def get_current_user(
         user = db.query(models.User).filter(models.User.id == token_data.id).first()
         if user is None:
             raise credentials_exception
+
+        if detect_ip_evasion(db, user.id, client_ip):
+            logger.warning(f"Possible IP evasion detected for user {user.id}")
+            # Здесь вы можете добавить дополнительную логику, например:
+            # - Отправить уведомление администратору
+            # - Заблокировать пользователя временно
+            # - Требовать дополнительную аутентификацию
+
         return user
     except Exception as e:
         logger.error(f"Database Error in get_current_user: {str(e)}")

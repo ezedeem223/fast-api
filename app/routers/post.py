@@ -22,6 +22,7 @@ from pathlib import Path
 import requests
 from ..utils import check_content_against_rules
 from sqlalchemy.dialects.postgresql import JSONB
+from ..content_filter import check_content, filter_content
 
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -145,6 +146,23 @@ def create_posts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    warnings, bans = check_content(db, post.content)
+
+    if bans:
+        raise HTTPException(
+            status_code=400, detail=f"Content contains banned words: {', '.join(bans)}"
+        )
+
+    if warnings:
+        # قد ترغب في تسجيل التحذيرات أو إرسال إشعار للمشرفين
+        logger.warning(f"Content contains warned words: {', '.join(warnings)}")
+
+    filtered_content = filter_content(db, post.content)
+    new_post = models.Post(
+        owner_id=current_user.id,
+        **post.dict(exclude={"content"}),
+        content=filtered_content,
+    )
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
