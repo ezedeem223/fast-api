@@ -461,3 +461,39 @@ def set_best_answer(
     post.has_best_answer = True
     db.commit()
     return comment
+
+
+@router.put("/{comment_id}/pin", response_model=schemas.CommentOut)
+def pin_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    if post.owner_id != current_user.id and not current_user.is_moderator:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to pin this comment"
+        )
+
+    if comment.is_pinned:
+        pinned_comments_count = (
+            db.query(models.Comment)
+            .filter(models.Comment.post_id == post.id, models.Comment.is_pinned == True)
+            .count()
+        )
+
+        if pinned_comments_count >= post.max_pinned_comments:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum number of pinned comments ({post.max_pinned_comments}) reached for this post",
+            )
+
+    comment.is_pinned = not comment.is_pinned
+    comment.pinned_at = datetime.now(timezone.utc) if comment.is_pinned else None
+    db.commit()
+    db.refresh(comment)
+    return comment

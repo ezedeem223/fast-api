@@ -44,6 +44,7 @@ from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.utils import train_content_classifier
+from .celery_worker import celery_app
 
 logger = logging.getLogger(__name__)
 train_content_classifier()

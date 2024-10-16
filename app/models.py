@@ -119,6 +119,12 @@ class ReactionType(enum.Enum):
     ANGRY = "angry"
 
 
+class BlockDuration(enum.Enum):
+    HOURS = "hours"
+    DAYS = "days"
+    WEEKS = "weeks"
+
+
 class Hashtag(Base):
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
@@ -329,6 +335,7 @@ class Post(Base):
     is_short_video = Column(Boolean, default=False)
     has_best_answer = Column(Boolean, default=False)
     comment_count = Column(Integer, default=0)
+    max_pinned_comments = Column(Integer, default=3)
 
     owner = relationship("User", back_populates="posts")
     comments = relationship(
@@ -389,6 +396,8 @@ class Comment(Base):
     sentiment_score = Column(Float, nullable=True)
 
     sticker_id = Column(Integer, ForeignKey("stickers.id"), nullable=True)
+    is_pinned = Column(Boolean, default=False)
+    pinned_at = Column(DateTime(timezone=True), nullable=True)
     sticker = relationship("Sticker", back_populates="comments")
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
@@ -796,8 +805,11 @@ class Block(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    duration = Column(Integer, nullable=True)
+    duration_unit = Column(Enum(BlockDuration), nullable=True)
+    ends_at = Column(DateTime(timezone=True), nullable=True)
 
     blocker = relationship("User", foreign_keys=[blocker_id], back_populates="blocks")
     blocked = relationship(

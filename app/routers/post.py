@@ -442,3 +442,26 @@ def get_recommendations(
     )
 
     return recommended_posts + other_posts
+
+
+@router.get("/{post_id}/comments", response_model=List[schemas.CommentOut])
+def get_comments(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 100,
+):
+    comments = (
+        db.query(models.Comment)
+        .filter(models.Comment.post_id == post_id)
+        .order_by(
+            models.Comment.is_pinned.desc(),
+            models.Comment.pinned_at.desc().nullslast(),
+            models.Comment.created_at.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return comments

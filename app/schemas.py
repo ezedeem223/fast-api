@@ -6,6 +6,7 @@ from pydantic import (
     ConfigDict,
     constr,
     HttpUrl,
+    Field,
 )
 from datetime import datetime, date
 from typing import Optional, List, ForwardRef, Dict
@@ -163,6 +164,27 @@ class FollowStatistics(BaseModel):
     following_count: int
     daily_growth: Dict[date, int]
     interaction_rate: float
+
+
+class BlockDuration(str, Enum):
+    HOURS = "hours"
+    DAYS = "days"
+    WEEKS = "weeks"
+
+
+class BlockCreate(BaseModel):
+    blocked_id: int
+    duration: Optional[int] = Field(None, ge=1)
+    duration_unit: Optional[BlockDuration] = None
+
+
+class BlockOut(BaseModel):
+    blocker_id: int
+    blocked_id: int
+    created_at: datetime
+    ends_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BusinessVerificationUpdate(BaseModel):
@@ -664,6 +686,8 @@ class CommentOut(BaseModel):
     has_emoji: bool
     has_sticker: bool
     sticker: Optional[StickerOut] = None
+    is_pinned: bool = False
+    pinned_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 

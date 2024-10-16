@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     mail_port: int
     mail_server: str
     COMMENT_EDIT_WINDOW_MINUTES: int = 15
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+
     # # أضف الحقول الجديدة هنا
     # facebook_access_token: "default_facebook_client_secret"
     # facebook_app_id: "default_facebook_client_secret"
