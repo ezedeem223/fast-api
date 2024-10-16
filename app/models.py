@@ -326,6 +326,7 @@ class Post(Base):
     )
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
+    has_best_answer = Column(Boolean, default=False)
 
     owner = relationship("User", back_populates="posts")
     comments = relationship(
@@ -374,6 +375,11 @@ class Comment(Base):
     likes_count = Column(Integer, default=0)
     is_flagged = Column(Boolean, default=False)
     flag_reason = Column(String, nullable=True)
+    contains_profanity = Column(Boolean, default=False)
+    has_invalid_urls = Column(Boolean, default=False)
+    reported_count = Column(Integer, default=0)
+    is_highlighted = Column(Boolean, default=False)
+    is_best_answer = Column(Boolean, default=False)
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
     reports = relationship(

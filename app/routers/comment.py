@@ -13,7 +13,7 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List, Optional
 from ..notifications import send_email_notification
-from ..utils import check_content_against_rules
+from ..utils import check_content_against_rules, check_for_profanity, validate_urls
 from datetime import datetime, timedelta
 from ..config import settings
 
@@ -83,17 +83,36 @@ async def create_comment(
         owner_id=current_user.id,
         post_id=comment.post_id,
         parent_id=comment.parent_id,
-        **comment.model_dump(exclude={"parent_id"}),
+        content=comment.content,
     )
+
+    # فحص المحتوى غير اللائق والروابط
+    new_comment.contains_profanity = check_for_profanity(comment.content)
+    new_comment.has_invalid_urls = not validate_urls(comment.content)
+
+    # إذا كان هناك محتوى غير لائق أو روابط غير صالحة، نضع علامة على التعليق
+    if new_comment.contains_profanity or new_comment.has_invalid_urls:
+        new_comment.is_flagged = True
+        new_comment.flag_reason = "Automatic content check"
+
+        # إرسال إشعار للمشرفين
+        moderators = db.query(models.User).filter(models.User.role == "moderator").all()
+        for moderator in moderators:
+            background_tasks.add_task(
+                send_email_notification,
+                to=moderator.email,
+                subject="New flagged comment",
+                body=f"A new comment has been automatically flagged. Comment ID: {new_comment.id}",
+            )
+
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
 
-    post_owner_email = (
-        db.query(models.User.email).filter(models.User.id == post.owner_id).scalar()
-    )
-    await send_email_notification(
-        to=post_owner_email,
+    # إرسال إشعار لصاحب المنشور
+    background_tasks.add_task(
+        send_email_notification,
+        to=post.owner.email,
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post titled '{post.title}'.",
     )
@@ -271,6 +290,7 @@ def report_comment(
     report: schemas.ReportCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     if report.post_id:
         post = db.query(models.Post).filter(models.Post.id == report.post_id).first()
@@ -278,8 +298,9 @@ def report_comment(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
             )
-
-    if report.comment_id:
+        reported_content = post.content
+        reported_type = "post"
+    elif report.comment_id:
         comment = (
             db.query(models.Comment)
             .filter(models.Comment.id == report.comment_id)
@@ -289,17 +310,51 @@ def report_comment(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found"
             )
+        reported_content = comment.content
+        reported_type = "comment"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either post_id or comment_id must be provided",
+        )
+
+    # Проверка содержимого на нецензурную лексику и недопустимые URL
+    contains_profanity = utils.check_for_profanity(reported_content)
+    has_invalid_urls = not utils.validate_urls(reported_content)
 
     new_report = models.Report(
         reporter_id=current_user.id,
         post_id=report.post_id,
         comment_id=report.comment_id,
         report_reason=report.report_reason,
+        contains_profanity=contains_profanity,
+        has_invalid_urls=has_invalid_urls,
     )
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
-    return new_report
+
+    # Автоматическая пометка контента, если обнаружены нарушения
+    if contains_profanity or has_invalid_urls:
+        if reported_type == "post":
+            post.is_flagged = True
+            post.flag_reason = "Automatic content check"
+        else:
+            comment.is_flagged = True
+            comment.flag_reason = "Automatic content check"
+        db.commit()
+
+        # Отправка уведомления модераторам
+        moderators = db.query(models.User).filter(models.User.role == "moderator").all()
+        for moderator in moderators:
+            background_tasks.add_task(
+                send_email_notification,
+                to=moderator.email,
+                subject=f"New flagged {reported_type}",
+                body=f"A {reported_type} has been automatically flagged. {reported_type.capitalize()} ID: {report.post_id or report.comment_id}",
+            )
+
+    return new
 
 
 @router.post("/{comment_id}/flag", status_code=status.HTTP_200_OK)
@@ -332,3 +387,55 @@ def like_comment(
     comment.likes_count += 1
     db.commit()
     return {"message": "Comment liked successfully"}
+
+
+@router.put("/{comment_id}/highlight", response_model=schemas.CommentOut)
+def highlight_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    if post.owner_id != current_user.id and not current_user.is_moderator:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to highlight this comment"
+        )
+
+    comment.is_highlighted = not comment.is_highlighted
+    db.commit()
+    return comment
+
+
+@router.put("/{comment_id}/best-answer", response_model=schemas.CommentOut)
+def set_best_answer(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    if post.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to set best answer")
+
+    # Reset previous best answer if exists
+    previous_best = (
+        db.query(models.Comment)
+        .filter(
+            models.Comment.post_id == post.id, models.Comment.is_best_answer == True
+        )
+        .first()
+    )
+    if previous_best:
+        previous_best.is_best_answer = False
+
+    comment.is_best_answer = True
+    post.has_best_answer = True
+    db.commit()
+    return comment

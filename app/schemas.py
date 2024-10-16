@@ -603,6 +603,7 @@ class EncryptedSessionUpdate(BaseModel):
 class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = []
+    is_help_request: bool = False
 
 
 class Post(PostBase):
@@ -624,6 +625,7 @@ class PostOut(Post):
     privacy_level: PrivacyLevel
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
+    has_best_answer: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -635,13 +637,17 @@ class CommentCreate(CommentBase):
 
 
 class CommentOut(BaseModel):
-    # ... (существующие поля)
+    contains_profanity: bool
+    has_invalid_urls: bool
+    reported_count: int
     likes_count: int
     is_flagged: bool
     flag_reason: Optional[str] = None
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
     model_config = ConfigDict(from_attributes=True)
+    is_highlighted: bool = False
+    is_best_answer: bool = False
 
 
 class FlagCommentRequest(BaseModel):

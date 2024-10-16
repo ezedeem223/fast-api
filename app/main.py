@@ -42,8 +42,10 @@ from .routers import (
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
 from apscheduler.schedulers.background import BackgroundScheduler
+from app.utils import train_content_classifier
 
 logger = logging.getLogger(__name__)
+train_content_classifier()
 
 app = FastAPI(
     title="Your API",

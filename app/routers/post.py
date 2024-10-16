@@ -178,6 +178,7 @@ def create_posts(
         content=post.content,
         is_safe_content=True,
         community_id=post.community_id,
+        is_help_request=post.is_help_request,  # أضف هذا الحقل
     )
 
     for hashtag_name in post.hashtags:
