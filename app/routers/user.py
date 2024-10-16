@@ -680,3 +680,15 @@ async def update_user_settings(
             **current_user.notifications_settings
         ),
     )
+
+
+@router.put("/block-settings", response_model=schemas.UserOut)
+async def update_block_settings(
+    settings: schemas.BlockSettings,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    current_user.default_block_type = settings.default_block_type
+    db.commit()
+    db.refresh(current_user)
+    return current_user

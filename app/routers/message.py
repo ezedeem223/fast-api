@@ -64,13 +64,16 @@ async def create_message(
         .filter(
             models.Block.blocker_id == message.receiver_id,
             models.Block.blocked_id == current_user.id,
+            models.Block.ends_at > datetime.now(),
         )
         .first()
     )
-    if block:
+    if block and (
+        block.block_type == models.BlockType.FULL
+        or block.block_type == models.BlockType.PARTIAL_MESSAGE
+    ):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can't send messages to this user",
+            status_code=403, detail="You are blocked from sending messages to this user"
         )
 
     conversation_id = generate_conversation_id(current_user.id, message.receiver_id)

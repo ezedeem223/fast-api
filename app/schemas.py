@@ -107,6 +107,34 @@ class ScreenShareSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AppealStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class BlockAppealCreate(BaseModel):
+    block_id: int
+    reason: str
+
+
+class BlockAppealOut(BaseModel):
+    id: int
+    block_id: int
+    user_id: int
+    reason: str
+    status: AppealStatus
+    created_at: datetime
+    reviewed_at: Optional[datetime] = None
+    reviewer_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BlockAppealReview(BaseModel):
+    status: AppealStatus
+
+
 class CallType(str, Enum):
     AUDIO = "audio"
     VIDEO = "video"
@@ -172,10 +200,21 @@ class BlockDuration(str, Enum):
     WEEKS = "weeks"
 
 
+class BlockTypeEnum(str, Enum):
+    FULL = "full"
+    PARTIAL_COMMENT = "partial_comment"
+    PARTIAL_MESSAGE = "partial_message"
+
+
 class BlockCreate(BaseModel):
     blocked_id: int
     duration: Optional[int] = Field(None, ge=1)
     duration_unit: Optional[BlockDuration] = None
+    block_type: BlockTypeEnum = BlockTypeEnum.FULL
+
+
+class BlockSettings(BaseModel):
+    default_block_type: BlockTypeEnum
 
 
 class BlockOut(BaseModel):
@@ -183,6 +222,36 @@ class BlockOut(BaseModel):
     blocked_id: int
     created_at: datetime
     ends_at: Optional[datetime] = None
+    block_type: BlockTypeEnum
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BlockLogCreate(BaseModel):
+    blocked_id: int
+    block_type: BlockTypeEnum
+    reason: Optional[str] = None
+
+
+class BlockLogOut(BaseModel):
+    id: int
+    blocker_id: int
+    blocked_id: int
+    block_type: BlockTypeEnum
+    reason: Optional[str]
+    created_at: datetime
+    ended_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BlockedUserOut(BaseModel):
+    id: int
+    username: str
+    email: str
+    block_type: BlockTypeEnum
+    reason: Optional[str]
+    blocked_since: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

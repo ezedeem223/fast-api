@@ -95,6 +95,23 @@ async def create_comment(
         sticker_id=comment.sticker_id,
     )
 
+    block = (
+        db.query(models.Block)
+        .filter(
+            models.Block.blocker_id == comment.post.owner_id,
+            models.Block.blocked_id == current_user.id,
+            models.Block.ends_at > datetime.now(),
+        )
+        .first()
+    )
+
+    if block and (
+        block.block_type == models.BlockType.FULL
+        or block.block_type == models.BlockType.PARTIAL_COMMENT
+    ):
+        raise HTTPException(
+            status_code=403, detail="You are blocked from commenting on this post"
+        )
     # التحقق من صحة الروابط
     if comment.image_url and not utils.is_valid_image_url(comment.image_url):
         raise HTTPException(status_code=400, detail="Invalid image URL")

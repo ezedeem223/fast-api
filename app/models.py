@@ -125,6 +125,35 @@ class BlockDuration(enum.Enum):
     WEEKS = "weeks"
 
 
+class BlockType(str, enum.Enum):
+    FULL = "full"
+    PARTIAL_COMMENT = "partial_comment"
+    PARTIAL_MESSAGE = "partial_message"
+
+
+class AppealStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class BlockAppeal(Base):
+    __tablename__ = "block_appeals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    reason = Column(String, nullable=False)
+    status = Column(Enum(AppealStatus), default=AppealStatus.PENDING)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    block = relationship("Block", back_populates="appeals")
+    user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
+    reviewer = relationship("User", foreign_keys=[reviewer_id])
+
+
 class Hashtag(Base):
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
@@ -312,6 +341,15 @@ class User(Base):
     )
     reactions = relationship(
         "Reaction", back_populates="user", cascade="all, delete-orphan"
+    )
+    block_logs_given = relationship(
+        "BlockLog", foreign_keys=[BlockLog.blocker_id], back_populates="blocker"
+    )
+    block_logs_received = relationship(
+        "BlockLog", foreign_keys=[BlockLog.blocked_id], back_populates="blocked"
+    )
+    block_appeals = relationship(
+        "BlockAppeal", foreign_keys=[BlockAppeal.user_id], back_populates="user"
     )
 
 
@@ -814,6 +852,27 @@ class Block(Base):
     blocker = relationship("User", foreign_keys=[blocker_id], back_populates="blocks")
     blocked = relationship(
         "User", foreign_keys=[blocked_id], back_populates="blocked_by"
+    )
+    block_type = Column(Enum(BlockType), nullable=False, default=BlockType.FULL)
+    appeals = relationship("BlockAppeal", back_populates="block")
+
+
+class BlockLog(Base):
+    __tablename__ = "block_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    blocker_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    blocked_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    block_type = Column(Enum(BlockType), nullable=False)
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+
+    blocker = relationship(
+        "User", foreign_keys=[blocker_id], back_populates="block_logs_given"
+    )
+    blocked = relationship(
+        "User", foreign_keys=[blocked_id], back_populates="block_logs_received"
     )
 
 
