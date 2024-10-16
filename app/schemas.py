@@ -636,8 +636,16 @@ class CommentCreate(CommentBase):
 
 class CommentOut(BaseModel):
     # ... (существующие поля)
+    likes_count: int
+    is_flagged: bool
+    flag_reason: Optional[str] = None
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FlagCommentRequest(BaseModel):
+    flag_reason: str = Field(..., min_length=5, max_length=200)
 
 
 class CommentUpdate(CommentBase):

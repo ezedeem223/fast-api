@@ -371,7 +371,9 @@ class Comment(Base):
     edited_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
-
+    likes_count = Column(Integer, default=0)
+    is_flagged = Column(Boolean, default=False)
+    flag_reason = Column(String, nullable=True)
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
     reports = relationship(
@@ -384,6 +386,10 @@ class Comment(Base):
     )
     reactions = relationship(
         "Reaction", back_populates="comment", cascade="all, delete-orphan"
+    )
+    __table_args__ = (
+        Index("ix_comments_post_id_created_at", "post_id", "created_at"),
+        Index("ix_comments_post_id_likes_count", "post_id", "likes_count"),
     )
 
 

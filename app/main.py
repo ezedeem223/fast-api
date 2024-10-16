@@ -45,7 +45,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(
+    title="Your API",
+    description="API for social media platform with comment filtering and sorting",
+    version="1.0.0",
+)
 
 # CORS settings
 origins = [

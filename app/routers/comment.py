@@ -1,8 +1,17 @@
-from fastapi import FastAPI, HTTPException, status, Depends, APIRouter, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    status,
+    Depends,
+    APIRouter,
+    BackgroundTasks,
+    Query,
+)
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import desc, asc
 from .. import models, schemas, oauth2
 from ..database import get_db
-from typing import List
+from typing import List, Optional
 from ..notifications import send_email_notification
 from ..utils import check_content_against_rules
 from datetime import datetime, timedelta
@@ -92,38 +101,89 @@ async def create_comment(
     return new_comment
 
 
-@router.get("/{post_id}", response_model=List[schemas.Comment])
+@router.get("/{post_id}", response_model=List[schemas.CommentOut])
 def get_comments(
     post_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    sort_by: Optional[str] = Query("created_at", enum=["created_at", "likes_count"]),
+    sort_order: Optional[str] = Query("desc", enum=["asc", "desc"]),
+    skip: int = 0,
+    limit: int = 100,
 ):
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
+
+    query = db.query(models.Comment).filter(
+        models.Comment.post_id == post_id, models.Comment.parent_id == None
+    )
+
+    # تطبيق الترتيب
+    if sort_by == "created_at":
+        query = query.order_by(
+            desc(models.Comment.created_at)
+            if sort_order == "desc"
+            else asc(models.Comment.created_at)
+        )
+    elif sort_by == "likes_count":
+        query = query.order_by(
+            desc(models.Comment.likes_count)
+            if sort_order == "desc"
+            else asc(models.Comment.likes_count)
+        )
+
+    # تصفية التعليقات المسيئة للمستخدمين العاديين
+    if not current_user.is_moderator:
+        query = query.filter(models.Comment.is_flagged == False)
+
     comments = (
-        db.query(models.Comment)
-        .filter(models.Comment.post_id == post_id, models.Comment.parent_id == None)
-        .options(joinedload(models.Comment.replies))
+        query.options(joinedload(models.Comment.replies))
+        .offset(skip)
+        .limit(limit)
         .all()
     )
     return comments
 
 
-@router.get("/{comment_id}/replies", response_model=List[schemas.Comment])
+@router.get("/{comment_id}/replies", response_model=List[schemas.CommentOut])
 def get_comment_replies(
     comment_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    sort_by: Optional[str] = Query("created_at", enum=["created_at", "likes_count"]),
+    sort_order: Optional[str] = Query("desc", enum=["asc", "desc"]),
 ):
     comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found"
         )
-    return comment.replies
+
+    query = db.query(models.Comment).filter(models.Comment.parent_id == comment_id)
+
+    # تطبيق الترتيب
+    if sort_by == "created_at":
+        query = query.order_by(
+            desc(models.Comment.created_at)
+            if sort_order == "desc"
+            else asc(models.Comment.created_at)
+        )
+    elif sort_by == "likes_count":
+        query = query.order_by(
+            desc(models.Comment.likes_count)
+            if sort_order == "desc"
+            else asc(models.Comment.likes_count)
+        )
+
+    # تصفية التعليقات المسيئة للمستخدمين العاديين
+    if not current_user.is_moderator:
+        query = query.filter(models.Comment.is_flagged == False)
+
+    replies = query.all()
+    return replies
 
 
 @router.put("/{comment_id}", response_model=schemas.Comment)
@@ -194,7 +254,7 @@ def get_comment_edit_history(
             status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found"
         )
 
-    # Проверка прав доступа к истории изменений
+    # التحقق من صلاحيات الوصول إلى سجل التعديلات
     if current_user.id != comment.owner_id and not current_user.is_moderator:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -240,3 +300,35 @@ def report_comment(
     db.commit()
     db.refresh(new_report)
     return new_report
+
+
+@router.post("/{comment_id}/flag", status_code=status.HTTP_200_OK)
+def flag_comment(
+    comment_id: int,
+    flag_reason: schemas.FlagCommentRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    comment.is_flagged = True
+    comment.flag_reason = flag_reason.flag_reason
+    db.commit()
+    return {"message": "Comment flagged successfully"}
+
+
+@router.post("/{comment_id}/like", status_code=status.HTTP_200_OK)
+def like_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    comment.likes_count += 1
+    db.commit()
+    return {"message": "Comment liked successfully"}
