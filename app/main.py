@@ -38,6 +38,7 @@ from .routers import (
     session,
     hashtag,
     reaction,
+    statistics,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -139,6 +140,7 @@ app.include_router(screen_share.router)
 app.include_router(session.router)
 app.include_router(hashtag.router)
 app.include_router(reaction.router)
+app.include_router(statistics.router)
 
 
 manager = ConnectionManager()

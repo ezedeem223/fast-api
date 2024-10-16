@@ -87,6 +87,12 @@ def get_sticker_pack(pack_id: int, db: Session = Depends(get_db)):
     return pack
 
 
+@router.get("/", response_model=List[schemas.StickerOut])
+def get_stickers(db: Session = Depends(get_db)):
+    stickers = db.query(models.Sticker).all()
+    return stickers
+
+
 @router.get("/search")
 def search_stickers(query: str, db: Session = Depends(get_db)):
     stickers = (

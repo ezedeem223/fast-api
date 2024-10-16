@@ -13,6 +13,9 @@ from sklearn.naive_bayes import MultinomialNB
 import nltk
 from nltk.corpus import stopwords
 import joblib
+import requests
+from urllib.parse import urlparse
+from textblob import TextBlob
 
 
 # إعداد التشفير باستخدام bcrypt
@@ -147,3 +150,22 @@ def validate_urls(text: str) -> bool:
     words = text.split()
     urls = [word for word in words if word.startswith(("http://", "https://"))]
     return all(validators.url(url) for url in urls)
+
+
+def is_valid_image_url(url: str) -> bool:
+    try:
+        response = requests.head(url)
+        return response.headers.get("content-type", "").startswith("image/")
+    except:
+        return False
+
+
+def is_valid_video_url(url: str) -> bool:
+    parsed_url = urlparse(url)
+    video_hosts = ["youtube.com", "vimeo.com", "dailymotion.com"]
+    return any(host in parsed_url.netloc for host in video_hosts)
+
+
+def analyze_sentiment(text):
+    analysis = TextBlob(text)
+    return analysis.sentiment.polarity

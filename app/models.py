@@ -221,6 +221,7 @@ class User(Base):
     followers_count = Column(Integer, default=0)
     following_count = Column(Integer, default=0)
     followers_growth = Column(ARRAY(Integer), default=list)
+    comment_count = Column(Integer, default=0)
 
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -327,6 +328,7 @@ class Post(Base):
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
     has_best_answer = Column(Boolean, default=False)
+    comment_count = Column(Integer, default=0)
 
     owner = relationship("User", back_populates="posts")
     comments = relationship(
@@ -380,6 +382,14 @@ class Comment(Base):
     reported_count = Column(Integer, default=0)
     is_highlighted = Column(Boolean, default=False)
     is_best_answer = Column(Boolean, default=False)
+    image_url = Column(String, nullable=True)
+    video_url = Column(String, nullable=True)
+    has_emoji = Column(Boolean, default=False)
+    has_sticker = Column(Boolean, default=False)
+    sentiment_score = Column(Float, nullable=True)
+
+    sticker_id = Column(Integer, ForeignKey("stickers.id"), nullable=True)
+    sticker = relationship("Sticker", back_populates="comments")
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
     reports = relationship(

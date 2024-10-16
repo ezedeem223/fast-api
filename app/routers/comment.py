@@ -16,6 +16,8 @@ from ..notifications import send_email_notification
 from ..utils import check_content_against_rules, check_for_profanity, validate_urls
 from datetime import datetime, timedelta
 from ..config import settings
+import emoji
+
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -30,7 +32,9 @@ def check_comment_owner(comment: models.Comment, user: models.User):
         )
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Comment)
+@router.post(
+    "/", status_code=status.HTTP_201_CREATED, response_model=schemas.CommentOut
+)
 async def create_comment(
     background_tasks: BackgroundTasks,
     comment: schemas.CommentCreate,
@@ -84,7 +88,18 @@ async def create_comment(
         post_id=comment.post_id,
         parent_id=comment.parent_id,
         content=comment.content,
+        image_url=comment.image_url,
+        video_url=comment.video_url,
+        has_emoji=emoji.emoji_count(comment.content) > 0,
+        has_sticker=comment.sticker_id is not None,
+        sticker_id=comment.sticker_id,
     )
+
+    # التحقق من صحة الروابط
+    if comment.image_url and not utils.is_valid_image_url(comment.image_url):
+        raise HTTPException(status_code=400, detail="Invalid image URL")
+    if comment.video_url and not utils.is_valid_video_url(comment.video_url):
+        raise HTTPException(status_code=400, detail="Invalid video URL")
 
     # فحص المحتوى غير اللائق والروابط
     new_comment.contains_profanity = check_for_profanity(comment.content)
@@ -104,6 +119,13 @@ async def create_comment(
                 subject="New flagged comment",
                 body=f"A new comment has been automatically flagged. Comment ID: {new_comment.id}",
             )
+    sentiment_score = analyze_sentiment(comment.content)
+    new_comment.sentiment_score = sentiment_score
+
+    # تحديث إحصائيات المستخدم والمنشور
+    current_user.comment_count += 1
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    post.comment_count += 1
 
     db.add(new_comment)
     db.commit()

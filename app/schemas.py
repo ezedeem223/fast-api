@@ -196,6 +196,13 @@ class BusinessTransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CommentStatistics(BaseModel):
+    total_comments: int
+    top_commenters: List[Tuple[int, str, int]]
+    most_commented_posts: List[Tuple[int, str, int]]
+    average_sentiment: float
+
+
 class PrivacyLevel(str, Enum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -632,8 +639,12 @@ class PostOut(Post):
 
 # Comment models
 class CommentCreate(CommentBase):
+    content: str
     post_id: int
     parent_id: Optional[int] = None
+    image_url: Optional[HttpUrl] = None
+    video_url: Optional[HttpUrl] = None
+    sticker_id: Optional[int] = None
 
 
 class CommentOut(BaseModel):
@@ -648,6 +659,12 @@ class CommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     is_highlighted: bool = False
     is_best_answer: bool = False
+    image_url: Optional[HttpUrl] = None
+    video_url: Optional[HttpUrl] = None
+    has_emoji: bool
+    has_sticker: bool
+    sticker: Optional[StickerOut] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FlagCommentRequest(BaseModel):
