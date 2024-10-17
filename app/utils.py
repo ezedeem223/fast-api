@@ -60,6 +60,51 @@ def check_content_against_rules(content: str, rules: List[str]) -> bool:
     return True
 
 
+def create_default_categories(db: Session):
+    default_categories = [
+        {"name": "عمل", "description": "منشورات متعلقة بفرص العمل"},
+        {"name": "هجرة", "description": "معلومات وتجارب عن الهجرة"},
+        {"name": "لجوء", "description": "منشورات حول عملية اللجوء"},
+    ]
+    for category in default_categories:
+        db_category = (
+            db.query(models.PostCategory)
+            .filter(models.PostCategory.name == category["name"])
+            .first()
+        )
+        if not db_category:
+            new_category = models.PostCategory(**category)
+            db.add(new_category)
+            db.commit()
+            db.refresh(new_category)
+
+            # إضافة تصنيفات فرعية
+            if category["name"] == "عمل":
+                sub_categories = ["عمل في كندا", "عمل في أمريكا", "عمل في أوروبا"]
+            elif category["name"] == "هجرة":
+                sub_categories = [
+                    "هجرة إلى كندا",
+                    "هجرة إلى أمريكا",
+                    "هجرة إلى أستراليا",
+                ]
+            elif category["name"] == "لجوء":
+                sub_categories = ["لجوء في أوروبا", "لجوء في كندا", "لجوء في أمريكا"]
+
+            for sub_cat in sub_categories:
+                db_sub_category = (
+                    db.query(models.PostCategory)
+                    .filter(models.PostCategory.name == sub_cat)
+                    .first()
+                )
+                if not db_sub_category:
+                    new_sub_category = models.PostCategory(
+                        name=sub_cat, parent_id=new_category.id
+                    )
+                    db.add(new_sub_category)
+
+    db.commit()
+
+
 def generate_qr_code(data: str) -> str:
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(data)
@@ -257,4 +302,49 @@ def update_ban_statistics(
 def log_user_event(db: Session, user_id: int, event_type: str, details: dict = None):
     event = models.UserEvent(user_id=user_id, event_type=event_type, details=details)
     db.add(event)
+    db.commit()
+
+
+def get_or_create_hashtag(db: Session, hashtag_name: str):
+    hashtag = (
+        db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
+    )
+    if not hashtag:
+        hashtag = models.Hashtag(name=hashtag_name)
+        db.add(hashtag)
+        db.commit()
+        db.refresh(hashtag)
+    return hashtag
+
+
+def update_repost_statistics(db: Session, post_id: int):
+    stats = (
+        db.query(models.RepostStatistics)
+        .filter(models.RepostStatistics.post_id == post_id)
+        .first()
+    )
+    if not stats:
+        stats = models.RepostStatistics(post_id=post_id)
+        db.add(stats)
+
+    stats.repost_count += 1
+    stats.last_reposted = func.now()
+    db.commit()
+
+
+def send_repost_notification(
+    db: Session, original_owner_id: int, reposter_id: int, repost_id: int
+):
+    original_owner = (
+        db.query(models.User).filter(models.User.id == original_owner_id).first()
+    )
+    reposter = db.query(models.User).filter(models.User.id == reposter_id).first()
+
+    notification = models.Notification(
+        user_id=original_owner_id,
+        content=f"{reposter.username} has reposted your post",
+        link=f"/post/{repost_id}",
+        notification_type="repost",
+    )
+    db.add(notification)
     db.commit()

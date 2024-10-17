@@ -25,6 +25,9 @@ import enum
 from datetime import date
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
 
 # Определение таблиц ассоциаций
 community_tags = Table(
@@ -264,6 +267,8 @@ class User(Base):
     total_ban_duration = Column(Interval, default=timedelta())
     total_reports = Column(Integer, default=0)
     valid_reports = Column(Integer, default=0)
+    allow_reposts = Column(Boolean, default=True)
+
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
         "Comment", back_populates="owner", cascade="all, delete-orphan"
@@ -467,7 +472,14 @@ class Post(Base):
     has_best_answer = Column(Boolean, default=False)
     comment_count = Column(Integer, default=0)
     max_pinned_comments = Column(Integer, default=3)
-
+    category_id = Column(Integer, ForeignKey("post_categories.id"))
+    scheduled_time = Column(DateTime(timezone=True), nullable=True)
+    is_published = Column(Boolean, default=False)
+    original_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    is_repost = Column(Boolean, default=False)
+    repost_count = Column(Integer, default=0)
+    allow_reposts = Column(Boolean, default=True)
+    category = relationship("PostCategory", back_populates="posts")
     owner = relationship("User", back_populates="posts")
     comments = relationship(
         "Comment", back_populates="post", cascade="all, delete-orphan"
@@ -489,6 +501,36 @@ class Post(Base):
     reactions = relationship(
         "Reaction", back_populates="post", cascade="all, delete-orphan"
     )
+    original_post = relationship("Post", remote_side=[id], backref="reposts")
+    repost_stats = relationship(
+        "RepostStatistics", uselist=False, back_populates="post"
+    )
+
+
+class RepostStatistics(Base):
+    __tablename__ = "repost_statistics"
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), unique=True)
+    repost_count = Column(Integer, default=0)
+    last_reposted = Column(DateTime, default=func.now())
+
+    post = relationship("Post", back_populates="repost_stats")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    content = Column(String)
+    link = Column(String)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    notification_type = Column(String)  # Новое поле
+
+    user = relationship("User", back_populates="notifications")
+
+
+User.notifications = relationship("Notification", back_populates="user")
 
 
 class Comment(Base):
@@ -547,6 +589,21 @@ class Comment(Base):
         Index("ix_comments_post_id_created_at", "post_id", "created_at"),
         Index("ix_comments_post_id_likes_count", "post_id", "likes_count"),
     )
+
+
+class PostCategory(Base):
+    __tablename__ = "post_categories"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String)
+    parent_id = Column(Integer, ForeignKey("post_categories.id"))
+    is_active = Column(Boolean, default=True)
+
+    children = relationship(
+        "PostCategory", back_populates="parent", cascade="all, delete-orphan"
+    )
+    parent = relationship("PostCategory", back_populates="children", remote_side=[id])
+    posts = relationship("Post", back_populates="category")
 
 
 class CommentEditHistory(Base):

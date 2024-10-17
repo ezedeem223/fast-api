@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app import models
 from datetime import datetime
+from .routers.post import send_notifications_and_share
 
 # إعداد Celery
 celery_app = Celery(
@@ -204,3 +205,19 @@ celery_app.conf.beat_schedule["reset-report-counters"] = {
     "task": "app.celery_worker.reset_report_counters",
     "schedule": crontab(day_of_month=1, hour=0, minute=0),  # تشغيل في بداية كل شهر
 }
+
+
+@celery_app.task
+def schedule_post_publication(post_id: int):
+    db = SessionLocal()
+    try:
+        post = db.query(models.Post).filter(models.Post.id == post_id).first()
+        if post and not post.is_published:
+            post.is_published = True
+            db.commit()
+
+            # إرسال الإشعارات ومشاركة المنشور
+            user = db.query(models.User).filter(models.User.id == post.owner_id).first()
+            send_notifications_and_share(None, post, user)
+    finally:
+        db.close()

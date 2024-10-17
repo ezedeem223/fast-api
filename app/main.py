@@ -42,11 +42,12 @@ from .routers import (
     ip_ban,
     banned_words,
     moderation,
+    category_management,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.utils import train_content_classifier
+from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
 from .ip_utils import get_client_ip, is_ip_banned
 
@@ -148,6 +149,7 @@ app.include_router(reaction.router)
 app.include_router(statistics.router)
 app.include_router(ip_ban.router)
 app.include_router(moderation.router)
+app.include_router(category_management.router)
 
 
 manager = ConnectionManager()
@@ -178,6 +180,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
     except Exception as e:
         print(f"An error occurred: {e}")
         await manager.disconnect(websocket)
+
+
+@app.on_event("startup")
+async def startup_event():
+    db = SessionLocal()
+    create_default_categories(db)
+    db.close()
 
 
 @app.middleware("http")
@@ -224,3 +233,14 @@ scheduler.start()
 @app.on_event("shutdown")
 def shutdown_event():
     scheduler.shutdown()
+
+
+@app.on_event("startup")
+async def startup_event():
+    # ... (الكود الموجود)
+    celery_app.conf.beat_schedule = {
+        "check-scheduled-posts": {
+            "task": "app.celery_worker.schedule_post_publication",
+            "schedule": 60.0,  # كل دقيقة
+        },
+    }

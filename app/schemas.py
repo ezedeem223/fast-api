@@ -62,6 +62,8 @@ class SortOption(str, Enum):
     USERNAME = "username"
     POST_COUNT = "post_count"
     INTERACTION_COUNT = "interaction_count"
+    REPOST_COUNT = "repost_count"
+    POPULARITY = "popularity"
 
 
 class UserFollowersSettings(BaseModel):
@@ -488,6 +490,9 @@ class PostBase(BaseModel):
     title: str
     content: str
     published: bool = True
+    original_post_id: Optional[int] = None
+    is_repost: bool = False
+    allow_reposts: bool = True
 
 
 class CommentBase(BaseModel):
@@ -563,6 +568,26 @@ class NotificationsSettings(BaseModel):
     newsletter: bool = True
 
 
+class RepostStatisticsOut(BaseModel):
+    post_id: int
+    repost_count: int
+    last_reposted: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class NotificationOut(BaseModel):
+    id: int
+    content: str
+    link: str
+    is_read: bool
+    created_at: datetime
+    notification_type: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserSettings(BaseModel):
     ui_settings: UISettings
     notifications_settings: NotificationsSettings
@@ -585,6 +610,7 @@ class UserUpdate(BaseModel):
     phone_number: Optional[str] = None
     followers_settings: Optional[UserFollowersSettings] = None
     followed_hashtags: List[int] = []
+    allow_reposts: Optional[bool] = None
 
 
 class UserLogin(UserBase):
@@ -710,6 +736,25 @@ class Category(CategoryBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PostCategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parent_id: Optional[int] = None
+    is_active: bool = True
+    hashtags: List[str] = []
+
+
+class PostCategoryCreate(PostCategoryBase):
+    pass
+
+
+class PostCategory(PostCategoryBase):
+    id: int
+    children: List["PostCategory"] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TagBase(BaseModel):
     name: str
 
@@ -801,6 +846,8 @@ class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = []
     is_help_request: bool = False
+    category_id: Optional[int] = None
+    scheduled_time: Optional[datetime] = None
 
 
 class Post(PostBase):
@@ -823,7 +870,10 @@ class PostOut(Post):
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
     has_best_answer: bool = False
-
+    category: Optional[PostCategory] = None
+    hashtags: List[Hashtag] = []
+    repost_count: int
+    original_post: Optional["PostOut"] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1167,6 +1217,11 @@ class UserContentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PostSearch(BaseModel):
+    keyword: Optional[str] = None
+    category_id: Optional[int] = None
+
+
 class StickerPackBase(BaseModel):
     name: str
 
@@ -1244,6 +1299,7 @@ CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
 PostOut.model_rebuild()
+PostOut.update_forward_refs()
 Comment.update_forward_refs()
 CommunityInvitationOut.model_rebuild()
 

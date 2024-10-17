@@ -9,10 +9,11 @@ from fastapi import (
     BackgroundTasks,
     UploadFile,
     File,
+    Query,
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, cast
-from .. import models, schemas, oauth2
+from .. import models, schemas, oauth2, utils
 from ..database import get_db
 from typing import List, Optional
 from ..notifications import send_email_notification, manager
@@ -24,6 +25,7 @@ from ..utils import check_content_against_rules, log_user_event
 
 from sqlalchemy.dialects.postgresql import JSONB
 from ..content_filter import check_content, filter_content
+from ..celery_worker import schedule_post_publication
 
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -64,6 +66,31 @@ def share_on_facebook(content: str):
             status_code=response.status_code,
             detail="Failed to share post on Facebook",
         )
+
+
+@router.get("/search", response_model=List[schemas.PostOut])
+def search_posts(
+    search: schemas.PostSearch,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    query = db.query(models.Post)
+    if search.keyword:
+        query = query.filter(
+            models.Post.title.contains(search.keyword)
+            | models.Post.content.contains(search.keyword)
+        )
+    if search.category_id:
+        query = query.filter(models.Post.category_id == search.category_id)
+
+    if keyword:
+        query = query.filter(
+            models.Post.title.contains(keyword) | models.Post.content.contains(keyword)
+        )
+    if hashtag:
+        query = query.join(models.Post.hashtags).filter(models.Hashtag.name == hashtag)
+    posts = query.all()
+    return posts
 
 
 @router.get("/{id}", response_model=schemas.PostOut)
@@ -140,30 +167,13 @@ def get_post(
     return post_out
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut)
 def create_posts(
     background_tasks: BackgroundTasks,
     post: schemas.PostCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    warnings, bans = check_content(db, post.content)
-
-    if bans:
-        raise HTTPException(
-            status_code=400, detail=f"Content contains banned words: {', '.join(bans)}"
-        )
-
-    if warnings:
-        # قد ترغب في تسجيل التحذيرات أو إرسال إشعار للمشرفين
-        logger.warning(f"Content contains warned words: {', '.join(warnings)}")
-
-    filtered_content = filter_content(db, post.content)
-    new_post = models.Post(
-        owner_id=current_user.id,
-        **post.dict(exclude={"content"}),
-        content=filtered_content,
-    )
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
@@ -173,6 +183,18 @@ def create_posts(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Content cannot be empty"
         )
+
+    warnings, bans = check_content(db, post.content)
+
+    if bans:
+        raise HTTPException(
+            status_code=400, detail=f"Content contains banned words: {', '.join(bans)}"
+        )
+
+    if warnings:
+        logger.warning(f"Content contains warned words: {', '.join(warnings)}")
+
+    filtered_content = filter_content(db, post.content)
 
     # التحقق من قواعد المجتمع
     if post.community_id:
@@ -185,7 +207,7 @@ def create_posts(
             raise HTTPException(status_code=404, detail="Community not found")
 
         rules = [rule.rule for rule in community.rules]
-        if not check_content_against_rules(post.content, rules):
+        if not check_content_against_rules(filtered_content, rules):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Post content violates community rules",
@@ -194,23 +216,24 @@ def create_posts(
     new_post = models.Post(
         owner_id=current_user.id,
         title=post.title,
-        content=post.content,
+        content=filtered_content,
         is_safe_content=True,
         community_id=post.community_id,
-        is_help_request=post.is_help_request,  # أضف هذا الحقل
+        is_help_request=post.is_help_request,
+        category_id=post.category_id,
+        scheduled_time=post.scheduled_time,
+        is_published=post.scheduled_time is None,
     )
 
+    # إضافة الوسوم
     for hashtag_name in post.hashtags:
-        hashtag = (
-            db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
-        )
-        if not hashtag:
-            hashtag = models.Hashtag(name=hashtag_name)
-            db.add(hashtag)
+        hashtag = get_or_create_hashtag(db, hashtag_name)
         new_post.hashtags.append(hashtag)
+
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
+
     log_user_event(db, current_user.id, "create_post", {"post_id": new_post.id})
 
     send_email_notification(
@@ -225,9 +248,35 @@ def create_posts(
         share_on_twitter(new_post.content)
         share_on_facebook(new_post.content)
     except HTTPException as e:
-        print(f"Error sharing on social media: {e.detail}")
+        logger.error(f"Error sharing on social media: {e.detail}")
+
+    if post.scheduled_time:
+        # جدولة نشر المنشور
+        schedule_post_publication.apply_async(
+            args=[new_post.id], eta=post.scheduled_time
+        )
+    else:
+        # إرسال الإشعارات ومشاركة المنشور على وسائل التواصل الاجتماعي
+        send_notifications_and_share(background_tasks, new_post, current_user)
 
     return new_post
+
+
+@router.get("/scheduled", response_model=List[schemas.PostOut])
+def get_scheduled_posts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    scheduled_posts = (
+        db.query(models.Post)
+        .filter(
+            models.Post.owner_id == current_user.id,
+            models.Post.scheduled_time.isnot(None),
+            models.Post.is_published == False,
+        )
+        .all()
+    )
+    return scheduled_posts
 
 
 @router.post("/upload_file/", status_code=status.HTTP_201_CREATED)
@@ -496,3 +545,166 @@ def get_comments(
         .all()
     )
     return comments
+
+
+@router.post(
+    "/repost/{post_id}",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.PostOut,
+)
+def repost(
+    post_id: int,
+    repost_data: schemas.PostCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    original_post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not original_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Original post not found"
+        )
+
+    if (
+        not original_post.is_published
+        or not original_post.allow_reposts
+        or not original_post.owner.allow_reposts
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This post cannot be reposted",
+        )
+
+    if original_post.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot repost your own post",
+        )
+
+    new_post = models.Post(
+        title=f"Repost: {original_post.title}",
+        content=repost_data.content or f"Repost of: {original_post.content}",
+        owner_id=current_user.id,
+        original_post_id=original_post.id,
+        is_repost=True,
+        is_published=True,
+        category_id=original_post.category_id,
+        community_id=original_post.community_id,
+        allow_reposts=repost_data.allow_reposts,
+    )
+
+    original_post.repost_count += 1
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    for hashtag in original_post.hashtags:
+        new_post.hashtags.append(hashtag)
+
+    utils.update_repost_statistics(db, post_id)
+    utils.send_repost_notification(
+        db, original_post.owner_id, current_user.id, new_post.id
+    )
+
+    return new_post
+
+
+@router.get("/reposts/{post_id}", response_model=List[schemas.PostOut])
+def get_reposts(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+        )
+
+    reposts = (
+        db.query(models.Post)
+        .filter(models.Post.original_post_id == post_id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return reposts
+
+
+@router.get("/top-reposts", response_model=List[schemas.RepostStatisticsOut])
+def get_top_reposts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    limit: int = Query(10, le=100),
+):
+    top_reposts = (
+        db.query(models.RepostStatistics)
+        .order_by(desc(models.RepostStatistics.repost_count))
+        .limit(limit)
+        .all()
+    )
+
+    return top_reposts
+
+
+@router.put("/toggle-reposts/{post_id}", response_model=schemas.PostOut)
+def toggle_allow_reposts(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+        )
+
+    if post.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this post",
+        )
+
+    post.allow_reposts = not post.allow_reposts
+    db.commit()
+    db.refresh(post)
+
+    return post
+
+
+@router.get("/search", response_model=List[schemas.PostOut])
+def search_posts(
+    keyword: Optional[str] = None,
+    hashtag: Optional[str] = None,
+    include_reposts: bool = True,
+    allow_reposts: Optional[bool] = None,
+    sort_by: schemas.SortOption = schemas.SortOption.DATE,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    query = db.query(models.Post)
+
+    if keyword:
+        query = query.filter(
+            models.Post.title.contains(keyword) | models.Post.content.contains(keyword)
+        )
+    if hashtag:
+        query = query.join(models.Post.hashtags).filter(models.Hashtag.name == hashtag)
+    if not include_reposts:
+        query = query.filter(models.Post.is_repost == False)
+    if allow_reposts is not None:
+        query = query.filter(models.Post.allow_reposts == allow_reposts)
+
+    if sort_by == schemas.SortOption.DATE:
+        query = query.order_by(desc(models.Post.created_at))
+    elif sort_by == schemas.SortOption.REPOST_COUNT:
+        query = query.order_by(desc(models.Post.repost_count))
+    elif sort_by == schemas.SortOption.POPULARITY:
+        query = query.order_by(desc(models.Post.view_count + models.Post.repost_count))
+
+    posts = query.offset(skip).limit(limit).all()
+    return posts

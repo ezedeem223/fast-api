@@ -51,12 +51,24 @@ def unfollow_hashtag(
 
 
 @router.get("/trending", response_model=List[schemas.Hashtag])
-def get_trending_hashtags(db: Session = Depends(get_db)):
-    # Implement logic to get trending hashtags (e.g., most used in the last 24 hours)
+def get_trending_hashtags(db: Session = Depends(get_db), limit: int = 10):
     trending_hashtags = (
         db.query(models.Hashtag)
-        .order_by(models.Hashtag.followers.desc())
-        .limit(10)
+        .join(models.Post.hashtags)
+        .group_by(models.Hashtag.id)
+        .order_by(func.count(models.Post.id).desc())
+        .limit(limit)
         .all()
     )
     return trending_hashtags
+
+
+@router.get("/{hashtag_name}/posts", response_model=List[schemas.PostOut])
+def get_posts_by_hashtag(hashtag_name: str, db: Session = Depends(get_db)):
+    posts = (
+        db.query(models.Post)
+        .join(models.Post.hashtags)
+        .filter(models.Hashtag.name == hashtag_name)
+        .all()
+    )
+    return posts

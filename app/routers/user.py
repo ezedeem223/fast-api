@@ -695,3 +695,63 @@ async def update_block_settings(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.put("/settings/reposts", response_model=schemas.UserOut)
+def update_repost_settings(
+    settings: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if settings.allow_reposts is not None:
+        current_user.allow_reposts = settings.allow_reposts
+        db.commit()
+        db.refresh(current_user)
+
+    return current_user
+
+
+@router.get("/notifications", response_model=List[schemas.NotificationOut])
+def get_user_notifications(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    notifications = (
+        db.query(models.Notification)
+        .filter(models.Notification.user_id == current_user.id)
+        .order_by(desc(models.Notification.created_at))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return notifications
+
+
+@router.put(
+    "/notifications/{notification_id}/read", response_model=schemas.NotificationOut
+)
+def mark_notification_as_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    notification = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.id == notification_id,
+            models.Notification.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+
+    return notification
