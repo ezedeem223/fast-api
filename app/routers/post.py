@@ -10,22 +10,33 @@ from fastapi import (
     UploadFile,
     File,
     Query,
+    Form,
 )
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, cast
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_, and_, cast, desc
 from .. import models, schemas, oauth2, utils
 from ..database import get_db
 from typing import List, Optional
-from ..notifications import send_email_notification, manager
+from ..notifications import send_email_notification, manager, send_mention_notification
 from cachetools import cached, TTLCache
 import os
 from pathlib import Path
 import requests
-from ..utils import check_content_against_rules, log_user_event
+from ..utils import (
+    check_content_against_rules,
+    log_user_event,
+    process_mentions,
+    get_or_create_hashtag,
+)
 
 from sqlalchemy.dialects.postgresql import JSONB
 from ..content_filter import check_content, filter_content
 from ..celery_worker import schedule_post_publication
+from ..analytics import analyze_content
+import aiofiles
+from pydub import AudioSegment
+import uuid
+from datetime import datetime, timedelta
 
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -39,6 +50,10 @@ TWITTER_BEARER_TOKEN = "YOUR_TWITTER_BEARER_TOKEN"
 
 FACEBOOK_API_URL = "https://graph.facebook.com/v11.0/me/feed"
 FACEBOOK_ACCESS_TOKEN = "YOUR_FACEBOOK_ACCESS_TOKEN"
+
+AUDIO_DIR = Path("static/audio_posts")
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
+MAX_AUDIO_DURATION = 300  # 5 minutes in seconds
 
 
 def share_on_twitter(content: str):
@@ -83,12 +98,10 @@ def search_posts(
     if search.category_id:
         query = query.filter(models.Post.category_id == search.category_id)
 
-    if keyword:
-        query = query.filter(
-            models.Post.title.contains(keyword) | models.Post.content.contains(keyword)
+    if search.hashtag:
+        query = query.join(models.Post.hashtags).filter(
+            models.Hashtag.name == search.hashtag
         )
-    if hashtag:
-        query = query.join(models.Post.hashtags).filter(models.Hashtag.name == hashtag)
     posts = query.all()
     return posts
 
@@ -104,6 +117,9 @@ def get_post(
         .options(
             joinedload(models.Post.comments).joinedload(models.Comment.replies),
             joinedload(models.Post.reactions),
+            joinedload(models.Post.mentioned_users),
+            joinedload(models.Post.poll_options),
+            joinedload(models.Post.poll),
         )
         .filter(models.Post.id == id)
     )
@@ -116,7 +132,6 @@ def get_post(
             detail=f"post with id: {id} was not found",
         )
 
-    # Получение реакций для поста
     reaction_counts = (
         db.query(
             models.Reaction.reaction_type, func.count(models.Reaction.id).label("count")
@@ -126,7 +141,6 @@ def get_post(
         .all()
     )
 
-    # Организация комментариев в древовидную структуру
     comments = []
     comments_dict = {}
 
@@ -137,7 +151,9 @@ def get_post(
             schemas.Reaction(id=r.id, user_id=r.user_id, reaction_type=r.reaction_type)
             for r in comment.reactions
         ]
-        comment_dict["reaction_counts"] = get_comment_reaction_counts(comment.id, db)
+        comment_dict["reaction_counts"] = utils.get_comment_reaction_counts(
+            comment.id, db
+        )
         comments_dict[comment.id] = comment_dict
         if comment.parent_id is None:
             comments.append(comment_dict)
@@ -146,6 +162,15 @@ def get_post(
             if parent:
                 parent["replies"].append(comment_dict)
 
+        poll_data = None
+    if post.is_poll:
+        poll_options = [
+            schemas.PollOption(id=option.id, option_text=option.option_text)
+            for option in post.poll_options
+        ]
+        poll_data = schemas.PollData(
+            options=poll_options, end_date=post.poll[0].end_date if post.poll else None
+        )
     post_out = schemas.PostOut(
         id=post.id,
         title=post.title,
@@ -162,6 +187,16 @@ def get_post(
             for r in reaction_counts
         ],
         comments=comments,
+        mentioned_users=[
+            schemas.UserOut.from_orm(user) for user in post.mentioned_users
+        ],
+        sentiment=post.sentiment,
+        sentiment_score=post.sentiment_score,
+        content_suggestion=post.content_suggestion,
+        is_audio_post=post.is_audio_post,
+        audio_url=post.audio_url if post.is_audio_post else None,
+        is_poll=post.is_poll,
+        poll_data=poll_data,
     )
 
     return post_out
@@ -196,7 +231,6 @@ def create_posts(
 
     filtered_content = filter_content(db, post.content)
 
-    # التحقق من قواعد المجتمع
     if post.community_id:
         community = (
             db.query(models.Community)
@@ -225,10 +259,19 @@ def create_posts(
         is_published=post.scheduled_time is None,
     )
 
-    # إضافة الوسوم
     for hashtag_name in post.hashtags:
         hashtag = get_or_create_hashtag(db, hashtag_name)
         new_post.hashtags.append(hashtag)
+
+    # Обработка упоминаний
+    mentioned_users = process_mentions(post.content, db)
+    new_post.mentioned_users = mentioned_users
+
+    if post.analyze_content:
+        analysis_result = analyze_content(post.content)
+        new_post.sentiment = analysis_result["sentiment"]["sentiment"]
+        new_post.sentiment_score = analysis_result["sentiment"]["score"]
+        new_post.content_suggestion = analysis_result["suggestion"]
 
     db.add(new_post)
     db.commit()
@@ -251,13 +294,17 @@ def create_posts(
         logger.error(f"Error sharing on social media: {e.detail}")
 
     if post.scheduled_time:
-        # جدولة نشر المنشور
         schedule_post_publication.apply_async(
             args=[new_post.id], eta=post.scheduled_time
         )
     else:
-        # إرسال الإشعارات ومشاركة المنشور على وسائل التواصل الاجتماعي
         send_notifications_and_share(background_tasks, new_post, current_user)
+
+    # Отправка уведомлений упомянутым пользователям
+    for user in mentioned_users:
+        background_tasks.add_task(
+            send_mention_notification, user.email, current_user.username, new_post.id
+        )
 
     return new_post
 
@@ -322,35 +369,13 @@ def report_post(
 
     report = models.Report(
         post_id=post_id,
-        reported_user_id=post.owner_id,  # إضافة معرف المستخدم المُبلغ عنه
+        reported_user_id=post.owner_id,
         reporter_id=current_user.id,
         reason=reason,
     )
     db.add(report)
     db.commit()
     return {"message": "Report submitted successfully"}
-
-
-@router.get("/{id}", response_model=schemas.PostOut)
-def get_post(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: int = Depends(oauth2.get_current_user),
-):
-    post = (
-        db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
-        .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
-        .group_by(models.Post.id)
-        .filter(models.Post.id == id)
-        .first()
-    )
-
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"post with id: {id} was not found",
-        )
-    return schemas.PostOut(post=post[0], votes=post[1])
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -382,7 +407,7 @@ def delete_post(
 @router.put("/{id}", response_model=schemas.Post)
 def update_post(
     id: int,
-    update_post: schemas.PostCreate,
+    updated_post: schemas.PostCreate,
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
@@ -400,14 +425,29 @@ def update_post(
             detail="Not authorized to perform requested action",
         )
 
-    if not update_post.content.strip():
+    if not updated_post.content.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Content cannot be empty"
         )
 
-    post_query.update(update_post.model_dump(), synchronize_session=False)
+    # Обработка новых упоминаний
+    new_mentioned_users = process_mentions(updated_post.content, db)
+    post.mentioned_users = new_mentioned_users
+
+    post.title = updated_post.title
+    post.content = updated_post.content
+    post.category_id = updated_post.category_id
+    post.is_help_request = updated_post.is_help_request
+
+    if updated_post.analyze_content:
+        analysis_result = analyze_content(updated_post.content)
+        post.sentiment = analysis_result["sentiment"]["sentiment"]
+        post.sentiment_score = analysis_result["sentiment"]["score"]
+        post.content_suggestion = analysis_result["suggestion"]
+
     db.commit()
-    return post_query.first()
+    db.refresh(post)
+    return post
 
 
 @router.post("/short_videos/", status_code=status.HTTP_201_CREATED)
@@ -708,3 +748,294 @@ def search_posts(
 
     posts = query.offset(skip).limit(limit).all()
     return posts
+
+
+@router.post("/{id}/analyze", response_model=schemas.PostOut)
+async def analyze_existing_post(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post = db.query(models.Post).filter(models.Post.id == id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if post.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to analyze this post"
+        )
+
+    analysis_result = analyze_content(post.content)
+    post.sentiment = analysis_result["sentiment"]["sentiment"]
+    post.sentiment_score = analysis_result["sentiment"]["score"]
+    post.content_suggestion = analysis_result["suggestion"]
+
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+@router.get("/mentions", response_model=List[schemas.PostOut])
+def get_posts_with_mentions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    posts = (
+        db.query(models.Post)
+        .filter(models.Post.mentioned_users.any(id=current_user.id))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return posts
+
+
+async def save_audio_file(file: UploadFile) -> str:
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    file_extension = os.path.splitext(file.filename)[1]
+    if file_extension.lower() not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported audio file format")
+
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = AUDIO_DIR / unique_filename
+
+    async with aiofiles.open(file_path, "wb") as out_file:
+        content = await file.read()
+        await out_file.write(content)
+
+    # Check audio duration
+    audio = AudioSegment.from_file(file_path)
+    duration_seconds = len(audio) / 1000
+    if duration_seconds > MAX_AUDIO_DURATION:
+        os.remove(file_path)
+        raise HTTPException(
+            status_code=400, detail="Audio file exceeds maximum duration"
+        )
+
+    return str(file_path)
+
+
+@router.post(
+    "/audio", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut
+)
+async def create_audio_post(
+    background_tasks: BackgroundTasks,
+    title: str = Form(...),
+    description: str = Form(...),
+    audio_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
+        )
+
+    audio_path = await save_audio_file(audio_file)
+
+    new_post = models.Post(
+        owner_id=current_user.id,
+        title=title,
+        content=description,
+        is_safe_content=True,
+        is_audio_post=True,
+        audio_url=audio_path,
+    )
+
+    # Process mentions
+    mentioned_users = process_mentions(description, db)
+    new_post.mentioned_users = mentioned_users
+
+    # Analyze content
+    analysis_result = analyze_content(description)
+    new_post.sentiment = analysis_result["sentiment"]["sentiment"]
+    new_post.sentiment_score = analysis_result["sentiment"]["score"]
+    new_post.content_suggestion = analysis_result["suggestion"]
+
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    log_user_event(db, current_user.id, "create_audio_post", {"post_id": new_post.id})
+
+    send_email_notification(
+        background_tasks=background_tasks,
+        to=[current_user.email],
+        subject="New Audio Post Created",
+        body=f"Your new audio post titled '{new_post.title}' has been created successfully.",
+    )
+
+    # Notify mentioned users
+    for user in mentioned_users:
+        background_tasks.add_task(
+            send_mention_notification, user.email, current_user.username, new_post.id
+        )
+
+    return new_post
+
+
+@router.get("/audio", response_model=List[schemas.PostOut])
+def get_audio_posts(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    audio_posts = (
+        db.query(models.Post)
+        .filter(models.Post.is_audio_post == True)
+        .order_by(models.Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return audio_posts
+
+
+@router.post(
+    "/poll", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut
+)
+async def create_poll_post(
+    background_tasks: BackgroundTasks,
+    poll: schemas.PollCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
+        )
+
+    new_post = models.Post(
+        owner_id=current_user.id,
+        title=poll.title,
+        content=poll.description,
+        is_poll=True,
+    )
+
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    for option in poll.options:
+        new_option = models.PollOption(post_id=new_post.id, option_text=option)
+        db.add(new_option)
+
+    if poll.end_date:
+        new_poll = models.Poll(post_id=new_post.id, end_date=poll.end_date)
+        db.add(new_poll)
+
+    db.commit()
+
+    log_user_event(db, current_user.id, "create_poll_post", {"post_id": new_post.id})
+
+    send_email_notification(
+        background_tasks=background_tasks,
+        to=[current_user.email],
+        subject="New Poll Created",
+        body=f"Your new poll '{new_post.title}' has been created successfully.",
+    )
+
+    return new_post
+
+
+@router.post("/{post_id}/vote", status_code=status.HTTP_200_OK)
+async def vote_in_poll(
+    post_id: int,
+    option_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post = (
+        db.query(models.Post)
+        .filter(models.Post.id == post_id, models.Post.is_poll == True)
+        .first()
+    )
+    if not post:
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    poll = db.query(models.Poll).filter(models.Poll.post_id == post_id).first()
+    if poll and poll.end_date < datetime.now():
+        raise HTTPException(status_code=400, detail="This poll has ended")
+
+    option = (
+        db.query(models.PollOption)
+        .filter(models.PollOption.id == option_id, models.PollOption.post_id == post_id)
+        .first()
+    )
+    if not option:
+        raise HTTPException(status_code=404, detail="Option not found")
+
+    existing_vote = (
+        db.query(models.PollVote)
+        .filter(
+            models.PollVote.user_id == current_user.id,
+            models.PollVote.post_id == post_id,
+        )
+        .first()
+    )
+
+    if existing_vote:
+        existing_vote.option_id = option_id
+    else:
+        new_vote = models.PollVote(
+            user_id=current_user.id, post_id=post_id, option_id=option_id
+        )
+        db.add(new_vote)
+
+    db.commit()
+
+    return {"message": "Vote recorded successfully"}
+
+
+@router.get("/{post_id}/poll-results", response_model=schemas.PollResults)
+async def get_poll_results(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post = (
+        db.query(models.Post)
+        .filter(models.Post.id == post_id, models.Post.is_poll == True)
+        .first()
+    )
+    if not post:
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    poll = db.query(models.Poll).filter(models.Poll.post_id == post_id).first()
+
+    options = (
+        db.query(models.PollOption).filter(models.PollOption.post_id == post_id).all()
+    )
+
+    results = []
+    total_votes = 0
+    for option in options:
+        vote_count = (
+            db.query(func.count(models.PollVote.id))
+            .filter(models.PollVote.option_id == option.id)
+            .scalar()
+        )
+        total_votes += vote_count
+        results.append(
+            {
+                "option_id": option.id,
+                "option_text": option.option_text,
+                "votes": vote_count,
+            }
+        )
+
+    for result in results:
+        result["percentage"] = (
+            (result["votes"] / total_votes * 100) if total_votes > 0 else 0
+        )
+
+    return {
+        "post_id": post_id,
+        "total_votes": total_votes,
+        "results": results,
+        "is_ended": poll.end_date < datetime.now() if poll else False,
+        "end_date": poll.end_date if poll else None,
+    }

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     mail_server: str
     COMMENT_EDIT_WINDOW_MINUTES: int = 15
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    HUGGINGFACE_API_TOKEN: str = "your_huggingface_api_token"
 
     # # أضف الحقول الجديدة هنا
     # facebook_access_token: "default_facebook_client_secret"

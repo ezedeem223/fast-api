@@ -1,6 +1,40 @@
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from . import models
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import torch
+from .config import settings
+
+
+# تهيئة النموذج والتوكنايزر
+tokenizer = AutoTokenizer.from_pretrained(
+    "distilbert-base-uncased-finetuned-sst-2-english"
+)
+model = AutoModelForSequenceClassification.from_pretrained(
+    "distilbert-base-uncased-finetuned-sst-2-english"
+)
+
+sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+
+
+def analyze_sentiment(text):
+    result = sentiment_pipeline(text)[0]
+    return {"sentiment": result["label"], "score": result["score"]}
+
+
+def suggest_improvements(text, sentiment):
+    if sentiment["sentiment"] == "NEGATIVE" and sentiment["score"] > 0.8:
+        return "Consider rephrasing your post to have a more positive tone."
+    elif len(text.split()) < 10:
+        return "Your post seems short. Consider adding more details to engage your audience."
+    else:
+        return "Your post looks good!"
+
+
+def analyze_content(text):
+    sentiment = analyze_sentiment(text)
+    suggestion = suggest_improvements(text, sentiment)
+    return {"sentiment": sentiment, "suggestion": suggestion}
 
 
 def get_user_activity(db: Session, user_id: int, days: int = 30):

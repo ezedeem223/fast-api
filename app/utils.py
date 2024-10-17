@@ -348,3 +348,13 @@ def send_repost_notification(
     )
     db.add(notification)
     db.commit()
+
+
+def process_mentions(content: str, db: Session):
+    mentioned_usernames = re.findall(r"@(\w+)", content)
+    mentioned_users = []
+    for username in mentioned_usernames:
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if user:
+            mentioned_users.append(user)
+    return mentioned_users

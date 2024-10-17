@@ -29,6 +29,13 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+
+post_mentions = Table(
+    "post_mentions",
+    Base.metadata,
+    Column("post_id", Integer, ForeignKey("posts.id")),
+    Column("user_id", Integer, ForeignKey("users.id")),
+)
 # Определение таблиц ассоциаций
 community_tags = Table(
     "community_tags",
@@ -362,6 +369,9 @@ class User(Base):
     block_appeals = relationship(
         "BlockAppeal", foreign_keys=[BlockAppeal.user_id], back_populates="user"
     )
+    mentions = relationship(
+        "Post", secondary=post_mentions, back_populates="mentioned_users"
+    )
 
 
 class UserEvent(Base):
@@ -479,6 +489,14 @@ class Post(Base):
     is_repost = Column(Boolean, default=False)
     repost_count = Column(Integer, default=0)
     allow_reposts = Column(Boolean, default=True)
+    sentiment = Column(String)
+    sentiment_score = Column(Float)
+    content_suggestion = Column(String)
+    is_audio_post = Column(Boolean, default=False)
+    audio_url = Column(String, nullable=True)
+    is_poll = Column(Boolean, default=False)
+    poll_options = relationship("PollOption", back_populates="post")
+    poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
     owner = relationship("User", back_populates="posts")
     comments = relationship(
@@ -505,6 +523,9 @@ class Post(Base):
     repost_stats = relationship(
         "RepostStatistics", uselist=False, back_populates="post"
     )
+    mentioned_users = relationship(
+        "User", secondary=post_mentions, back_populates="mentions"
+    )
 
 
 class RepostStatistics(Base):
@@ -515,6 +536,34 @@ class RepostStatistics(Base):
     last_reposted = Column(DateTime, default=func.now())
 
     post = relationship("Post", back_populates="repost_stats")
+
+
+class PollOption(Base):
+    __tablename__ = "poll_options"
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"))
+    option_text = Column(String, nullable=False)
+    post = relationship("Post", back_populates="poll_options")
+    votes = relationship("PollVote", back_populates="option")
+
+
+class Poll(Base):
+    __tablename__ = "polls"
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), unique=True)
+    end_date = Column(DateTime)
+    post = relationship("Post", back_populates="poll")
+
+
+class PollVote(Base):
+    __tablename__ = "poll_votes"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    post_id = Column(Integer, ForeignKey("posts.id"))
+    option_id = Column(Integer, ForeignKey("poll_options.id"))
+    user = relationship("User", back_populates="poll_votes")
+    post = relationship("Post")
+    option = relationship("PollOption", back_populates="votes")
 
 
 class Notification(Base):

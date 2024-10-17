@@ -96,3 +96,11 @@ async def send_login_notification(email: str, ip_address: str, user_agent: str):
     If this wasn't you, please secure your account immediately.
     """
     await send_email_notification(to=email, subject=subject, body=body)
+
+
+async def send_mention_notification(to: str, mentioner: str, post_id: int):
+    subject = f"You've been mentioned by {mentioner}"
+    body = (
+        f"{mentioner} mentioned you in a post. Check it out: [link to post/{post_id}]"
+    )
+    await send_email_notification(to=to, subject=subject, body=body)

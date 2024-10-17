@@ -742,6 +742,9 @@ class PostCategoryBase(BaseModel):
     parent_id: Optional[int] = None
     is_active: bool = True
     hashtags: List[str] = []
+    analyze_content: bool = Field(
+        default=False, description="Flag to trigger content analysis"
+    )
 
 
 class PostCategoryCreate(PostCategoryBase):
@@ -848,6 +851,8 @@ class PostCreate(PostBase):
     is_help_request: bool = False
     category_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
+    content: str
+    mentioned_usernames: List[str] = []
 
 
 class Post(PostBase):
@@ -874,7 +879,40 @@ class PostOut(Post):
     hashtags: List[Hashtag] = []
     repost_count: int
     original_post: Optional["PostOut"] = None
+    sentiment: Optional[str]
+    sentiment_score: Optional[float]
+    content_suggestion: Optional[str]
+    mentioned_users: List[UserOut]
+    is_audio_post: bool
+    audio_url: Optional[str]
     model_config = ConfigDict(from_attributes=True)
+    is_poll: bool
+    poll_data: Optional[PollData]
+
+
+class PollOption(BaseModel):
+    id: int
+    option_text: str
+
+
+class PollData(BaseModel):
+    options: List[PollOption]
+    end_date: Optional[datetime]
+
+
+class PollCreate(BaseModel):
+    title: str
+    description: str
+    options: List[str]
+    end_date: Optional[datetime]
+
+
+class PollResults(BaseModel):
+    post_id: int
+    total_votes: int
+    results: List[Dict[str, Union[int, str, float]]]
+    is_ended: bool
+    end_date: Optional[datetime]
 
 
 # Comment models

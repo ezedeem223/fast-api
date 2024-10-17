@@ -50,6 +50,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
 from .ip_utils import get_client_ip, is_ip_banned
+from .analytics import model, tokenizer
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -244,3 +245,6 @@ async def startup_event():
             "schedule": 60.0,  # كل دقيقة
         },
     }
+    print("Loading content analysis model...")
+    model.eval()
+    print("Content analysis model loaded successfully!")
