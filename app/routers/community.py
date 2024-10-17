@@ -9,6 +9,7 @@ from sqlalchemy import func
 from fastapi.responses import HTMLResponse, StreamingResponse
 import csv
 from io import StringIO
+from ..utils import log_user_event
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["Communities"])
@@ -47,6 +48,10 @@ def create_community(
     db.add(new_community)
     db.commit()
     db.refresh(new_community)
+    log_user_event(
+        db, current_user.id, "create_community", {"community_id": new_community.id}
+    )
+
     return schemas.CommunityOut.from_orm(new_community)
 
 

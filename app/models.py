@@ -257,7 +257,13 @@ class User(Base):
     following_count = Column(Integer, default=0)
     followers_growth = Column(ARRAY(Integer), default=list)
     comment_count = Column(Integer, default=0)
-
+    warning_count = Column(Integer, default=0)
+    last_warning_date = Column(DateTime(timezone=True), nullable=True)
+    ban_count = Column(Integer, default=0)
+    current_ban_end = Column(DateTime(timezone=True), nullable=True)
+    total_ban_duration = Column(Interval, default=timedelta())
+    total_reports = Column(Integer, default=0)
+    valid_reports = Column(Integer, default=0)
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
         "Comment", back_populates="owner", cascade="all, delete-orphan"
@@ -351,6 +357,40 @@ class User(Base):
     block_appeals = relationship(
         "BlockAppeal", foreign_keys=[BlockAppeal.user_id], back_populates="user"
     )
+
+
+class UserEvent(Base):
+    __tablename__ = "user_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    event_type = Column(
+        String, nullable=False
+    )  # e.g., "login", "post", "comment", "report"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    details = Column(JSON, nullable=True)
+
+    user = relationship("User", back_populates="events")
+
+
+User.events = relationship("UserEvent", back_populates="user")
+
+
+class UserWarning(Base):
+    __tablename__ = "user_warnings"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    reason = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserBan(Base):
+    __tablename__ = "user_bans"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    reason = Column(String, nullable=False)
+    duration = Column(Interval, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class IPBan(Base):
@@ -596,6 +636,9 @@ class Report(Base):
     reporter = relationship(
         "User", foreign_keys=[reporter_id], back_populates="reports"
     )
+    is_valid = Column(Boolean, default=False)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     post = relationship("Post", back_populates="reports")
     comment = relationship("Comment", back_populates="reports")

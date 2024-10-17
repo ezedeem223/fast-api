@@ -20,7 +20,8 @@ from cachetools import cached, TTLCache
 import os
 from pathlib import Path
 import requests
-from ..utils import check_content_against_rules
+from ..utils import check_content_against_rules, log_user_event
+
 from sqlalchemy.dialects.postgresql import JSONB
 from ..content_filter import check_content, filter_content
 
@@ -210,6 +211,7 @@ def create_posts(
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
+    log_user_event(db, current_user.id, "create_post", {"post_id": new_post.id})
 
     send_email_notification(
         background_tasks=background_tasks,
@@ -265,7 +267,16 @@ def report_post(
     db: Session = Depends(get_db),
     current_user: int = Depends(oauth2.get_current_user),
 ):
-    report = models.Report(post_id=post_id, user_id=current_user.id, reason=reason)
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    report = models.Report(
+        post_id=post_id,
+        reported_user_id=post.owner_id,  # إضافة معرف المستخدم المُبلغ عنه
+        reporter_id=current_user.id,
+        reason=reason,
+    )
     db.add(report)
     db.commit()
     return {"message": "Report submitted successfully"}
@@ -314,6 +325,8 @@ def delete_post(
         )
     post_query.delete(synchronize_session=False)
     db.commit()
+    log_user_event(db, current_user.id, "delete_post", {"post_id": id})
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

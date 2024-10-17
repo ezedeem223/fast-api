@@ -122,10 +122,17 @@ def get_current_user(
 
         if detect_ip_evasion(db, user.id, client_ip):
             logger.warning(f"Possible IP evasion detected for user {user.id}")
-            # Здесь вы можете добавить дополнительную логику, например:
-            # - Отправить уведомление администратору
-            # - Заблокировать пользователя временно
-            # - Требовать дополнительную аутентификацию
+            # هنا يمكنك إضافة منطق إضافي، مثل:
+            # - إرسال إشعار للمسؤول
+            # - حظر المستخدم مؤقتًا
+            # - طلب مصادقة إضافية
+
+        # التحقق من حالة الحظر للمستخدم
+        if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User is banned until {user.current_ban_end}",
+            )
 
         return user
     except Exception as e:

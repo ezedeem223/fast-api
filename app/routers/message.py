@@ -22,6 +22,7 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 import emoji
 from ..link_preview import extract_link_preview
+from ..utils import log_user_event
 
 
 router = APIRouter(prefix="/message", tags=["Messages"])
@@ -135,6 +136,9 @@ async def create_message(
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+    log_user_event(
+        db, current_user.id, "send_message", {"receiver_id": message.receiver_id}
+    )
 
     # تحديث إحصائيات المحادثة
     conversation_stats = (

@@ -162,3 +162,45 @@ celery_app.conf.beat_schedule["calculate-ban-effectiveness"] = {
     "task": "app.celery_worker.calculate_ban_effectiveness",
     "schedule": crontab(hour=0, minute=5),  # تشغيل في الساعة 00:05 كل يوم
 }
+
+
+@celery_app.task
+def remove_expired_bans():
+    db = SessionLocal()
+    try:
+        expired_bans = (
+            db.query(models.User)
+            .filter(models.User.current_ban_end < datetime.now())
+            .all()
+        )
+        for user in expired_bans:
+            user.current_ban_end = None
+        db.commit()
+    finally:
+        db.close()
+
+
+# أضف هذه المهمة إلى جدول المهام
+celery_app.conf.beat_schedule["remove-expired-bans"] = {
+    "task": "app.celery_worker.remove_expired_bans",
+    "schedule": 3600.0,  # كل ساعة
+}
+
+
+@celery_app.task
+def reset_report_counters():
+    db = SessionLocal()
+    try:
+        db.query(models.User).update(
+            {models.User.total_reports: 0, models.User.valid_reports: 0}
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+# أضف هذه المهمة إلى جدول المهام
+celery_app.conf.beat_schedule["reset-report-counters"] = {
+    "task": "app.celery_worker.reset_report_counters",
+    "schedule": crontab(day_of_month=1, hour=0, minute=0),  # تشغيل في بداية كل شهر
+}

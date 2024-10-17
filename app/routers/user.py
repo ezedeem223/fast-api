@@ -19,6 +19,7 @@ from pydantic import HttpUrl
 import pyotp
 from datetime import timedelta
 from ..cache import cache
+from ..utils import log_user_event
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -313,6 +314,8 @@ def update_user_profile(
 
     db.commit()
     db.refresh(current_user)
+    log_user_event(db, current_user.id, "update_profile")
+
     return get_user_profile(current_user.id, db)
 
 

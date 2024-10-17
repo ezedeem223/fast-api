@@ -3,8 +3,11 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List
+from ..analytics import get_user_activity, get_problematic_users, get_ban_statistics
+from datetime import date, timedelta
+from sqlalchemy import func
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 
 
 async def get_current_admin(
@@ -102,4 +105,123 @@ async def get_communities_overview(
     return {
         "total_communities": total_communities,
         "active_communities": active_communities,
+    }
+
+
+@router.get("/user-activity/{user_id}")
+def user_activity(
+    user_id: int,
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    return get_user_activity(db, user_id, days)
+
+
+@router.get("/problematic-users", response_model=List[schemas.UserOut])
+def problematic_users(
+    threshold: int = 5,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    users = get_problematic_users(db, threshold)
+    return [schemas.UserOut.from_orm(user) for user in users]
+
+
+@router.get("/ban-statistics")
+def ban_statistics(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    return get_ban_statistics(db)
+
+
+@router.get("/ban-overview", response_model=schemas.BanStatisticsOverview)
+async def get_ban_statistics_overview(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    today = date.today()
+    last_30_days = today - timedelta(days=30)
+
+    stats = (
+        db.query(models.BanStatistics)
+        .filter(models.BanStatistics.date >= last_30_days)
+        .all()
+    )
+
+    total_bans = sum(stat.total_bans for stat in stats)
+    ip_bans = sum(stat.ip_bans for stat in stats)
+    word_bans = sum(stat.word_bans for stat in stats)
+    user_bans = sum(stat.user_bans for stat in stats)
+    avg_effectiveness = (
+        sum(stat.effectiveness_score for stat in stats) / len(stats) if stats else 0
+    )
+
+    return {
+        "total_bans": total_bans,
+        "ip_bans": ip_bans,
+        "word_bans": word_bans,
+        "user_bans": user_bans,
+        "average_effectiveness": avg_effectiveness,
+    }
+
+
+@router.get("/common-ban-reasons", response_model=List[schemas.BanReasonOut])
+async def get_common_ban_reasons(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+    limit: int = 10,
+):
+    reasons = (
+        db.query(models.BanReason)
+        .order_by(models.BanReason.count.desc())
+        .limit(limit)
+        .all()
+    )
+    return reasons
+
+
+@router.get("/ban-effectiveness-trend", response_model=List[schemas.EffectivenessTrend])
+async def get_ban_effectiveness_trend(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+    days: int = 30,
+):
+    today = date.today()
+    start_date = today - timedelta(days=days)
+
+    trend = (
+        db.query(models.BanStatistics.date, models.BanStatistics.effectiveness_score)
+        .filter(models.BanStatistics.date >= start_date)
+        .order_by(models.BanStatistics.date)
+        .all()
+    )
+
+    return [{"date": t.date, "effectiveness": t.effectiveness_score} for t in trend]
+
+
+@router.get("/ban-type-distribution", response_model=schemas.BanTypeDistribution)
+async def get_ban_type_distribution(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+    days: int = 30,
+):
+    today = date.today()
+    start_date = today - timedelta(days=days)
+
+    distribution = (
+        db.query(
+            func.sum(models.BanStatistics.ip_bans).label("ip_bans"),
+            func.sum(models.BanStatistics.word_bans).label("word_bans"),
+            func.sum(models.BanStatistics.user_bans).label("user_bans"),
+        )
+        .filter(models.BanStatistics.date >= start_date)
+        .first()
+    )
+
+    return {
+        "ip_bans": distribution.ip_bans or 0,
+        "word_bans": distribution.word_bans or 0,
+        "user_bans": distribution.user_bans or 0,
     }

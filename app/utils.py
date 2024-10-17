@@ -252,3 +252,9 @@ def update_ban_statistics(
     ) / stats.total_bans
 
     db.commit()
+
+
+def log_user_event(db: Session, user_id: int, event_type: str, details: dict = None):
+    event = models.UserEvent(user_id=user_id, event_type=event_type, details=details)
+    db.add(event)
+    db.commit()

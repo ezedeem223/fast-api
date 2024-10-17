@@ -451,6 +451,33 @@ class Ticket(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WarningCreate(BaseModel):
+    reason: str
+
+
+class BanCreate(BaseModel):
+    reason: str
+
+
+class UserWarningOut(BaseModel):
+    id: int
+    user_id: int
+    reason: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserBanOut(BaseModel):
+    id: int
+    user_id: int
+    reason: str
+    duration: timedelta
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Base models
 class UserBase(BaseModel):
     email: EmailStr
@@ -876,6 +903,10 @@ class Report(ReportBase):
     reporter_id: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReportReview(BaseModel):
+    is_valid: bool
 
 
 class UserRoleUpdate(BaseModel):

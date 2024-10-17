@@ -7,6 +7,7 @@ from typing import List
 from ..notifications import send_email_notification
 from ..cache import cache
 from datetime import datetime, timedelta
+from ..utils import log_user_event
 
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
@@ -66,6 +67,8 @@ async def follow_user(
     current_user.following_count += 1
 
     db.commit()
+
+    log_user_event(db, current_user.id, "follow_user", {"followed_id": user_id})
 
     background_tasks.add_task(
         send_email_notification,

@@ -10,6 +10,7 @@ from fastapi_mail import FastMail, MessageSchema
 from .. import database, schemas, models, utils, oauth2
 from ..config import settings
 from ..notifications import send_login_notification
+from ..utils import log_user_event
 
 router = APIRouter(tags=["Authentication"])
 
@@ -62,6 +63,15 @@ def login(
             "token_type": "bearer",
             "user_id": user.id,
         }
+    log_user_event(
+        db,
+        user.id,
+        "login",
+        {
+            "ip": request.client.host,
+            "user_agent": request.headers.get("user-agent", ""),
+        },
+    )
 
     user.last_login = datetime.now(timezone.utc)
     session = models.UserSession(
@@ -150,7 +160,7 @@ def logout(
     if session:
         db.delete(session)
         db.commit()
-
+    log_user_event(db, current_user.id, "logout")
     return {"message": "Logged out successfully"}
 
 

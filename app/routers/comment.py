@@ -13,7 +13,12 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List, Optional
 from ..notifications import send_email_notification
-from ..utils import check_content_against_rules, check_for_profanity, validate_urls
+from ..utils import (
+    check_content_against_rules,
+    check_for_profanity,
+    validate_urls,
+    log_user_event,
+)
 from datetime import datetime, timedelta
 from ..config import settings
 import emoji
@@ -147,6 +152,12 @@ async def create_comment(
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+    log_user_event(
+        db,
+        current_user.id,
+        "create_comment",
+        {"comment_id": new_comment.id, "post_id": comment.post_id},
+    )
 
     # إرسال إشعار لصاحب المنشور
     background_tasks.add_task(
