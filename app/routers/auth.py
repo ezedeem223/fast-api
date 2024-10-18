@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import uuid
 from jose import jwt, JWTError
 from fastapi_mail import FastMail, MessageSchema
+from pydantic import EmailStr
 
 from .. import database, schemas, models, utils, oauth2
 from ..config import settings
@@ -25,6 +26,9 @@ def login(
     request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """
+    Обработка входа пользователя в систему.
+    """
     user = (
         db.query(models.User)
         .filter(models.User.email == user_credentials.username)
@@ -33,7 +37,7 @@ def login(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials"
         )
 
     if user.account_locked_until and user.account_locked_until > datetime.now(
@@ -50,10 +54,9 @@ def login(
             user.account_locked_until = datetime.now(timezone.utc) + LOCKOUT_DURATION
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials"
         )
 
-    # Reset failed attempts on successful login
     user.failed_login_attempts = 0
     user.account_locked_until = None
 
@@ -63,39 +66,8 @@ def login(
             "token_type": "bearer",
             "user_id": user.id,
         }
-    log_user_event(
-        db,
-        user.id,
-        "login",
-        {
-            "ip": request.client.host,
-            "user_agent": request.headers.get("user-agent", ""),
-        },
-    )
 
-    user.last_login = datetime.now(timezone.utc)
-    session = models.UserSession(
-        user_id=user.id,
-        session_id=str(uuid.uuid4()),
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent", ""),
-    )
-    db.add(session)
-    db.commit()
-
-    access_token = oauth2.create_access_token(
-        data={"user_id": user.id, "session_id": session.session_id}
-    )
-
-    # Send login notification
-    background_tasks.add_task(
-        send_login_notification,
-        user.email,
-        request.client.host,
-        request.headers.get("user-agent", ""),
-    )
-
-    return {"access_token": access_token, "token_type": "bearer"}
+    return complete_login(user, db, request, background_tasks)
 
 
 @router.post("/login/2fa", response_model=schemas.Token)
@@ -106,6 +78,9 @@ def login_2fa(
     request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """
+    Обработка входа с двухфакторной аутентификацией.
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user or not user.is_2fa_enabled:
         raise HTTPException(status_code=400, detail="Invalid request")
@@ -114,6 +89,13 @@ def login_2fa(
     if not totp.verify(otp.otp):
         raise HTTPException(status_code=400, detail="Invalid OTP")
 
+    return complete_login(user, db, request, background_tasks)
+
+
+def complete_login(user, db, request, background_tasks):
+    """
+    Завершение процесса входа после успешной аутентификации.
+    """
     user.last_login = datetime.now(timezone.utc)
     session = models.UserSession(
         user_id=user.id,
@@ -128,7 +110,16 @@ def login_2fa(
         data={"user_id": user.id, "session_id": session.session_id}
     )
 
-    # Send login notification
+    log_user_event(
+        db,
+        user.id,
+        "login",
+        {
+            "ip": request.client.host,
+            "user_agent": request.headers.get("user-agent", ""),
+        },
+    )
+
     background_tasks.add_task(
         send_login_notification,
         user.email,
@@ -145,6 +136,9 @@ def logout(
     current_user: models.User = Depends(oauth2.get_current_user),
     token: str = Depends(oauth2.oauth2_scheme),
 ):
+    """
+    Выход пользователя из системы.
+    """
     token_data = oauth2.verify_access_token(
         token, HTTPException(status_code=401, detail="Invalid token")
     )
@@ -170,17 +164,24 @@ def logout_all_devices(
     current_session: str = Depends(oauth2.get_current_session),
     db: Session = Depends(database.get_db),
 ):
+    """
+    Выход пользователя из всех устройств, кроме текущего.
+    """
     db.query(models.UserSession).filter(
         models.UserSession.user_id == current_user.id,
         models.UserSession.session_id != current_session,
     ).delete()
     db.commit()
+    log_user_event(db, current_user.id, "logout_all_devices")
     return {"message": "Logged out from all other devices"}
 
 
 def create_password_reset_token(email: str) -> str:
+    """
+    Создание токена для сброса пароля.
+    """
     expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode = {"exp": expire, "email": email}
+    to_encode = {"exp": expire, "sub": email}
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -190,11 +191,15 @@ async def reset_password_request(
     db: Session = Depends(database.get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """
+    Обработка запроса на сброс пароля.
+    """
     user = db.query(models.User).filter(models.User.email == email.email).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        # Не раскрываем информацию о существовании пользователя
+        return {
+            "message": "If a user with this email exists, a password reset link has been sent."
+        }
 
     token = create_password_reset_token(email.email)
     reset_link = f"https://yourapp.com/reset-password?token={token}"
@@ -208,19 +213,25 @@ async def reset_password_request(
 
     fm = FastMail(settings.mail_config)
     background_tasks.add_task(fm.send_message, message)
+    log_user_event(db, user.id, "password_reset_requested")
 
-    return {"message": "Password reset instructions sent to your email"}
+    return {
+        "message": "If a user with this email exists, a password reset link has been sent."
+    }
 
 
 @router.post("/reset-password")
 async def reset_password(
     reset_data: schemas.PasswordReset, db: Session = Depends(database.get_db)
 ):
+    """
+    Сброс пароля пользователя.
+    """
     try:
         payload = jwt.decode(
             reset_data.token, settings.secret_key, algorithms=[settings.algorithm]
         )
-        email: str = payload.get("email")
+        email: str = payload.get("sub")
         if email is None:
             raise HTTPException(status_code=400, detail="Invalid token")
     except JWTError:
@@ -233,5 +244,6 @@ async def reset_password(
     hashed_password = utils.hash(reset_data.new_password)
     user.password = hashed_password
     db.commit()
+    log_user_event(db, user.id, "password_reset_completed")
 
     return {"message": "Password reset successfully"}

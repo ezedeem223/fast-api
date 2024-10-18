@@ -319,6 +319,12 @@ class BanTypeDistribution(BaseModel):
     user_bans: int
 
 
+class CopyrightType(str, Enum):
+    ALL_RIGHTS_RESERVED = "all_rights_reserved"
+    CREATIVE_COMMONS = "creative_commons"
+    PUBLIC_DOMAIN = "public_domain"
+
+
 class BlockedUserOut(BaseModel):
     id: int
     username: str
@@ -493,6 +499,9 @@ class PostBase(BaseModel):
     original_post_id: Optional[int] = None
     is_repost: bool = False
     allow_reposts: bool = True
+    copyright_type: CopyrightType = CopyrightType.ALL_RIGHTS_RESERVED
+    custom_copyright: Optional[str] = None
+    is_archived: bool = False
 
 
 class CommentBase(BaseModel):
@@ -501,6 +510,24 @@ class CommentBase(BaseModel):
 
 class ReportBase(BaseModel):
     report_reason: str
+    reason: str
+    ai_detected: bool = False
+    ai_confidence: Optional[float] = None
+
+
+class ReportCreate(ReportBase):
+    post_id: Optional[int] = None
+    comment_id: Optional[int] = None
+
+
+class ReportOut(ReportBase):
+    id: int
+    post_id: Optional[int]
+    comment_id: Optional[int]
+    reporter_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserPublicKeyUpdate(BaseModel):
@@ -888,6 +915,10 @@ class PostOut(Post):
     model_config = ConfigDict(from_attributes=True)
     is_poll: bool
     poll_data: Optional[PollData]
+    copyright_type: CopyrightType
+    custom_copyright: Optional[str]
+    is_archived: bool
+    archived_at: Optional[datetime]
 
 
 class PollOption(BaseModel):

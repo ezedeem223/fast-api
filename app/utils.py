@@ -18,7 +18,13 @@ from urllib.parse import urlparse
 from textblob import TextBlob
 from sqlalchemy.orm import Session
 from . import models
+from transformers import pipeline
+from .config import settings
 
+model_name = "microsoft/DialogRPT-offensive"
+offensive_classifier = pipeline(
+    "text-classification", model=model_name, device=0 if settings.USE_GPU else -1
+)
 
 # إعداد التشفير باستخدام bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -358,3 +364,15 @@ def process_mentions(content: str, db: Session):
         if user:
             mentioned_users.append(user)
     return mentioned_users
+
+
+def is_content_offensive(text: str) -> tuple:
+    """
+    فحص النص للكشف عن المحتوى المسيء باستخدام نموذج الذكاء الاصطناعي.
+
+    :param text: النص المراد فحصه
+    :return: زوج يحتوي على (هل النص مسيء، درجة الثقة)
+    """
+    result = offensive_classifier(text)[0]
+    is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
+    return is_offensive, result["score"]

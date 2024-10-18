@@ -27,6 +27,7 @@ from ..utils import (
     log_user_event,
     process_mentions,
     get_or_create_hashtag,
+    is_content_offensive,
 )
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -257,6 +258,8 @@ def create_posts(
         category_id=post.category_id,
         scheduled_time=post.scheduled_time,
         is_published=post.scheduled_time is None,
+        copyright_type=post.copyright_type,
+        custom_copyright=post.custom_copyright,
     )
 
     for hashtag_name in post.hashtags:
@@ -272,6 +275,13 @@ def create_posts(
         new_post.sentiment = analysis_result["sentiment"]["sentiment"]
         new_post.sentiment_score = analysis_result["sentiment"]["score"]
         new_post.content_suggestion = analysis_result["suggestion"]
+
+    is_offensive, confidence = is_content_offensive(new_post.content)
+    if is_offensive:
+        new_post.is_flagged = True
+        new_post.flag_reason = (
+            f"AI detected potentially offensive content (confidence: {confidence:.2f})"
+        )
 
     db.add(new_post)
     db.commit()
@@ -367,14 +377,25 @@ def report_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    report = models.Report(
-        post_id=post_id,
+    is_offensive, confidence = is_content_offensive(post.content)
+
+    report_db = models.Report(
+        post_id=report.post_id,
         reported_user_id=post.owner_id,
         reporter_id=current_user.id,
-        reason=reason,
+        reason=report.reason,
+        ai_detected=is_offensive,
+        ai_confidence=confidence,
     )
     db.add(report)
+    if is_offensive and not post.is_flagged:
+        post.is_flagged = True
+        post.flag_reason = (
+            f"AI detected offensive content (confidence: {confidence:.2f})"
+        )
     db.commit()
+    db.refresh(report)
+
     return {"message": "Report submitted successfully"}
 
 
@@ -424,6 +445,11 @@ def update_post(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to perform requested action",
         )
+
+    if updated_post.copyright_type is not None:
+        post.copyright_type = updated_post.copyright_type
+    if updated_post.custom_copyright is not None:
+        post.custom_copyright = updated_post.custom_copyright
 
     if not updated_post.content.strip():
         raise HTTPException(
@@ -781,7 +807,16 @@ def get_posts_with_mentions(
     current_user: models.User = Depends(oauth2.get_current_user),
     skip: int = 0,
     limit: int = 10,
+    search: Optional[str] = "",
+    include_archived: bool = False,
 ):
+    query = db.query(models.Post)
+
+    if not include_archived:
+        query = query.filter(models.Post.is_archived == False)
+
+    if search:
+        query = query.filter(models.Post.title.contains(search))
     posts = (
         db.query(models.Post)
         .filter(models.Post.mentioned_users.any(id=current_user.id))
@@ -1039,3 +1074,30 @@ async def get_poll_results(
         "is_ended": poll.end_date < datetime.now() if poll else False,
         "end_date": poll.end_date if poll else None,
     }
+
+
+@router.put("/{id}/archive", response_model=schemas.PostOut)
+def archive_post(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post_query = db.query(models.Post).filter(models.Post.id == id)
+    post = post_query.first()
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id: {id} does not exist",
+        )
+
+    if post.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform requested action",
+        )
+
+    post.is_archived = not post.is_archived
+    post.archived_at = func.now() if post.is_archived else None
+    db.commit()
+    return post

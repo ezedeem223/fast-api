@@ -495,6 +495,15 @@ class Post(Base):
     is_audio_post = Column(Boolean, default=False)
     audio_url = Column(String, nullable=True)
     is_poll = Column(Boolean, default=False)
+    copyright_type = Column(
+        Enum(CopyrightType), nullable=False, default=CopyrightType.ALL_RIGHTS_RESERVED
+    )
+    custom_copyright = Column(String, nullable=True)
+    is_archived = Column(Boolean, default=False)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
+    is_flagged: Column = Column(Boolean, default=False)
+    flag_reason: Column = Column(String, nullable=True)
+
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -564,6 +573,12 @@ class PollVote(Base):
     user = relationship("User", back_populates="poll_votes")
     post = relationship("Post")
     option = relationship("PollOption", back_populates="votes")
+
+
+class CopyrightType(str, PyEnum):
+    ALL_RIGHTS_RESERVED = "all_rights_reserved"
+    CREATIVE_COMMONS = "creative_commons"
+    PUBLIC_DOMAIN = "public_domain"
 
 
 class Notification(Base):
@@ -745,6 +760,9 @@ class Report(Base):
     is_valid = Column(Boolean, default=False)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    ai_detected: Column = Column(Boolean, default=False)
+    ai_confidence: Column = Column(Float, nullable=True)
+
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     post = relationship("Post", back_populates="reports")
     comment = relationship("Comment", back_populates="reports")

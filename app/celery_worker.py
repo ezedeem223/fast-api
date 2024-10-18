@@ -7,6 +7,8 @@ from app.database import SessionLocal
 from app import models
 from datetime import datetime
 from .routers.post import send_notifications_and_share
+from app.utils import is_content_offensive
+
 
 # إعداد Celery
 celery_app = Celery(
@@ -30,6 +32,10 @@ conf = ConnectionConfig(
 
 # إنشاء كائن FastMail مرة واحدة لاستخدامه في جميع المهام
 fm = FastMail(conf)
+celery_app.conf.beat_schedule["check-old-posts-content"] = {
+    "task": "app.celery_worker.check_old_posts_content",
+    "schedule": crontab(hour=3, minute=0),  # تشغيل كل يوم في الساعة 3 صباحًا
+}
 
 
 @celery_app.task
@@ -47,6 +53,21 @@ def send_email_task(email_to: List[EmailStr], subject: str, body: str):
         fm.send_message(message)
     except Exception as e:
         print(f"Failed to send email: {e}")
+
+
+@celery_app.task
+def check_old_posts_content():
+    db = SessionLocal()
+    try:
+        old_posts = db.query(models.Post).filter(models.Post.is_flagged == False).all()
+        for post in old_posts:
+            is_offensive, confidence = is_content_offensive(post.content)
+            if is_offensive:
+                post.is_flagged = True
+                post.flag_reason = f"AI detected potentially offensive content (delayed check, confidence: {confidence:.2f})"
+        db.commit()
+    finally:
+        db.close()
 
 
 @celery_app.task
