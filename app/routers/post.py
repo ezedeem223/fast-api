@@ -38,6 +38,7 @@ import aiofiles
 from pydub import AudioSegment
 import uuid
 from datetime import datetime, timedelta
+from ..media_processing import process_media_file
 
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -247,6 +248,15 @@ def create_posts(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Post content violates community rules",
             )
+
+    if file:
+        file_path = f"uploads/{file.filename}"
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        new_post.media_url = file_path
+        new_post.media_type = file.content_type
+        new_post.media_text = process_media_file(file_path)
 
     new_post = models.Post(
         owner_id=current_user.id,

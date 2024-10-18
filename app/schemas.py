@@ -64,6 +64,14 @@ class SortOption(str, Enum):
     INTERACTION_COUNT = "interaction_count"
     REPOST_COUNT = "repost_count"
     POPULARITY = "popularity"
+    RELEVANCE = "relevance"
+    DATE_DESC = "date_desc"
+    DATE_ASC = "date_asc"
+
+
+class SearchParams(BaseModel):
+    query: str
+    sort_by: SortOption = SortOption.RELEVANCE
 
 
 class UserFollowersSettings(BaseModel):
@@ -441,6 +449,19 @@ class UserAnalytics(BaseModel):
     daily_statistics: List[UserStatisticsOut]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SearchStatOut(BaseModel):
+    query: str
+    count: int
+    last_searched: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SearchResponse(BaseModel):
+    results: List[PostOut]
+    spell_suggestion: str
+    search_suggestions: List[str]
 
 
 class TicketCreate(BaseModel):
@@ -961,6 +982,9 @@ class PostOut(Post):
     custom_copyright: Optional[str]
     is_archived: bool
     archived_at: Optional[datetime]
+    media_url: Optional[str]
+    media_type: Optional[str]
+    media_text: Optional[str]
 
 
 class PollOption(BaseModel):

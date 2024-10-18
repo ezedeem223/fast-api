@@ -1,14 +1,48 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
 from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List, Optional
-from ..analytics import get_user_activity, get_problematic_users, get_ban_statistics
+from ..analytics import (
+    get_user_activity,
+    get_problematic_users,
+    get_ban_statistics,
+    get_popular_searches,
+    get_recent_searches,
+    generate_search_trends_chart,
+)
+from fastapi.templating import Jinja2Templates
+
 from datetime import date, timedelta
 from ..utils import cache  # افتراض أننا أضفنا وظيفة للتخزين المؤقت
 
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
+
+
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    current_user: models.User = Depends(oauth2.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    search_trends_chart = generate_search_trends_chart()
+    popular_searches = get_popular_searches(db, limit=10)
+    recent_searches = get_recent_searches(db, limit=10)
+
+    return templates.TemplateResponse(
+        "admin_dashboard.html",
+        {
+            "request": request,
+            "search_trends_chart": search_trends_chart,
+            "popular_searches": popular_searches,
+            "recent_searches": recent_searches,
+        },
+    )
 
 
 async def get_current_admin(

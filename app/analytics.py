@@ -4,6 +4,12 @@ from . import models
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from .config import settings
+import matplotlib.pyplot as plt
+import seaborn as sns
+import io
+import base64
+from .models import SearchStatistics, User
+from sqlalchemy.orm import Session
 
 
 # تهيئة النموذج والتوكنايزر
@@ -83,3 +89,88 @@ def get_ban_statistics(db: Session):
         func.count(models.UserBan.id).label("total_bans"),
         func.avg(models.UserBan.duration).label("avg_duration"),
     ).first()
+
+
+def record_search_query(db: Session, query: str, user_id: int):
+    search_stat = (
+        db.query(SearchStatistics)
+        .filter(SearchStatistics.query == query, SearchStatistics.user_id == user_id)
+        .first()
+    )
+    if search_stat:
+        search_stat.count += 1
+    else:
+        search_stat = SearchStatistics(query=query, user_id=user_id)
+        db.add(search_stat)
+    db.commit()
+
+
+def get_popular_searches(db: Session, limit: int = 10):
+    return (
+        db.query(SearchStatistics)
+        .order_by(SearchStatistics.count.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_recent_searches(db: Session, limit: int = 10):
+    return (
+        db.query(SearchStatistics)
+        .order_by(SearchStatistics.last_searched.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_user_searches(db: Session, user_id: int, limit: int = 10):
+    return (
+        db.query(SearchStatistics)
+        .filter(SearchStatistics.user_id == user_id)
+        .order_by(SearchStatistics.last_searched.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def clean_old_statistics(db: Session, days: int = 30):
+    threshold = datetime.now() - timedelta(days=days)
+    db.query(SearchStatistics).filter(
+        SearchStatistics.last_searched < threshold
+    ).delete()
+    db.commit()
+
+
+def generate_search_trends_chart():
+    db = next(get_db())
+    data = (
+        db.query(
+            func.date(SearchStatistics.last_searched).label("date"),
+            func.count(SearchStatistics.id).label("count"),
+        )
+        .group_by(func.date(SearchStatistics.last_searched))
+        .order_by("date")
+        .all()
+    )
+
+    dates = [row.date for row in data]
+    counts = [row.count for row in data]
+
+    plt.figure(figsize=(12, 6))
+    sns.lineplot(x=dates, y=counts)
+    plt.title("Search Trends Over Time")
+    plt.xlabel("Date")
+    plt.ylabel("Number of Searches")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format="png")
+    buffer.seek(0)
+    image_png = buffer.getvalue()
+    buffer.close()
+
+    graphic = base64.b64encode(image_png)
+    graphic = graphic.decode("utf-8")
+
+    return graphic

@@ -50,9 +50,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
 from .ip_utils import get_client_ip, is_ip_banned
-from .analytics import model, tokenizer
+from .analytics import model, tokenizer, clean_old_statistics
 from fastapi_utils.tasks import repeat_every
 from app.routers.search import update_search_suggestions
+from .utils import update_search_vector, spell
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -156,6 +157,9 @@ app.include_router(category_management.router)
 
 
 manager = ConnectionManager()
+scheduler = BackgroundScheduler()
+scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
+scheduler.start()
 
 
 @app.get("/")
@@ -190,6 +194,9 @@ async def startup_event():
     db = SessionLocal()
     create_default_categories(db)
     db.close()
+    update_search_vector()
+    arabic_words_path = Path(__file__).parent / "arabic_words.txt"
+    spell.word_frequency.load_dictionary(str(arabic_words_path))
 
 
 @app.middleware("http")

@@ -1,30 +1,68 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime
 from .. import models, database, schemas, oauth2
 from ..database import get_db
 from sqlalchemy import or_, and_
 from ..config import redis_client
 import json
-
+from ..utils import (
+    search_posts,
+    get_spell_suggestions,
+    format_spell_suggestions,
+    sort_search_results,
+)
+from ..schemas import SearchParams, SearchResponse, SortOption
+from ..analytics import (
+    record_search_query,
+    get_popular_searches,
+    get_recent_searches,
+    get_user_searches,
+    generate_search_trends_chart,
+)
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
 
-@router.get("/", response_model=List[schemas.PostOut])
-def search_posts(query: Optional[str] = "", db: Session = Depends(database.get_db)):
-    if not query:
-        raise HTTPException(status_code=400, detail="Query parameter cannot be empty.")
+@router.post("/", response_model=SearchResponse)
+async def search(
+    search_params: SearchParams,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    cache_key = f"search:{search_params.query}:{search_params.sort_by}"
+    cached_result = redis_client.get(cache_key)
 
-    # تحسين الاستعلام بإضافة تصفية أو ترتيب إذا لزم الأمر
-    posts = db.query(models.Post).filter(models.Post.content.contains(query)).all()
+    if cached_result:
+        return json.loads(cached_result)
 
-    if not posts:
-        raise HTTPException(
-            status_code=404, detail="No posts found matching the query."
-        )
+    # Record search query
+    record_search_query(db, search_params.query, current_user.id)
 
-    return posts
+    suggestions = get_spell_suggestions(search_params.query)
+    spell_suggestion = format_spell_suggestions(search_params.query, suggestions)
+
+    results = search_posts(search_params.query, db)
+    sorted_results = sort_search_results(results, search_params.sort_by, db)
+
+    # Get search suggestions
+    popular_searches = get_popular_searches(db, limit=3)
+    user_searches = get_user_searches(db, current_user.id, limit=2)
+    search_suggestions = list(
+        set([stat.query for stat in popular_searches + user_searches])
+    )
+
+    search_response = {
+        "results": sorted_results,
+        "spell_suggestion": spell_suggestion,
+        "search_suggestions": search_suggestions,
+    }
+
+    if results:
+        redis_client.setex(cache_key, 3600, json.dumps(search_response))
+
+    return search_response
 
 
 @router.get("/advanced", response_model=List[schemas.PostOut])
@@ -37,7 +75,7 @@ async def advanced_search(
     search_scope: Optional[str] = Query(
         None, enum=["title", "content", "comments", "all"]
     ),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     skip: int = 0,
     limit: int = 20,
@@ -75,13 +113,13 @@ async def advanced_search(
 
 
 @router.get("/categories", response_model=List[schemas.Category])
-async def get_categories(db: Session = Depends(database.get_db)):
+async def get_categories(db: Session = Depends(get_db)):
     categories = db.query(models.Category).all()
     return categories
 
 
 @router.get("/authors", response_model=List[schemas.UserOut])
-async def get_authors(db: Session = Depends(database.get_db)):
+async def get_authors(db: Session = Depends(get_db)):
     authors = db.query(models.User).filter(models.User.post_count > 0).all()
     return authors
 
@@ -89,10 +127,9 @@ async def get_authors(db: Session = Depends(database.get_db)):
 @router.get("/autocomplete", response_model=List[schemas.SearchSuggestionOut])
 async def autocomplete(
     query: str = Query(..., min_length=1),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     limit: int = 10,
 ):
-    # محاولة الحصول على النتائج من Redis أولاً
     cache_key = f"autocomplete:{query}"
     cached_result = redis_client.get(cache_key)
     if cached_result:
@@ -108,7 +145,6 @@ async def autocomplete(
 
     result = [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
 
-    # تخزين النتيجة في Redis لمدة 5 دقائق
     redis_client.setex(cache_key, 300, json.dumps([s.dict() for s in result]))
 
     return result
@@ -117,7 +153,7 @@ async def autocomplete(
 @router.post("/record-search")
 async def record_search(
     term: str,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     suggestion = (
@@ -134,13 +170,36 @@ async def record_search(
     return {"status": "recorded"}
 
 
-# دالة مساعدة لتحديث اقتراحات البحث بناءً على محتوى المنشورات
+@router.get("/popular", response_model=List[schemas.SearchStatOut])
+async def popular_searches(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_admin),
+    limit: int = Query(10, ge=1, le=100),
+):
+    return get_popular_searches(db, limit)
+
+
+@router.get("/recent", response_model=List[schemas.SearchStatOut])
+async def recent_searches(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_admin),
+    limit: int = Query(10, ge=1, le=100),
+):
+    return get_recent_searches(db, limit)
+
+
+@router.get("/trends")
+async def search_trends(current_user: models.User = Depends(oauth2.get_current_admin)):
+    chart = generate_search_trends_chart()
+    return {"chart": chart}
+
+
 def update_search_suggestions(db: Session):
     posts = db.query(models.Post).all()
     for post in posts:
         words = set(post.title.split() + post.content.split())
         for word in words:
-            if len(word) > 2:  # تجاهل الكلمات القصيرة جدًا
+            if len(word) > 2:
                 suggestion = (
                     db.query(models.SearchSuggestion)
                     .filter(models.SearchSuggestion.term == word)

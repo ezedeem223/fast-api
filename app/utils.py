@@ -24,7 +24,13 @@ import secrets
 from cryptography.fernet import Fernet
 import time
 from collections import deque
+from sqlalchemy import func, text, desc, asc
+from .database import engine
+from .models import Post
+from spellchecker import SpellChecker
+from .media_processing import process_media_file
 
+spell = SpellChecker()
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
@@ -464,3 +470,66 @@ def clean_old_quality_buffers():
     for call_id in list(quality_buffers.keys()):
         if current_time - quality_buffers[call_id].last_update_time > 300:  # 5 دقائق
             del quality_buffers[call_id]
+
+
+def update_search_vector():
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                """
+            UPDATE posts
+            SET search_vector = to_tsvector('english', 
+                coalesce(title,'') || ' ' || 
+                coalesce(content,'') || ' ' || 
+                coalesce(media_text,''))
+            """
+            )
+        )
+
+
+def search_posts(query: str, db: Session):
+    search_query = func.plainto_tsquery("english", query)
+    return (
+        db.query(Post)
+        .filter(
+            or_(
+                Post.search_vector.op("@@")(search_query),
+                Post.media_text.ilike(f"%{query}%"),
+            )
+        )
+        .all()
+    )
+
+
+def get_spell_suggestions(query: str) -> List[str]:
+    words = query.split()
+    suggestions = []
+    for word in words:
+        if word not in spell:
+            suggestions.append(spell.correction(word))
+        else:
+            suggestions.append(word)
+    return suggestions
+
+
+def format_spell_suggestions(original_query: str, suggestions: List[str]) -> str:
+    if original_query.lower() != " ".join(suggestions).lower():
+        return f"هل تقصد: {' '.join(suggestions)}?"
+    return ""
+
+
+def sort_search_results(query, sort_option: SortOption, db: Session):
+    if sort_option == SortOption.RELEVANCE:
+        return query.order_by(
+            desc(
+                func.ts_rank(Post.search_vector, func.plainto_tsquery("english", query))
+            )
+        )
+    elif sort_option == SortOption.DATE_DESC:
+        return query.order_by(desc(Post.created_at))
+    elif sort_option == SortOption.DATE_ASC:
+        return query.order_by(asc(Post.created_at))
+    elif sort_option == SortOption.POPULARITY:
+        return query.order_by(desc(Post.votes))
+    else:
+        return query

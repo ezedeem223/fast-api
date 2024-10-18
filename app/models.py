@@ -26,6 +26,7 @@ from datetime import date
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.dialects.postgresql import TSVECTOR
 
 Base = declarative_base()
 
@@ -380,6 +381,7 @@ class User(Base):
         foreign_keys=[EncryptedCall.receiver_id],
         back_populates="receiver",
     )
+    search_history = relationship("SearchStatistics", back_populates="user")
 
 
 class UserEvent(Base):
@@ -485,6 +487,10 @@ class Post(Base):
     community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True
     )
+    votes = Column(Integer, default=0)
+    media_url = Column(String)
+    media_type = Column(String)
+    media_text = Column(Text)
     is_safe_content = Column(Boolean, default=True)
     is_short_video = Column(Boolean, default=False)
     has_best_answer = Column(Boolean, default=False)
@@ -511,7 +517,10 @@ class Post(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)
     is_flagged: Column = Column(Boolean, default=False)
     flag_reason: Column = Column(String, nullable=True)
-
+    search_vector = Column(TSVECTOR)
+    __table_args__ = (
+        Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
+    )
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -953,6 +962,20 @@ class SearchSuggestion(Base):
     term = Column(String, unique=True, index=True)
     frequency = Column(Integer, default=1)
     last_used = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class SearchStatistics(Base):
+    __tablename__ = "search_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    query = Column(String, index=True)
+    count = Column(Integer, default=1)
+    last_searched = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    user = relationship("User", back_populates="search_history")
 
 
 class Tag(Base):
