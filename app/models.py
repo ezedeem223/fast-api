@@ -372,6 +372,14 @@ class User(Base):
     mentions = relationship(
         "Post", secondary=post_mentions, back_populates="mentioned_users"
     )
+    outgoing_encrypted_calls = relationship(
+        "EncryptedCall", foreign_keys=[EncryptedCall.caller_id], back_populates="caller"
+    )
+    incoming_encrypted_calls = relationship(
+        "EncryptedCall",
+        foreign_keys=[EncryptedCall.receiver_id],
+        back_populates="receiver",
+    )
 
 
 class UserEvent(Base):
@@ -866,6 +874,28 @@ class EncryptedSession(Base):
     other_user = relationship("User", foreign_keys=[other_user_id])
 
 
+class EncryptedCall(Base):
+    __tablename__ = "encrypted_calls"
+
+    id = Column(Integer, primary_key=True, index=True)
+    caller_id = Column(Integer, ForeignKey("users.id"))
+    receiver_id = Column(Integer, ForeignKey("users.id"))
+    start_time = Column(DateTime, default=func.now())
+    end_time = Column(DateTime, nullable=True)
+    call_type = Column(Enum("audio", "video", name="call_type"))
+    encryption_key = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    quality_score = Column(Integer, default=100)
+    last_key_update = Column(DateTime, default=func.now())
+
+    caller = relationship(
+        "User", foreign_keys=[caller_id], back_populates="outgoing_encrypted_calls"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="incoming_encrypted_calls"
+    )
+
+
 class Community(Base):
     __tablename__ = "communities"
     id = Column(Integer, primary_key=True, index=True)
@@ -914,6 +944,15 @@ class Category(Base):
     description = Column(String)
 
     communities = relationship("Community", back_populates="category")
+
+
+class SearchSuggestion(Base):
+    __tablename__ = "search_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    term = Column(String, unique=True, index=True)
+    frequency = Column(Integer, default=1)
+    last_used = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
 class Tag(Base):
@@ -1204,7 +1243,9 @@ class Call(Base):
     )
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
-
+    encryption_key = Column(String, nullable=False)
+    last_key_update = Column(DateTime(timezone=True), nullable=False)
+    quality_score = Column(Integer, default=100)
     caller = relationship(
         "User", foreign_keys=[caller_id], back_populates="outgoing_calls"
     )

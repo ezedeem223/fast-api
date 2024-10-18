@@ -3,6 +3,7 @@ import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr, PrivateAttr
 from fastapi_mail import ConnectionConfig
+import redis
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     database_name: str
     database_username: str
     secret_key: str
-    algorithm: str = "RS256"
+    algorithm: str = ALGORITHM
     access_token_expire_minutes: int
     google_client_id: str = "default_google_client_id"
     google_client_secret: str = "default_google_client_secret"
@@ -27,10 +28,11 @@ class Settings(BaseSettings):
     mail_port: int
     mail_server: str
     COMMENT_EDIT_WINDOW_MINUTES: int = 15
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    HUGGINGFACE_API_TOKEN: str = "your_huggingface_api_token"
-
-    # # أضف الحقول الجديدة هنا
+    CELERY_BROKER_URL: str = REDIS_URL
+    HUGGINGFACE_API_TOKEN: str = HUGGINGFACE_API_TOKEN
+    REDIS_URL = REDIS_URL
+    redis_client = redis.Redis.from_url(REDIS_URL)
+    # أضف الحقول الجديدة هنا
     # facebook_access_token: "default_facebook_client_secret"
     # facebook_app_id: "default_facebook_client_secret"
     # facebook_app_secret: "default_facebook_client_secret"

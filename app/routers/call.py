@@ -5,16 +5,29 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     status,
+    BackgroundTasks,
 )
 from sqlalchemy.orm import Session
-from .. import models, schemas, oauth2, notifications
+from .. import models, schemas, oauth2, notifications, database
 from ..database import get_db
 from typing import List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from ..notifications import ConnectionManager
+from ..utils import (
+    generate_encryption_key,
+    update_encryption_key,
+    check_call_quality,
+    should_adjust_video_quality,
+    get_recommended_video_quality,
+    clean_old_quality_buffers,
+)
+from fastapi_utils.tasks import repeat_every
+
 
 router = APIRouter(prefix="/calls", tags=["Calls"])
 manager = ConnectionManager()
+
+KEY_UPDATE_INTERVAL = timedelta(minutes=30)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.CallOut)
@@ -29,11 +42,30 @@ async def start_call(
             status_code=status.HTTP_404_NOT_FOUND, detail="Receiver not found"
         )
 
+    # Проверка на количество активных вызовов пользователя
+    active_calls_count = (
+        db.query(models.Call)
+        .filter(
+            (models.Call.caller_id == current_user.id)
+            | (models.Call.receiver_id == current_user.id),
+            models.Call.status != models.CallStatus.ENDED,
+        )
+        .count()
+    )
+    if active_calls_count >= 5:  # Ограничение на 5 активных вызовов
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum number of active calls reached",
+        )
+
+    encryption_key = generate_encryption_key()
     new_call = models.Call(
         caller_id=current_user.id,
         receiver_id=call.receiver_id,
         call_type=call.call_type,
         status=models.CallStatus.PENDING,
+        encryption_key=encryption_key,
+        last_key_update=datetime.now(timezone.utc),
     )
     db.add(new_call)
     db.commit()
@@ -205,8 +237,9 @@ async def end_screen_share(
 async def websocket_endpoint(
     websocket: WebSocket,
     call_id: int,
-    db: Session = Depends(get_db),
+    db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     await websocket.accept()
     try:
@@ -223,28 +256,55 @@ async def websocket_endpoint(
                 else call.caller_id
             )
 
+            # التحقق وتحديث مفتاح التشفير
+            if datetime.now(timezone.utc) - call.last_key_update > KEY_UPDATE_INTERVAL:
+                new_key = update_encryption_key(call.encryption_key)
+                call.encryption_key = new_key
+                call.last_key_update = datetime.now(timezone.utc)
+                db.commit()
+                await notifications.send_real_time_notification(
+                    call.caller_id, {"type": "new_encryption_key", "key": new_key}
+                )
+                await notifications.send_real_time_notification(
+                    call.receiver_id, {"type": "new_encryption_key", "key": new_key}
+                )
+
+            # التحقق من جودة المكالمة
+            call_quality = check_call_quality(data, call_id)
+            if call_quality != call.quality_score:
+                background_tasks.add_task(
+                    update_call_quality, db, call.id, call_quality
+                )
+
+            # التحقق مما إذا كان يجب ضبط جودة الفيديو
+            if should_adjust_video_quality(call_id):
+                recommended_quality = get_recommended_video_quality(call_id)
+                await notifications.send_real_time_notification(
+                    current_user.id,
+                    {"type": "adjust_video_quality", "quality": recommended_quality},
+                )
+                await notifications.send_real_time_notification(
+                    other_user_id,
+                    {"type": "adjust_video_quality", "quality": recommended_quality},
+                )
+
+            # معالجة أنواع البيانات المختلفة
             if data["type"] in ["offer", "answer", "ice_candidate"]:
-                # Handle WebRTC signaling (offer, answer, ICE candidates)
                 await notifications.send_real_time_notification(other_user_id, data)
             elif data["type"] == "screen_share_offer":
-                # Handle screen share offer
                 await notifications.send_real_time_notification(other_user_id, data)
             elif data["type"] == "screen_share_answer":
-                # Handle screen share answer
                 await notifications.send_real_time_notification(other_user_id, data)
             elif data["type"] == "screen_share_ice_candidate":
-                # Handle ICE candidates for screen sharing
                 await notifications.send_real_time_notification(other_user_id, data)
             elif data["type"] == "screen_share_data":
-                # Handle screen share data
                 await notifications.send_real_time_notification(other_user_id, data)
 
     except WebSocketDisconnect:
-        # Handle disconnection
+        # معالجة قطع الاتصال
         call.status = models.CallStatus.ENDED
         call.end_time = datetime.now(timezone.utc)
 
-        # End any active screen share session
         active_share = (
             db.query(models.ScreenShareSession)
             .filter(
@@ -259,10 +319,23 @@ async def websocket_endpoint(
 
         db.commit()
 
-        # Notify the other participant about the disconnection
-        other_user_id = (
-            call.receiver_id if current_user.id == call.caller_id else call.caller_id
-        )
         await notifications.send_real_time_notification(
             other_user_id, {"type": "call_ended", "call_id": call.id}
         )
+
+        # تنظيف بيانات جودة المكالمة القديمة
+        clean_old_quality_buffers()
+
+
+# يجب إضافة هذه الوظيفة لتشغيلها بشكل دوري (مثلاً كل ساعة) لتنظيف البيانات القديمة
+@router.on_event("startup")
+@repeat_every(seconds=3600)  # كل ساعة
+def clean_quality_buffers_periodically():
+    clean_old_quality_buffers()
+
+
+def update_call_quality(db: Session, call_id: int, quality_score: int):
+    call = db.query(models.Call).filter(models.Call.id == call_id).first()
+    if call:
+        call.quality_score = quality_score
+        db.commit()

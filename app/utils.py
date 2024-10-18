@@ -20,6 +20,14 @@ from sqlalchemy.orm import Session
 from . import models
 from transformers import pipeline
 from .config import settings
+import secrets
+from cryptography.fernet import Fernet
+import time
+from collections import deque
+
+
+QUALITY_WINDOW_SIZE = 10
+MIN_QUALITY_THRESHOLD = 50
 
 model_name = "microsoft/DialogRPT-offensive"
 offensive_classifier = pipeline(
@@ -376,3 +384,83 @@ def is_content_offensive(text: str) -> tuple:
     result = offensive_classifier(text)[0]
     is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
     return is_offensive, result["score"]
+
+
+def generate_encryption_key():
+    return Fernet.generate_key().decode()
+
+
+def update_encryption_key(old_key):
+    new_key = Fernet.generate_key()
+    old_fernet = Fernet(old_key.encode())
+    new_fernet = Fernet(new_key)
+
+    # Здесь вы можете добавить логику для повторного шифрования данных с новым ключом, если это необходимо
+
+    return new_key.decode()
+
+
+class CallQualityBuffer:
+    def __init__(self, window_size=QUALITY_WINDOW_SIZE):
+        self.window_size = window_size
+        self.quality_scores = deque(maxlen=window_size)
+        self.last_update_time = time.time()
+
+    def add_score(self, score):
+        self.quality_scores.append(score)
+        self.last_update_time = time.time()
+
+    def get_average_score(self):
+        if not self.quality_scores:
+            return 100  # افتراض الجودة الممتازة إذا لم يتم تسجيل أي قياسات
+        return sum(self.quality_scores) / len(self.quality_scores)
+
+
+quality_buffers = {}
+
+
+def check_call_quality(data, call_id):
+    # استخراج معلومات الجودة من البيانات المستلمة
+    packet_loss = data.get("packet_loss", 0)
+    latency = data.get("latency", 0)
+    jitter = data.get("jitter", 0)
+
+    # حساب درجة الجودة (هذه مجرد صيغة بسيطة، يمكنك تعديلها حسب احتياجاتك)
+    quality_score = 100 - (packet_loss * 2 + latency / 10 + jitter)
+
+    # تحديث التخزين المؤقت للجودة
+    if call_id not in quality_buffers:
+        quality_buffers[call_id] = CallQualityBuffer()
+
+    quality_buffers[call_id].add_score(quality_score)
+
+    # الحصول على متوسط الجودة
+    average_quality = quality_buffers[call_id].get_average_score()
+
+    return average_quality
+
+
+def should_adjust_video_quality(call_id):
+    if call_id in quality_buffers:
+        average_quality = quality_buffers[call_id].get_average_score()
+        return average_quality < MIN_QUALITY_THRESHOLD
+    return False
+
+
+def get_recommended_video_quality(call_id):
+    if call_id in quality_buffers:
+        average_quality = quality_buffers[call_id].get_average_score()
+        if average_quality < 30:
+            return "low"
+        elif average_quality < 60:
+            return "medium"
+        else:
+            return "high"
+    return "high"  # افتراض الجودة العالية إذا لم تتوفر بيانات
+
+
+def clean_old_quality_buffers():
+    current_time = time.time()
+    for call_id in list(quality_buffers.keys()):
+        if current_time - quality_buffers[call_id].last_update_time > 300:  # 5 دقائق
+            del quality_buffers[call_id]

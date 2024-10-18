@@ -51,6 +51,8 @@ from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
 from .ip_utils import get_client_ip, is_ip_banned
 from .analytics import model, tokenizer
+from fastapi_utils.tasks import repeat_every
+from app.routers.search import update_search_suggestions
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -248,3 +250,10 @@ async def startup_event():
     print("Loading content analysis model...")
     model.eval()
     print("Content analysis model loaded successfully!")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * 60 * 24)  # مرة واحدة يوميًا
+def update_search_suggestions_task():
+    db = next(get_db())
+    update_search_suggestions(db)

@@ -212,8 +212,18 @@ class CallOut(BaseModel):
     start_time: datetime
     end_time: Optional[datetime] = None
     current_screen_share: Optional[ScreenShareSessionOut] = None
+    quality_score: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdvancedSearchQuery(BaseModel):
+    keyword: str
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    categories: Optional[List[int]] = None
+    author_id: Optional[int] = None
+    search_in: List[str] = Field(default=["title", "content", "comments"])
 
 
 class MessageType(str, Enum):
@@ -567,6 +577,28 @@ class MessageBase(BaseModel):
     file_url: Optional[str]
 
 
+class EncryptedCallCreate(BaseModel):
+    receiver_id: int
+    call_type: str
+
+
+class EncryptedCallUpdate(BaseModel):
+    quality_score: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class EncryptedCallOut(BaseModel):
+    id: int
+    caller_id: int
+    receiver_id: int
+    start_time: datetime
+    call_type: str
+    is_active: bool
+    quality_score: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ArticleBase(BaseModel):
     title: str
     content: str
@@ -600,8 +632,7 @@ class RepostStatisticsOut(BaseModel):
     repost_count: int
     last_reposted: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationOut(BaseModel):
@@ -759,8 +790,19 @@ class CategoryCreate(CategoryBase):
 
 class Category(CategoryBase):
     id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SearchSuggestionOut(BaseModel):
+    term: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdvancedSearchResponse(BaseModel):
+    total: int
+    posts: List[PostOut]
 
 
 class PostCategoryBase(BaseModel):
