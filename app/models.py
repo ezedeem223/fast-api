@@ -521,6 +521,11 @@ class Post(Base):
     __table_args__ = (
         Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
     )
+    share_scope = Column(String, default="public")  # public, community, group
+    shared_with_community_id = Column(
+        Integer, ForeignKey("communities.id"), nullable=True
+    )
+    sharing_settings = Column(JSONB, default={})  # لتخزين إعدادات المشاركة المتقدمة
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -557,8 +562,11 @@ class Post(Base):
 class RepostStatistics(Base):
     __tablename__ = "repost_statistics"
     id = Column(Integer, primary_key=True, index=True)
-    post_id = Column(Integer, ForeignKey("posts.id"), unique=True)
+    post_id = Column(Integer, ForeignKey("posts.id"))
     repost_count = Column(Integer, default=0)
+    community_shares = Column(Integer, default=0)
+    views_after_repost = Column(Integer, default=0)
+    engagement_rate = Column(Float, default=0.0)
     last_reposted = Column(DateTime, default=func.now())
 
     post = relationship("Post", back_populates="repost_stats")

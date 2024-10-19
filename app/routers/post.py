@@ -630,7 +630,7 @@ def get_comments(
 )
 def repost(
     post_id: int,
-    repost_data: schemas.PostCreate,
+    repost_data: schemas.RepostCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
@@ -656,6 +656,12 @@ def repost(
             detail="Cannot repost your own post",
         )
 
+    if not check_repost_permissions(original_post, current_user, repost_data):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to repost this content",
+        )
+
     new_post = models.Post(
         title=f"Repost: {original_post.title}",
         content=repost_data.content or f"Repost of: {original_post.content}",
@@ -664,8 +670,14 @@ def repost(
         is_repost=True,
         is_published=True,
         category_id=original_post.category_id,
-        community_id=original_post.community_id,
+        community_id=repost_data.community_id or original_post.community_id,
         allow_reposts=repost_data.allow_reposts,
+        share_scope=repost_data.share_scope,
+        sharing_settings={
+            "visibility": repost_data.visibility,
+            "custom_message": repost_data.custom_message,
+            "shared_at": datetime.now().isoformat(),
+        },
     )
 
     original_post.repost_count += 1
@@ -681,7 +693,53 @@ def repost(
         db, original_post.owner_id, current_user.id, new_post.id
     )
 
+    if new_post.share_scope == "community" and new_post.community_id:
+        utils.notify_community_members(db, new_post)
+
     return new_post
+
+
+def check_repost_permissions(
+    post: models.Post, user: models.User, repost_data: schemas.RepostCreate
+):
+    if not post.allow_reposts:
+        return False
+
+    if repost_data.repost_settings and repost_data.repost_settings.scope == "community":
+        return is_community_member(post.shared_with_community_id, user.id)
+
+    return True
+
+
+@router.get("/post/{post_id}/repost-stats", response_model=schemas.RepostStatsOut)
+def get_repost_statistics(
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    stats = (
+        db.query(models.RepostStatistics)
+        .filter(models.RepostStatistics.post_id == post_id)
+        .first()
+    )
+
+    if not stats:
+        raise HTTPException(status_code=404, detail="Statistics not found")
+
+    return stats
+
+
+def notify_community_members(db: Session, post: models.Post):
+    members = (
+        db.query(models.CommunityMember)
+        .filter(models.CommunityMember.community_id == post.shared_with_community_id)
+        .all()
+    )
+
+    for member in members:
+        send_notification(
+            member.user_id, f"New shared post in community: {post.title}", post.id
+        )
 
 
 @router.get("/reposts/{post_id}", response_model=List[schemas.PostOut])

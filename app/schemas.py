@@ -656,6 +656,17 @@ class RepostStatisticsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RepostSettings(BaseModel):
+    scope: str = "public"
+    community_id: Optional[int] = None
+    visibility: Optional[str] = "all_members"
+    custom_message: Optional[str] = None
+
+
+class RepostCreate(PostCreate):
+    repost_settings: Optional[RepostSettings] = None
+
+
 class NotificationOut(BaseModel):
     id: int
     content: str
