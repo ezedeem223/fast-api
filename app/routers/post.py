@@ -39,7 +39,9 @@ from pydub import AudioSegment
 import uuid
 from datetime import datetime, timedelta
 from ..media_processing import process_media_file
-
+from io import BytesIO
+from xhtml2pdf import pisa
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
@@ -1169,3 +1171,76 @@ def archive_post(
     post.archived_at = func.now() if post.is_archived else None
     db.commit()
     return post
+
+
+@router.get("/", response_model=List[schemas.PostOut])
+def get_posts(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(oauth2.get_current_user),
+    limit: int = 10,
+    skip: int = 0,
+    search: Optional[str] = "",
+):
+    posts = (
+        db.query(models.Post, func.count(models.Vote.user_id).label("votes"))
+        .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
+        .group_by(models.Post.id)
+        .filter(models.Post.title.contains(search))
+        .order_by(models.Post.score.desc())
+        .limit(limit)
+        .offset(skip)
+        .all()
+    )
+    return posts
+
+
+def create_pdf(post):
+    html = f"""
+    <html>
+    <head>
+        <title>{post.title}</title>
+    </head>
+    <body>
+        <h1>{post.title}</h1>
+        <p>Posted by: {post.owner.username}</p>
+        <p>Date: {post.created_at.strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <div>
+            {post.content}
+        </div>
+    </body>
+    </html>
+    """
+
+    result = BytesIO()
+    pdf = pisa.pisaDocument(BytesIO(html.encode("UTF-8")), result)
+
+    if not pdf.err:
+        return BytesIO(result.getvalue())
+    return None
+
+
+@router.get("/{id}/export-pdf")
+def export_post_as_pdf(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    post = db.query(models.Post).filter(models.Post.id == id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id: {id} not found",
+        )
+
+    pdf = create_pdf(post)
+    if not pdf:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate PDF",
+        )
+
+    return StreamingResponse(
+        iter([pdf.getvalue()]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=post_{id}.pdf"},
+    )

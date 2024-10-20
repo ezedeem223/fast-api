@@ -53,7 +53,7 @@ from .ip_utils import get_client_ip, is_ip_banned
 from .analytics import model, tokenizer, clean_old_statistics
 from fastapi_utils.tasks import repeat_every
 from app.routers.search import update_search_suggestions
-from .utils import update_search_vector, spell
+from .utils import update_search_vector, spell, update_post_score
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -264,3 +264,15 @@ async def startup_event():
 def update_search_suggestions_task():
     db = next(get_db())
     update_search_suggestions(db)
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * 60)  # تحديث كل ساعة
+def update_all_post_scores():
+    db = SessionLocal()
+    try:
+        posts = db.query(models.Post).all()
+        for post in posts:
+            update_post_score(db, post)
+    finally:
+        db.close()

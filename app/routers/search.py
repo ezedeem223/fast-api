@@ -12,6 +12,7 @@ from ..utils import (
     get_spell_suggestions,
     format_spell_suggestions,
     sort_search_results,
+    analyze_user_behavior,
 )
 from ..schemas import SearchParams, SearchResponse, SortOption
 from ..analytics import (
@@ -21,6 +22,8 @@ from ..analytics import (
     get_user_searches,
     generate_search_trends_chart,
 )
+from ..utils import analyze_user_behavior
+
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -210,4 +213,66 @@ def update_search_suggestions(db: Session):
                 else:
                     suggestion = models.SearchSuggestion(term=word)
                     db.add(suggestion)
+    db.commit()
+
+
+@router.get("/smart", response_model=List[schemas.PostOut])
+async def smart_search(
+    query: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 10,
+):
+    # الحصول على تاريخ بحث المستخدم
+    user_history = (
+        db.query(models.SearchStatistics.query)
+        .filter(models.SearchStatistics.user_id == current_user.id)
+        .order_by(models.SearchStatistics.last_searched.desc())
+        .limit(20)
+        .all()
+    )
+    user_history = [item[0] for item in user_history]
+
+    # البحث الأولي
+    search_query = func.plainto_tsquery("english", query)
+    initial_results = (
+        db.query(models.Post)
+        .filter(models.Post.search_vector.op("@@")(search_query))
+        .all()
+    )
+
+    # تطبيق الفلترة الذكية
+    scored_results = [
+        (post, analyze_user_behavior(user_history, post.content))
+        for post in initial_results
+    ]
+    scored_results.sort(key=lambda x: x[1], reverse=True)
+
+    # تحديث إحصائيات البحث
+    update_search_statistics(db, current_user.id, query)
+
+    return [
+        schemas.PostOut.from_orm(post)
+        for post, _ in scored_results[skip : skip + limit]
+    ]
+
+
+def update_search_statistics(db: Session, user_id: int, query: str):
+    stat = (
+        db.query(models.SearchStatistics)
+        .filter(
+            models.SearchStatistics.user_id == user_id,
+            models.SearchStatistics.query == query,
+        )
+        .first()
+    )
+
+    if stat:
+        stat.count += 1
+        stat.last_searched = func.now()
+    else:
+        new_stat = models.SearchStatistics(user_id=user_id, query=query)
+        db.add(new_stat)
+
     db.commit()

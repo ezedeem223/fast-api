@@ -17,8 +17,8 @@ import requests
 from urllib.parse import urlparse
 from textblob import TextBlob
 from sqlalchemy.orm import Session
-from . import models
-from transformers import pipeline
+from . import models, schemas
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from .config import settings
 import secrets
 from cryptography.fernet import Fernet
@@ -29,6 +29,8 @@ from .database import engine
 from .models import Post
 from spellchecker import SpellChecker
 from .media_processing import process_media_file
+import torch
+from datetime import datetime, timezone
 
 spell = SpellChecker()
 
@@ -44,6 +46,13 @@ offensive_classifier = pipeline(
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()
+tokenizer = AutoTokenizer.from_pretrained(
+    "distilbert-base-uncased-finetuned-sst-2-english"
+)
+model = AutoModelForSequenceClassification.from_pretrained(
+    "distilbert-base-uncased-finetuned-sst-2-english"
+)
+sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 
 
 def hash(password: str) -> str:
@@ -533,3 +542,161 @@ def sort_search_results(query, sort_option: SortOption, db: Session):
         return query.order_by(desc(Post.votes))
     else:
         return query
+
+
+def analyze_user_behavior(user_history, content):
+    # تحليل تاريخ بحث المستخدم وتفاعلاته
+    user_interests = set(item.lower() for item in user_history)
+
+    # تصنيف المحتوى باستخدام sentiment_pipeline الموجود
+    result = sentiment_pipeline(content[:512])[0]  # تقليم النص إلى 512 حرف كحد أقصى
+    sentiment = result["label"]
+    score = result["score"]
+
+    # حساب درجة الملاءمة بناءً على تطابق الاهتمامات والتصنيف
+    relevance_score = sum(
+        1 for word in content.lower().split() if word in user_interests
+    )
+    relevance_score += score if sentiment == "POSITIVE" else 0
+
+    return relevance_score
+
+
+def calculate_post_score(upvotes, downvotes, comment_count, created_at):
+    # حساب الفارق بين الأصوات الإيجابية والسلبية
+    vote_difference = upvotes - downvotes
+
+    # حساب عمر المنشور بالساعات
+    age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
+
+    # صيغة بسيطة لحساب النقاط
+    # يمكنك تعديل هذه الصيغة حسب احتياجات تطبيقك
+    score = (vote_difference + comment_count) / (age_hours + 2) ** 1.8
+
+    return score
+
+
+def update_post_score(db: Session, post: models.Post):
+    upvotes = (
+        db.query(models.Vote)
+        .filter(models.Vote.post_id == post.id, models.Vote.dir == 1)
+        .count()
+    )
+    downvotes = (
+        db.query(models.Vote)
+        .filter(models.Vote.post_id == post.id, models.Vote.dir == 0)
+        .count()
+    )
+
+    post.score = calculate_post_score(
+        upvotes, downvotes, post.comment_count, post.created_at
+    )
+    db.commit()
+
+
+def update_post_vote_statistics(db: Session, post_id: int):
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        return
+
+    stats = post.vote_statistics or models.PostVoteStatistics(post_id=post_id)
+
+    # تحديث الإحصاءات
+    stats.total_votes = (
+        db.query(models.Reaction).filter(models.Reaction.post_id == post_id).count()
+    )
+    stats.upvotes = (
+        db.query(models.Vote)
+        .filter(models.Vote.post_id == post_id, models.Vote.dir == 1)
+        .count()
+    )
+    stats.downvotes = (
+        db.query(models.Vote)
+        .filter(models.Vote.post_id == post_id, models.Vote.dir == 0)
+        .count()
+    )
+
+    for reaction_type in models.ReactionType:
+        count = (
+            db.query(models.Reaction)
+            .filter(
+                models.Reaction.post_id == post_id,
+                models.Reaction.reaction_type == reaction_type,
+            )
+            .count()
+        )
+        setattr(stats, f"{reaction_type.value}_count", count)
+
+    if not post.vote_statistics:
+        db.add(stats)
+    db.commit()
+
+
+def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalytics:
+    user_posts = db.query(models.Post).filter(models.Post.owner_id == user_id).all()
+    total_posts = len(user_posts)
+    total_votes = sum(
+        post.vote_statistics.total_votes for post in user_posts if post.vote_statistics
+    )
+
+    if total_posts == 0:
+        return schemas.UserVoteAnalytics(
+            total_posts=0,
+            total_votes_received=0,
+            average_votes_per_post=0,
+            most_upvoted_post=None,
+            most_downvoted_post=None,
+            most_reacted_post=None,
+        )
+
+    average_votes = total_votes / total_posts
+
+    most_upvoted = max(
+        user_posts, key=lambda p: p.vote_statistics.upvotes if p.vote_statistics else 0
+    )
+    most_downvoted = max(
+        user_posts,
+        key=lambda p: p.vote_statistics.downvotes if p.vote_statistics else 0,
+    )
+    most_reacted = max(
+        user_posts,
+        key=lambda p: p.vote_statistics.total_votes if p.vote_statistics else 0,
+    )
+
+    return schemas.UserVoteAnalytics(
+        total_posts=total_posts,
+        total_votes_received=total_votes,
+        average_votes_per_post=average_votes,
+        most_upvoted_post=create_post_vote_analytics(most_upvoted),
+        most_downvoted_post=create_post_vote_analytics(most_downvoted),
+        most_reacted_post=create_post_vote_analytics(most_reacted),
+    )
+
+
+def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
+    stats = post.vote_statistics
+    if not stats:
+        return None
+
+    total_votes = stats.total_votes or 1  # لتجنب القسمة على صفر
+    upvote_percentage = (stats.upvotes / total_votes) * 100
+    downvote_percentage = (stats.downvotes / total_votes) * 100
+
+    reaction_counts = {
+        "like": stats.like_count,
+        "love": stats.love_count,
+        "haha": stats.haha_count,
+        "wow": stats.wow_count,
+        "sad": stats.sad_count,
+        "angry": stats.angry_count,
+    }
+    most_common_reaction = max(reaction_counts, key=reaction_counts.get)
+
+    return schemas.PostVoteAnalytics(
+        post_id=post.id,
+        title=post.title,
+        statistics=schemas.PostVoteStatistics.from_orm(stats),
+        upvote_percentage=upvote_percentage,
+        downvote_percentage=downvote_percentage,
+        most_common_reaction=most_common_reaction,
+    )

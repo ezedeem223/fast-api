@@ -5,8 +5,17 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from typing import List
 from datetime import date, timedelta
+from ..utils import get_user_vote_analytics
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
+
+
+@router.get("/vote-analytics", response_model=schemas.UserVoteAnalytics)
+def get_vote_analytics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    return get_user_vote_analytics(db, current_user.id)
 
 
 @router.get("/comments", response_model=schemas.CommentStatistics)

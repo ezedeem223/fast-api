@@ -525,6 +525,8 @@ class Post(Base):
     shared_with_community_id = Column(
         Integer, ForeignKey("communities.id"), nullable=True
     )
+    score = Column(Float, default=0.0, index=True)
+
     sharing_settings = Column(JSONB, default={})  # لتخزين إعدادات المشاركة المتقدمة
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
@@ -557,6 +559,33 @@ class Post(Base):
     mentioned_users = relationship(
         "User", secondary=post_mentions, back_populates="mentions"
     )
+    vote_statistics = relationship(
+        "PostVoteStatistics",
+        back_populates="post",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class PostVoteStatistics(Base):
+    __tablename__ = "post_vote_statistics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"))
+    total_votes = Column(Integer, default=0)
+    upvotes = Column(Integer, default=0)
+    downvotes = Column(Integer, default=0)
+    like_count = Column(Integer, default=0)
+    love_count = Column(Integer, default=0)
+    haha_count = Column(Integer, default=0)
+    wow_count = Column(Integer, default=0)
+    sad_count = Column(Integer, default=0)
+    angry_count = Column(Integer, default=0)
+    last_updated = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    post = relationship("Post", back_populates="vote_statistics")
 
 
 class RepostStatistics(Base):

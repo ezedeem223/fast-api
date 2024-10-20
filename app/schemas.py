@@ -27,7 +27,8 @@ class ReactionBase(BaseModel):
 
 
 class ReactionCreate(ReactionBase):
-    pass
+    post_id: int
+    reaction_type: ReactionType
 
 
 class Reaction(ReactionBase):
@@ -40,6 +41,48 @@ class Reaction(ReactionBase):
 class ReactionCount(BaseModel):
     reaction_type: ReactionType
     count: int
+
+
+class PostVoteStatisticsBase(BaseModel):
+    total_votes: int
+    upvotes: int
+    downvotes: int
+    like_count: int
+    love_count: int
+    haha_count: int
+    wow_count: int
+    sad_count: int
+    angry_count: int
+
+
+class PostVoteStatisticsCreate(PostVoteStatisticsBase):
+    pass
+
+
+class PostVoteStatistics(PostVoteStatisticsBase):
+    id: int
+    post_id: int
+    last_updated: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PostVoteAnalytics(BaseModel):
+    post_id: int
+    title: str
+    statistics: PostVoteStatistics
+    upvote_percentage: float
+    downvote_percentage: float
+    most_common_reaction: str
+
+
+class UserVoteAnalytics(BaseModel):
+    total_posts: int
+    total_votes_received: int
+    average_votes_per_post: float
+    most_upvoted_post: PostVoteAnalytics
+    most_downvoted_post: PostVoteAnalytics
+    most_reacted_post: PostVoteAnalytics
 
 
 class HashtagBase(BaseModel):
@@ -620,6 +663,23 @@ class EncryptedCallOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SearchStatisticsBase(BaseModel):
+    query: str
+    count: int
+    last_searched: datetime
+
+
+class SearchStatisticsCreate(SearchStatisticsBase):
+    pass
+
+
+class SearchStatistics(SearchStatisticsBase):
+    id: int
+    user_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ArticleBase(BaseModel):
     title: str
     content: str
@@ -764,6 +824,19 @@ class TokenData(BaseModel):
 class Vote(BaseModel):
     post_id: int
     dir: conint(le=1)
+
+
+class VoterOut(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VotersListOut(BaseModel):
+    voters: List[VoterOut]
+    total_count: int
 
 
 # Community models

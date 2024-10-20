@@ -18,6 +18,7 @@ from ..utils import (
     check_for_profanity,
     validate_urls,
     log_user_event,
+    update_post_score,
 )
 from datetime import datetime, timedelta
 from ..config import settings
@@ -166,6 +167,9 @@ async def create_comment(
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post titled '{post.title}'.",
     )
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    post.comment_count += 1
+    update_post_score(db, post)
 
     return new_comment
 
