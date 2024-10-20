@@ -43,6 +43,7 @@ from .routers import (
     banned_words,
     moderation,
     category_management,
+    social_auth,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -154,6 +155,7 @@ app.include_router(statistics.router)
 app.include_router(ip_ban.router)
 app.include_router(moderation.router)
 app.include_router(category_management.router)
+app.include_router(social_auth.router)
 
 
 manager = ConnectionManager()

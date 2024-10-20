@@ -1057,3 +1057,24 @@ def create_tag(
 def get_tags(db: Session = Depends(get_db)):
     tags = db.query(models.Tag).all()
     return tags
+
+
+@router.post("/{community_id}/join-request")
+def request_to_join(community_id: int, user_id: int, db: Session = Depends(get_db)):
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+    if not community.is_private and not community.requires_approval:
+        # Автоматическое присоединение к открытому сообществу
+        # Реализуйте логику присоединения здесь
+        return {"message": "Joined community successfully"}
+    else:
+        # Создание запроса на присоединение
+        join_request = models.CommunityJoinRequest(
+            community_id=community_id, user_id=user_id
+        )
+        db.add(join_request)
+        db.commit()
+        return {"message": "Join request submitted successfully"}

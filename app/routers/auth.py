@@ -10,8 +10,9 @@ from pydantic import EmailStr
 
 from .. import database, schemas, models, utils, oauth2
 from ..config import settings
-from ..notifications import send_login_notification
+from ..notifications import send_login_notification, send_email_notification
 from ..utils import log_user_event
+import secrets
 
 router = APIRouter(tags=["Authentication"])
 
@@ -27,7 +28,7 @@ def login(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    Обработка входа пользователя в систему.
+    معالجة تسجيل دخول المستخدم إلى النظام.
     """
     user = (
         db.query(models.User)
@@ -37,7 +38,7 @@ def login(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials"
+            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
         )
 
     if user.account_locked_until and user.account_locked_until > datetime.now(
@@ -45,7 +46,7 @@ def login(
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is locked. Try again later.",
+            detail="الحساب مقفل. حاول مرة أخرى لاحقًا.",
         )
 
     if not utils.verify(user_credentials.password, user.password):
@@ -54,7 +55,7 @@ def login(
             user.account_locked_until = datetime.now(timezone.utc) + LOCKOUT_DURATION
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials"
+            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
         )
 
     user.failed_login_attempts = 0
@@ -79,22 +80,22 @@ def login_2fa(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    Обработка входа с двухфакторной аутентификацией.
+    معالجة تسجيل الدخول باستخدام المصادقة الثنائية.
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user or not user.is_2fa_enabled:
-        raise HTTPException(status_code=400, detail="Invalid request")
+        raise HTTPException(status_code=400, detail="طلب غير صالح")
 
     totp = pyotp.TOTP(user.otp_secret)
     if not totp.verify(otp.otp):
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+        raise HTTPException(status_code=400, detail="رمز OTP غير صالح")
 
     return complete_login(user, db, request, background_tasks)
 
 
 def complete_login(user, db, request, background_tasks):
     """
-    Завершение процесса входа после успешной аутентификации.
+    إكمال عملية تسجيل الدخول بعد المصادقة الناجحة.
     """
     user.last_login = datetime.now(timezone.utc)
     session = models.UserSession(
@@ -130,32 +131,50 @@ def complete_login(user, db, request, background_tasks):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.post("/logout")
+@router.post("/logout", status_code=status.HTTP_200_OK)
 def logout(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     token: str = Depends(oauth2.oauth2_scheme),
 ):
     """
-    Выход пользователя из системы.
+    تسجيل خروج المستخدم من النظام.
     """
-    token_data = oauth2.verify_access_token(
-        token, HTTPException(status_code=401, detail="Invalid token")
-    )
-    session = (
-        db.query(models.UserSession)
-        .filter(
-            models.UserSession.user_id == current_user.id,
-            models.UserSession.session_id == token_data.session_id,
-        )
-        .first()
-    )
+    try:
+        token_data = oauth2.verify_access_token(token, None)
+        if not token_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="توكن غير صالح"
+            )
 
-    if session:
-        db.delete(session)
+        session = (
+            db.query(models.UserSession)
+            .filter(
+                models.UserSession.user_id == current_user.id,
+                models.UserSession.session_id == token_data.session_id,
+            )
+            .first()
+        )
+
+        if session:
+            db.delete(session)
+            db.commit()
+        else:
+            utils.log_user_event(db, current_user.id, "logout_session_not_found")
+
+        utils.log_user_event(db, current_user.id, "logout")
+
+        blacklist_token = models.TokenBlacklist(token=token, user_id=current_user.id)
+        db.add(blacklist_token)
         db.commit()
-    log_user_event(db, current_user.id, "logout")
-    return {"message": "Logged out successfully"}
+
+        return {"message": "تم تسجيل الخروج بنجاح"}
+    except Exception as e:
+        utils.log_user_event(db, current_user.id, "logout_error", {"error": str(e)})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="حدث خطأ أثناء تسجيل الخروج",
+        )
 
 
 @router.post("/logout-all-devices")
@@ -165,7 +184,7 @@ def logout_all_devices(
     db: Session = Depends(database.get_db),
 ):
     """
-    Выход пользователя из всех устройств, кроме текущего.
+    تسجيل خروج المستخدم من جميع الأجهزة باستثناء الجهاز الحالي.
     """
     db.query(models.UserSession).filter(
         models.UserSession.user_id == current_user.id,
@@ -173,12 +192,12 @@ def logout_all_devices(
     ).delete()
     db.commit()
     log_user_event(db, current_user.id, "logout_all_devices")
-    return {"message": "Logged out from all other devices"}
+    return {"message": "تم تسجيل الخروج من جميع الأجهزة الأخرى"}
 
 
 def create_password_reset_token(email: str) -> str:
     """
-    Создание токена для сброса пароля.
+    إنشاء توكن لإعادة تعيين كلمة المرور.
     """
     expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode = {"exp": expire, "sub": email}
@@ -192,22 +211,21 @@ async def reset_password_request(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    Обработка запроса на сброс пароля.
+    معالجة طلب إعادة تعيين كلمة المرور.
     """
     user = db.query(models.User).filter(models.User.email == email.email).first()
     if not user:
-        # Не раскрываем информацию о существовании пользователя
         return {
-            "message": "If a user with this email exists, a password reset link has been sent."
+            "message": "إذا كان هناك مستخدم بهذا البريد الإلكتروني، فسيتم إرسال رابط إعادة تعيين كلمة المرور."
         }
 
     token = create_password_reset_token(email.email)
     reset_link = f"https://yourapp.com/reset-password?token={token}"
 
     message = MessageSchema(
-        subject="Password Reset Request",
+        subject="طلب إعادة تعيين كلمة المرور",
         recipients=[email.email],
-        body=f"Click the following link to reset your password: {reset_link}",
+        body=f"انقر على الرابط التالي لإعادة تعيين كلمة المرور الخاصة بك: {reset_link}",
         subtype="html",
     )
 
@@ -216,7 +234,7 @@ async def reset_password_request(
     log_user_event(db, user.id, "password_reset_requested")
 
     return {
-        "message": "If a user with this email exists, a password reset link has been sent."
+        "message": "إذا كان هناك مستخدم بهذا البريد الإلكتروني، فسيتم إرسال رابط إعادة تعيين كلمة المرور."
     }
 
 
@@ -225,7 +243,7 @@ async def reset_password(
     reset_data: schemas.PasswordReset, db: Session = Depends(database.get_db)
 ):
     """
-    Сброс пароля пользователя.
+    إعادة تعيين كلمة مرور المستخدم.
     """
     try:
         payload = jwt.decode(
@@ -233,17 +251,40 @@ async def reset_password(
         )
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=400, detail="Invalid token")
+            raise HTTPException(status_code=400, detail="توكن غير صالح")
     except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        raise HTTPException(status_code=400, detail="توكن غير صالح أو منتهي الصلاحية")
 
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
 
     hashed_password = utils.hash(reset_data.new_password)
     user.password = hashed_password
     db.commit()
     log_user_event(db, user.id, "password_reset_completed")
 
-    return {"message": "Password reset successfully"}
+    return {"message": "تم إعادة تعيين كلمة المرور بنجاح"}
+
+
+@router.post("/refresh-token", response_model=schemas.Token)
+async def refresh_token(refresh_token: str, db: Session = Depends(database.get_db)):
+    """
+    تجديد توكن الوصول باستخدام توكن التحديث.
+    """
+    try:
+        payload = jwt.decode(
+            refresh_token, settings.secret_key, algorithms=[settings.algorithm]
+        )
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="توكن التحديث غير صالح")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="توكن التحديث غير صالح")
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+    access_token = oauth2.create_access_token(data={"user_id": user.id})
+    return {"access_token": access_token, "token_type": "bearer"}

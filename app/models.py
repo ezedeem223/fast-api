@@ -276,7 +276,16 @@ class User(Base):
     total_reports = Column(Integer, default=0)
     valid_reports = Column(Integer, default=0)
     allow_reposts = Column(Boolean, default=True)
-
+    last_logout = Column(DateTime, nullable=True)
+    current_token = Column(String, nullable=True)
+    facebook_id = Column(String, unique=True, nullable=True)
+    twitter_id = Column(String, unique=True, nullable=True)
+    reset_token = Column(String, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+    reputation_score = Column(Float, default=0.0)
+    is_suspended = Column(Boolean, default=False)
+    suspension_end_date = Column(DateTime, nullable=True)
+    token_blacklist = relationship("TokenBlacklist", back_populates="user")
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
         "Comment", back_populates="owner", cascade="all, delete-orphan"
@@ -382,6 +391,29 @@ class User(Base):
         back_populates="receiver",
     )
     search_history = relationship("SearchStatistics", back_populates="user")
+
+
+class UserActivity(Base):
+    __tablename__ = "user_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    activity_type = Column(String)
+    timestamp = Column(DateTime, default=func.now())
+    details = Column(JSON)
+
+    user = relationship("User", back_populates="activities")
+
+
+User.activities = relationship("UserActivity", back_populates="user")
+
+
+class CommunityCategory(Base):
+    __tablename__ = "community_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String)
 
 
 class UserEvent(Base):
@@ -565,6 +597,15 @@ class Post(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+
+
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
+    blacklisted_on = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"))
 
 
 class PostVoteStatistics(Base):
@@ -953,7 +994,10 @@ class Community(Base):
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
     category_id = Column(Integer, ForeignKey("categories.id"))
-
+    category_id = Column(Integer, ForeignKey("community_categories.id"))
+    is_private = Column(Boolean, default=False)
+    requires_approval = Column(Boolean, default=False)
+    category = relationship("CommunityCategory", back_populates="communities")
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
@@ -980,6 +1024,9 @@ class Community(Base):
     @property
     def member_count(self):
         return len(self.members)
+
+
+CommunityCategory.communities = relationship("Community", back_populates="category")
 
 
 class Category(Base):

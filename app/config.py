@@ -32,14 +32,14 @@ class Settings(BaseSettings):
     HUGGINGFACE_API_TOKEN: str = HUGGINGFACE_API_TOKEN
     REDIS_URL = REDIS_URL
     redis_client = redis.Redis.from_url(REDIS_URL)
-    # أضف الحقول الجديدة هنا
-    # facebook_access_token: "default_facebook_client_secret"
-    # facebook_app_id: "default_facebook_client_secret"
-    # facebook_app_secret: "default_facebook_client_secret"
-    # twitter_api_key: "default_facebook_client_secret"
-    # twitter_api_secret: "default_facebook_client_secret"
-    # twitter_access_token: "default_facebook_client_secret"
-    # twitter_access_token_secret: "default_facebook_client_secret"
+    facebook_access_token: str
+    facebook_app_id: str
+    facebook_app_secret: str
+    twitter_api_key: str
+    twitter_api_secret: str
+    twitter_access_token: str
+    twitter_access_token_secret: str
+    refresh_secret_key: str
 
     rsa_private_key_path: str
     rsa_public_key_path: str

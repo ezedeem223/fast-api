@@ -890,7 +890,14 @@ class CategoryBase(BaseModel):
 
 
 class CategoryCreate(CategoryBase):
-    pass
+    name: str
+    description: Optional[str] = None
+
+
+class CategoryOut(CategoryCreate):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Category(CategoryBase):

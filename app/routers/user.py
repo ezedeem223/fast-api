@@ -755,3 +755,29 @@ def mark_notification_as_read(
     db.refresh(notification)
 
     return notification
+
+
+def log_user_activity(db: Session, user_id: int, activity_type: str, details: dict):
+    activity = UserActivity(
+        user_id=user_id, activity_type=activity_type, details=details
+    )
+    db.add(activity)
+    db.commit()
+
+
+@router.post("/users/{user_id}/suspend")
+def suspend_user(user_id: int, days: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    user.is_suspended = True
+    user.suspension_end_date = datetime.utcnow() + timedelta(days=days)
+    db.commit()
+    return {"message": "User suspended successfully"}
+
+
+@router.post("/users/{user_id}/unsuspend")
+def unsuspend_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    user.is_suspended = False
+    user.suspension_end_date = None
+    db.commit()
+    return {"message": "User unsuspended successfully"}
