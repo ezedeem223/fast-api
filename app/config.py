@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int
     google_client_id: str = "default_google_client_id"
     google_client_secret: str = "default_google_client_secret"
-    facebook_client_id: str = "default_facebook_client_id"
-    facebook_client_secret: str = "default_facebook_client_secret"
     mail_username: str
     mail_password: str
     mail_from: EmailStr
@@ -40,6 +38,7 @@ class Settings(BaseSettings):
     twitter_access_token: str
     twitter_access_token_secret: str
     refresh_secret_key: str
+    DEFAULT_LANGUAGE = "ar"
 
     rsa_private_key_path: str
     rsa_public_key_path: str

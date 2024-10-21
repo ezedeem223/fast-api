@@ -18,6 +18,8 @@ router = APIRouter(tags=["Authentication"])
 
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+TOKEN_EXPIRY = timedelta(hours=1)
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -40,6 +42,9 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
         )
+
+    if user.is_suspended:
+        raise HTTPException(status_code=403, detail="Account is suspended")
 
     if user.account_locked_until and user.account_locked_until > datetime.now(
         timezone.utc
@@ -195,6 +200,18 @@ def logout_all_devices(
     return {"message": "تم تسجيل الخروج من جميع الأجهزة الأخرى"}
 
 
+@router.post("/invalidate-all-sessions")
+async def invalidate_all_sessions(
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    db.query(models.UserSession).filter(
+        models.UserSession.user_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"message": "All sessions have been invalidated"}
+
+
 def create_password_reset_token(email: str) -> str:
     """
     إنشاء توكن لإعادة تعيين كلمة المرور.
@@ -214,27 +231,26 @@ async def reset_password_request(
     معالجة طلب إعادة تعيين كلمة المرور.
     """
     user = db.query(models.User).filter(models.User.email == email.email).first()
-    if not user:
-        return {
-            "message": "إذا كان هناك مستخدم بهذا البريد الإلكتروني، فسيتم إرسال رابط إعادة تعيين كلمة المرور."
-        }
+    if user:
+        token = create_password_reset_token(email.email)
+        user.reset_token = token
+        user.reset_token_expires = datetime.now() + TOKEN_EXPIRY
+        db.commit()
+        reset_link = f"https://yourapp.com/reset-password?token={token}"
 
-    token = create_password_reset_token(email.email)
-    reset_link = f"https://yourapp.com/reset-password?token={token}"
+        message = MessageSchema(
+            subject="طلب إعادة تعيين كلمة المرور",
+            recipients=[email.email],
+            body=f"انقر على الرابط التالي لإعادة تعيين كلمة المرور الخاصة بك: {reset_link}",
+            subtype="html",
+        )
 
-    message = MessageSchema(
-        subject="طلب إعادة تعيين كلمة المرور",
-        recipients=[email.email],
-        body=f"انقر على الرابط التالي لإعادة تعيين كلمة المرور الخاصة بك: {reset_link}",
-        subtype="html",
-    )
-
-    fm = FastMail(settings.mail_config)
-    background_tasks.add_task(fm.send_message, message)
-    log_user_event(db, user.id, "password_reset_requested")
+        fm = FastMail(settings.mail_config)
+        background_tasks.add_task(fm.send_message, message)
+        log_user_event(db, user.id, "password_reset_requested")
 
     return {
-        "message": "إذا كان هناك مستخدم بهذا البريد الإلكتروني، فسيتم إرسال رابط إعادة تعيين كلمة المرور."
+        "message": "If an account with that email exists, a password reset link has been sent."
     }
 
 
@@ -259,8 +275,17 @@ async def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
 
+    if (
+        not user.reset_token
+        or user.reset_token != reset_data.token
+        or user.reset_token_expires < datetime.now()
+    ):
+        raise HTTPException(status_code=400, detail="توكن غير صالح أو منتهي الصلاحية")
+
     hashed_password = utils.hash(reset_data.new_password)
     user.password = hashed_password
+    user.reset_token = None
+    user.reset_token_expires = None
     db.commit()
     log_user_event(db, user.id, "password_reset_completed")
 
@@ -274,7 +299,7 @@ async def refresh_token(refresh_token: str, db: Session = Depends(database.get_d
     """
     try:
         payload = jwt.decode(
-            refresh_token, settings.secret_key, algorithms=[settings.algorithm]
+            refresh_token, settings.refresh_secret_key, algorithms=[settings.algorithm]
         )
         user_id: int = payload.get("sub")
         if user_id is None:

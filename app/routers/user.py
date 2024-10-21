@@ -20,6 +20,7 @@ import pyotp
 from datetime import timedelta
 from ..cache import cache
 from ..utils import log_user_event
+from ..i18n import ALL_LANGUAGES
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -781,3 +782,23 @@ def unsuspend_user(user_id: int, db: Session = Depends(get_db)):
     user.suspension_end_date = None
     db.commit()
     return {"message": "User unsuspended successfully"}
+
+
+@router.put("/users/me/language")
+def update_user_language(
+    language: UserLanguageUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if language.preferred_language not in ALL_LANGUAGES:
+        raise HTTPException(status_code=400, detail="Invalid language code")
+
+    current_user.preferred_language = language.preferred_language
+    current_user.auto_translate = language.auto_translate
+    db.commit()
+    return {"message": "Language preferences updated successfully"}
+
+
+@router.get("/languages")
+def get_language_options():
+    return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]

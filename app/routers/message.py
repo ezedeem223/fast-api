@@ -85,6 +85,9 @@ async def create_message(
         content=message.content,
         message_type=schemas.MessageType.TEXT,
     )
+    new_message.language = detect_language(
+        new_message.content
+    )  # Assume you have a function to detect language
 
     if message.content and emoji.emoji_count(message.content) > 0:
         new_message.has_emoji = True
@@ -186,6 +189,9 @@ async def create_message(
         )
 
     db.commit()
+    new_message.content = await get_translated_content(
+        new_message.content, current_user, new_message.language
+    )
 
     return new_message
 
@@ -300,6 +306,11 @@ def get_messages(
         if message.receiver_id == current_user.id and not message.is_read:
             message.is_read = True
             message.read_at = datetime.now()
+
+    for message in messages:
+        message.content = await get_translated_content(
+            message.content, current_user, message.language
+        )
 
     db.commit()
     return messages

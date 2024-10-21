@@ -4,7 +4,7 @@ import qrcode
 import base64
 from io import BytesIO
 import os
-from fastapi import UploadFile, Request
+from fastapi import UploadFile, Request, HTTPException, status
 import aiofiles
 from better_profanity import profanity
 import validators
@@ -13,6 +13,9 @@ from sklearn.naive_bayes import MultinomialNB
 import nltk
 from nltk.corpus import stopwords
 import joblib
+from functools import wraps
+from .oauth2 import get_current_user
+
 import requests
 from urllib.parse import urlparse
 from textblob import TextBlob
@@ -700,3 +703,29 @@ def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
         downvote_percentage=downvote_percentage,
         most_common_reaction=most_common_reaction,
     )
+
+
+def admin_required(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        current_user = await get_current_user()
+        if not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="Admin privileges required")
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
+def handle_exceptions(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            # يمكنك تخصيص معالجة الاستثناءات هنا
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An error occurred: {str(e)}",
+            )
+
+    return wrapper

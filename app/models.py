@@ -284,7 +284,11 @@ class User(Base):
     reset_token_expires = Column(DateTime, nullable=True)
     reputation_score = Column(Float, default=0.0)
     is_suspended = Column(Boolean, default=False)
+    preferred_language = Column(String, default=ar)
+    auto_translate = Column(Boolean, default=True)
     suspension_end_date = Column(DateTime, nullable=True)
+    language = Column(String, nullable=False, default="en")
+
     token_blacklist = relationship("TokenBlacklist", back_populates="user")
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -726,6 +730,7 @@ class Comment(Base):
     has_emoji = Column(Boolean, default=False)
     has_sticker = Column(Boolean, default=False)
     sentiment_score = Column(Float, nullable=True)
+    language = Column(String, nullable=False, default="en")
 
     sticker_id = Column(Integer, ForeignKey("stickers.id"), nullable=True)
     is_pinned = Column(Boolean, default=False)
@@ -913,6 +918,7 @@ class Message(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     link_preview = Column(JSON, nullable=True)
+    language = Column(String, nullable=False, default="en")
 
     sender = relationship(
         "User", foreign_keys=[sender_id], back_populates="sent_messages"
@@ -997,6 +1003,8 @@ class Community(Base):
     category_id = Column(Integer, ForeignKey("community_categories.id"))
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
+    language = Column(String, nullable=False, default="en")
+
     category = relationship("CommunityCategory", back_populates="communities")
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")

@@ -55,9 +55,12 @@ from .analytics import model, tokenizer, clean_old_statistics
 from fastapi_utils.tasks import repeat_every
 from app.routers.search import update_search_suggestions
 from .utils import update_search_vector, spell, update_post_score
+from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
+from .middleware.language import language_middleware
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
+app.state.default_language = settings.DEFAULT_LANGUAGE
 
 app = FastAPI(
     title="Your API",
@@ -156,6 +159,8 @@ app.include_router(ip_ban.router)
 app.include_router(moderation.router)
 app.include_router(category_management.router)
 app.include_router(social_auth.router)
+
+app.middleware("http")(language_middleware)
 
 
 manager = ConnectionManager()
@@ -278,3 +283,35 @@ def update_all_post_scores():
             update_post_score(db, post)
     finally:
         db.close()
+
+
+@app.middleware("http")
+async def add_language_header(request: Request, call_next):
+    response = await call_next(request)
+    lang = get_locale(request)
+    response.headers["Content-Language"] = lang
+    return response
+
+
+@app.get("/languages")
+def get_available_languages():
+    return ALL_LANGUAGES
+
+
+@app.get("/languages")
+def get_available_languages():
+    return ALL_LANGUAGES
+
+
+@app.post("/translate")
+async def translate_content(request: Request):
+    data = await request.json()
+    text = data.get("text")
+    source_lang = data.get("source_lang", get_locale(request))
+    target_lang = data.get("target_lang", app.state.default_language)
+    translated = translate_text(text, source_lang, target_lang)
+    return {
+        "translated": translated,
+        "source_lang": source_lang,
+        "target_lang": target_lang,
+    }

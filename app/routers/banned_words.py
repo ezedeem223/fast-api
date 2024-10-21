@@ -4,31 +4,27 @@ from sqlalchemy import func
 from .. import models, schemas, oauth2, utils
 from ..database import get_db
 from typing import List, Optional
+from ..cache import cache
 
 router = APIRouter(prefix="/banned-words", tags=["Banned Words"])
 
 
-def check_admin(current_user: models.User):
-    if not current_user.is_admin:
+async def check_admin(current_user: models.User = Depends(oauth2.get_current_user)):
+    if not await utils.is_admin(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perform this action",
+            status_code=403, detail="Only administrators can perform this action"
         )
+    return current_user
 
 
 @router.post(
     "/", status_code=status.HTTP_201_CREATED, response_model=schemas.BannedWordOut
 )
-def add_banned_word(
+async def add_banned_word(
     word: schemas.BannedWordCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(check_admin),
 ):
-    """
-    Add a new banned word to the database.
-    """
-    check_admin(current_user)
-
     existing_word = (
         db.query(models.BannedWord)
         .filter(func.lower(models.BannedWord.word) == word.word.lower())
@@ -51,10 +47,11 @@ def add_banned_word(
     return new_banned_word
 
 
-@router.get("/", response_model=List[schemas.BannedWordOut])
-def get_banned_words(
+@router.get("/", response_model=schemas.BannedWordListOut)
+@cache(expire=300)
+async def get_banned_words(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(check_admin),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = None,
@@ -63,11 +60,6 @@ def get_banned_words(
     ),
     sort_order: Optional[str] = Query("asc", description="Sort order: 'asc' or 'desc'"),
 ):
-    """
-    Retrieve a list of banned words with optional filtering and sorting.
-    """
-    check_admin(current_user)
-
     query = db.query(models.BannedWord)
 
     if search:
@@ -93,16 +85,11 @@ def get_banned_words(
 
 
 @router.delete("/{word_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_banned_word(
+async def remove_banned_word(
     word_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(check_admin),
 ):
-    """
-    Remove a banned word from the database.
-    """
-    check_admin(current_user)
-
     word = db.query(models.BannedWord).filter(models.BannedWord.id == word_id).first()
     if not word:
         raise HTTPException(
@@ -120,17 +107,12 @@ def remove_banned_word(
 
 
 @router.put("/{word_id}", response_model=schemas.BannedWordOut)
-def update_banned_word(
+async def update_banned_word(
     word_id: int,
     word_update: schemas.BannedWordUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(check_admin),
 ):
-    """
-    Update a banned word in the database.
-    """
-    check_admin(current_user)
-
     word = db.query(models.BannedWord).filter(models.BannedWord.id == word_id).first()
     if not word:
         raise HTTPException(
@@ -151,3 +133,22 @@ def update_banned_word(
     )
 
     return word
+
+
+@router.post("/bulk", status_code=status.HTTP_201_CREATED)
+async def add_banned_words_bulk(
+    words: List[schemas.BannedWordCreate],
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(check_admin),
+):
+    new_words = [
+        models.BannedWord(**word.dict(), created_by=current_user.id) for word in words
+    ]
+    db.add_all(new_words)
+    db.commit()
+
+    utils.log_admin_action(
+        db, current_user.id, "add_banned_words_bulk", {"count": len(new_words)}
+    )
+
+    return {"message": f"{len(new_words)} words added successfully"}

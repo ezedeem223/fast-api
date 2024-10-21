@@ -127,6 +127,9 @@ async def create_comment(
     # فحص المحتوى غير اللائق والروابط
     new_comment.contains_profanity = check_for_profanity(comment.content)
     new_comment.has_invalid_urls = not validate_urls(comment.content)
+    new_comment.language = detect_language(
+        new_comment.content
+    )  # Assume you have a function to detect language
 
     # إذا كان هناك محتوى غير لائق أو روابط غير صالحة، نضع علامة على التعليق
     if new_comment.contains_profanity or new_comment.has_invalid_urls:
@@ -167,6 +170,10 @@ async def create_comment(
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post titled '{post.title}'.",
     )
+    new_comment.content = await get_translated_content(
+        new_comment.content, current_user, new_comment.language
+    )
+
     post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
     post.comment_count += 1
     update_post_score(db, post)
@@ -218,6 +225,11 @@ def get_comments(
         .limit(limit)
         .all()
     )
+    for comment in comments:
+        comment.content = await get_translated_content(
+            comment.content, current_user, comment.language
+        )
+
     return comments
 
 

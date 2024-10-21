@@ -12,6 +12,9 @@ from fastapi import (
     Query,
     Form,
 )
+from ..i18n import translate_text, get_translated_content
+
+
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_, cast, desc
 from .. import models, schemas, oauth2, utils
@@ -202,6 +205,10 @@ def get_post(
         is_poll=post.is_poll,
         poll_data=poll_data,
     )
+    post.content = await get_translated_content(
+        post.content, current_user, post.language
+    )
+    post.title = await get_translated_content(post.title, current_user, post.language)
 
     return post_out
 
@@ -1191,6 +1198,14 @@ def get_posts(
         .offset(skip)
         .all()
     )
+    for post in posts:
+        post.content = await get_translated_content(
+            post.content, current_user, post.language
+        )
+        post.title = await get_translated_content(
+            post.title, current_user, post.language
+        )
+
     return posts
 
 
@@ -1244,3 +1259,9 @@ def export_post_as_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=post_{id}.pdf"},
     )
+
+
+async def get_translated_content(content: str, user: User, source_lang: str):
+    if user.auto_translate and user.preferred_language != source_lang:
+        return await translate_text(content, source_lang, user.preferred_language)
+    return content

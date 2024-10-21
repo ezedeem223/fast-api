@@ -869,6 +869,17 @@ class CommunityOut(CommunityBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserLanguageUpdate(BaseModel):
+    preferred_language: str
+    auto_translate: bool = True
+
+
+class TranslationRequest(BaseModel):
+    text: str
+    source_lang: str
+    target_lang: str
+
+
 class FollowerOut(BaseModel):
     id: int
     username: str

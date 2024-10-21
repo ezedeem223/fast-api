@@ -67,6 +67,14 @@ def get_communities(
     if search:
         query = query.filter(models.Community.name.ilike(f"%{search}%"))
     communities = query.offset(skip).limit(limit).all()
+    for community in communities:
+        community.name = await get_translated_content(
+            community.name, current_user, community.language
+        )
+        community.description = await get_translated_content(
+            community.description, current_user, community.language
+        )
+
     return [schemas.CommunityOut.from_orm(community) for community in communities]
 
 
@@ -82,6 +90,13 @@ def get_community(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Community with id: {id} was not found",
         )
+    community.name = await get_translated_content(
+        community.name, current_user, community.language
+    )
+    community.description = await get_translated_content(
+        community.description, current_user, community.language
+    )
+
     return schemas.CommunityOut.from_orm(community)
 
 
@@ -284,7 +299,13 @@ async def get_community_content(
 
     content_type = request.url.path.split("/")[-1]  # reels, articles, or posts
     model = getattr(models, content_type.capitalize()[:-1])  # Reel, Article, or Post
-
+    for article in articles:
+        article.title = await get_translated_content(
+            article.title, current_user, article.language
+        )
+        article.content = await get_translated_content(
+            article.content, current_user, article.language
+        )
     content = (
         db.query(model)
         .filter(model.community_id == community_id)
