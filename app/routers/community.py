@@ -313,6 +313,19 @@ async def get_community_content(
         .limit(limit)
         .all()
     )
+    for item in content:
+        if hasattr(item, "title"):
+            item.title = await get_translated_content(
+                item.title, current_user, item.language
+            )
+        if hasattr(item, "content"):
+            item.content = await get_translated_content(
+                item.content, current_user, item.language
+            )
+        if hasattr(item, "description"):  # للملفات الصوتية
+            item.description = await get_translated_content(
+                item.description, current_user, item.language
+            )
 
     response_schema = getattr(schemas, f"{content_type.capitalize()[:-1]}Out")
     return [

@@ -350,6 +350,7 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    user.bio = await get_translated_content(user.bio, current_user, user.language)
     post_count = (
         db.query(func.count(models.Post.id))
         .filter(models.Post.owner_id == user_id)

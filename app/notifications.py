@@ -104,3 +104,10 @@ async def send_mention_notification(to: str, mentioner: str, post_id: int):
         f"{mentioner} mentioned you in a post. Check it out: [link to post/{post_id}]"
     )
     await send_email_notification(to=to, subject=subject, body=body)
+
+
+async def translate_notification_content(notification, user):
+    notification.content = await get_translated_content(
+        notification.content, user, notification.language
+    )
+    return notification

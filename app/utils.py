@@ -13,7 +13,8 @@ from sklearn.naive_bayes import MultinomialNB
 import nltk
 from nltk.corpus import stopwords
 import joblib
-from functools import wraps
+from functools import wraps, lru_cache
+from cachetools import TTLCache
 from .oauth2 import get_current_user
 
 import requests
@@ -36,6 +37,7 @@ import torch
 from datetime import datetime, timezone
 
 spell = SpellChecker()
+translation_cache = TTLCache(maxsize=1000, ttl=3600)
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
@@ -729,3 +731,22 @@ def handle_exceptions(func):
             )
 
     return wrapper
+
+
+@lru_cache(maxsize=1000)
+async def cached_translate_text(text: str, source_lang: str, target_lang: str):
+    cache_key = f"{text}:{source_lang}:{target_lang}"
+    if cache_key in translation_cache:
+        return translation_cache[cache_key]
+
+    translated_text = await translate_text(text, source_lang, target_lang)
+    translation_cache[cache_key] = translated_text
+    return translated_text
+
+
+async def get_translated_content(content: str, user: User, source_lang: str):
+    if user.auto_translate and user.preferred_language != source_lang:
+        return await cached_translate_text(
+            content, source_lang, user.preferred_language
+        )
+    return content

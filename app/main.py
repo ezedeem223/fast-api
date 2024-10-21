@@ -57,6 +57,7 @@ from app.routers.search import update_search_suggestions
 from .utils import update_search_vector, spell, update_post_score
 from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
 from .middleware.language import language_middleware
+import gettext
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -82,6 +83,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+localedir = "locales"
+translation = gettext.translation("messages", localedir, fallback=True)
+_ = translation.gettext
+
+
+@app.get("/")
+async def root():
+    return {"message": _("Welcome to our application")}
 
 
 @app.exception_handler(RequestValidationError)
