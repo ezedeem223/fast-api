@@ -778,6 +778,25 @@ class NotificationGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class NotificationDeliveryLogOut(BaseModel):
+    id: int
+    attempt_time: datetime
+    status: str
+    error_message: Optional[str]
+    delivery_channel: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationWithLogs(NotificationOut):
+    delivery_logs: List[NotificationDeliveryLogOut]
+    retry_count: int
+    status: NotificationStatus
+    last_retry: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NotificationOut(BaseModel):
     id: int
     content: str

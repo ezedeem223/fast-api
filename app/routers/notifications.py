@@ -264,27 +264,77 @@ async def get_notification_statistics(
     return stats
 
 
-@router.get("/analytics", response_model=schemas.NotificationAnalytics)
+@router.post("/retry")
+async def retry_failed_notifications(
+    notification_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """إعادة محاولة إرسال الإشعارات الفاشلة"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    notification_service = NotificationService(db)
+    results = []
+
+    for notification_id in notification_ids:
+        success = await notification_service.retry_failed_notification(notification_id)
+        results.append({"notification_id": notification_id, "success": success})
+
+    return {"results": results}
+
+
+@router.post("/cleanup")
+async def cleanup_old_notifications(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """تنظيف الإشعارات القديمة"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    notification_service = NotificationService(db)
+    await notification_service.cleanup_old_notifications(days)
+    return {"message": f"Successfully archived notifications older than {days} days"}
+
+
+@router.get("/analytics")
 async def get_notification_analytics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    days: int = Query(30, ge=1, le=365),
+    days: int = Query(default=30, ge=1, le=365),
 ):
-    """الحصول على تحليلات متقدمة للإشعارات"""
+    """الحصول على إحصائيات الإشعارات"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-    analytics = {
-        "engagement_rate": calculate_engagement_rate(db, current_user.id, start_date),
-        "response_time": calculate_average_response_time(
-            db, current_user.id, start_date
-        ),
-        "peak_activity_hours": get_peak_activity_hours(db, current_user.id, start_date),
-        "most_interacted_types": get_most_interacted_types(
-            db, current_user.id, start_date
-        ),
-    }
+    stats = (
+        db.query(
+            func.count(models.Notification.id).label("total"),
+            func.count(case((models.Notification.status == "DELIVERED", 1))).label(
+                "delivered"
+            ),
+            func.count(case((models.Notification.status == "FAILED", 1))).label(
+                "failed"
+            ),
+            func.avg(models.Notification.retry_count).label("avg_retries"),
+            func.count(case((models.Notification.is_read == True, 1))).label("read"),
+        )
+        .filter(models.Notification.created_at >= start_date)
+        .first()
+    )
 
-    return analytics
+    return {
+        "total_notifications": stats.total,
+        "delivered_notifications": stats.delivered,
+        "failed_notifications": stats.failed,
+        "average_retries": float(stats.avg_retries or 0),
+        "read_notifications": stats.read,
+        "period_days": days,
+    }
 
 
 @router.post("/send-push")

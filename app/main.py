@@ -327,3 +327,39 @@ async def translate_content(request: Request):
         "source_lang": source_lang,
         "target_lang": target_lang,
     }
+
+
+# إضافة مهمة دورية لتنظيف الإشعارات القديمة
+@app.on_event("startup")
+@repeat_every(seconds=86400)  # كل 24 ساعة
+def cleanup_old_notifications():
+    db = SessionLocal()
+    try:
+        notification_service = NotificationService(db)
+        await notification_service.cleanup_old_notifications(
+            30
+        )  # تنظيف الإشعارات الأقدم من 30 يوماً
+    finally:
+        db.close()
+
+
+# إضافة مهمة دورية لإعادة محاولة الإشعارات الفاشلة
+@app.on_event("startup")
+@repeat_every(seconds=3600)  # كل ساعة
+def retry_failed_notifications():
+    db = SessionLocal()
+    try:
+        notifications = (
+            db.query(models.Notification)
+            .filter(
+                models.Notification.status == models.NotificationStatus.FAILED,
+                models.Notification.retry_count < 3,
+            )
+            .all()
+        )
+
+        notification_service = NotificationService(db)
+        for notification in notifications:
+            await notification_service.retry_failed_notification(notification.id)
+    finally:
+        db.close()

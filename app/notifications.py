@@ -75,6 +75,8 @@ class NotificationService:
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
         self.background_tasks = background_tasks
+        self.max_retries = 3
+        self.retry_delay = 300
 
     async def create_notification(
         self,
@@ -141,27 +143,47 @@ class NotificationService:
             raise
 
     async def deliver_notification(self, notification: models.Notification):
-        """تسليم الإشعار عبر جميع القنوات المكونة"""
+        """تحسين تسليم الإشعار مع تتبع محاولات التسليم"""
         try:
             user_prefs = self._get_user_preferences(notification.user_id)
-
             delivery_tasks = []
-
-            if user_prefs.in_app_notifications:
-                delivery_tasks.append(self._send_realtime_notification(notification))
 
             if user_prefs.email_notifications:
                 delivery_tasks.append(self._send_email_notification(notification))
-
             if user_prefs.push_notifications:
                 delivery_tasks.append(self._send_push_notification(notification))
+            if user_prefs.in_app_notifications:
+                delivery_tasks.append(self._send_realtime_notification(notification))
 
-            await asyncio.gather(*delivery_tasks)
+            results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
 
-            logger.info(f"Notification {notification.id} delivered successfully")
+            success = all(not isinstance(r, Exception) for r in results)
+            status = (
+                models.NotificationStatus.DELIVERED
+                if success
+                else models.NotificationStatus.FAILED
+            )
+
+            log = models.NotificationDeliveryLog(
+                notification_id=notification.id,
+                status=status.value,
+                error_message=str(results) if not success else None,
+                delivery_channel="all",
+            )
+            self.db.add(log)
+            notification.status = status
+            self.db.commit()
 
         except Exception as e:
-            logger.error(f"Error delivering notification {notification.id}: {str(e)}")
+            notification.status = models.NotificationStatus.FAILED
+            log = models.NotificationDeliveryLog(
+                notification_id=notification.id,
+                status="failed",
+                error_message=str(e),
+                delivery_channel="all",
+            )
+            self.db.add(log)
+            self.db.commit()
             raise
 
     async def _send_realtime_notification(self, notification: models.Notification):
@@ -183,6 +205,53 @@ class NotificationService:
             await manager.send_personal_message(message, notification.user_id)
         except Exception as e:
             logger.error(f"Error sending realtime notification: {str(e)}")
+
+    async def retry_failed_notification(self, notification_id: int):
+        """إعادة محاولة إرسال الإشعارات الفاشلة"""
+        notification = (
+            self.db.query(models.Notification)
+            .filter(models.Notification.id == notification_id)
+            .first()
+        )
+
+        if not notification or notification.retry_count >= self.max_retries:
+            return False
+
+        try:
+            await self.deliver_notification(notification)
+            notification.status = models.NotificationStatus.DELIVERED
+            self.db.commit()
+            return True
+        except Exception as e:
+            notification.retry_count += 1
+            notification.last_retry = datetime.now(timezone.utc)
+            notification.status = models.NotificationStatus.FAILED
+
+            log = models.NotificationDeliveryLog(
+                notification_id=notification.id,
+                status="failed",
+                error_message=str(e),
+                delivery_channel="all",
+            )
+            self.db.add(log)
+            self.db.commit()
+            return False
+
+    async def cleanup_old_notifications(self, days: int):
+        """تنظيف الإشعارات القديمة"""
+        threshold = datetime.now(timezone.utc) - timedelta(days=days)
+        old_notifications = (
+            self.db.query(models.Notification)
+            .filter(
+                models.Notification.created_at < threshold,
+                models.Notification.is_read == True,
+            )
+            .all()
+        )
+
+        for notification in old_notifications:
+            notification.is_archived = True
+        self.db.commit()
 
     async def _send_email_notification(self, notification: models.Notification):
         """إرسال إشعار بالبريد الإلكتروني"""

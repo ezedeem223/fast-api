@@ -148,6 +148,13 @@ class AppealStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class NotificationStatus(str, enum.Enum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    RETRYING = "retrying"
+
+
 class BlockAppeal(Base):
     __tablename__ = "block_appeals"
 
@@ -755,13 +762,34 @@ class Notification(Base):
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
+    status = Column(
+        Enum(NotificationStatus), default=NotificationStatus.PENDING
+    )  # جديد
+    retry_count = Column(Integer, default=0)  # جديد
+    last_retry = Column(DateTime(timezone=True), nullable=True)  # جديد
+    delivery_attempts = Column(JSONB, default=list)
     user = relationship("User", back_populates="notifications")
     group = relationship("NotificationGroup", back_populates="notifications")
+
+    delivery_logs = relationship(
+        "NotificationDeliveryLog", back_populates="notification"
+    )
 
 
 User.notifications = relationship("Notification", back_populates="user")
 
+
+class NotificationDeliveryLog(Base):
+    __tablename__ = "notification_delivery_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    notification_id = Column(Integer, ForeignKey("notifications.id", ondelete="CASCADE"))
+    attempt_time = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String)
+    error_message = Column(String, nullable=True)
+    delivery_channel = Column(String)  # email, push, websocket
+    
+    notification = relationship("Notification", back_populates="delivery_logs")
 
 class Comment(Base):
     __tablename__ = "comments"
