@@ -111,3 +111,38 @@ async def translate_notification_content(notification, user):
         notification.content, user, notification.language
     )
     return notification
+
+
+@router.get("/notifications", response_model=List[schemas.NotificationOut])
+def get_user_notifications(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    notifications = (
+        db.query(models.Notification)
+        .filter(models.Notification.user_id == current_user.id)
+        .order_by(models.Notification.created_at.desc())
+        .all()
+    )
+    return notifications
+
+
+@router.put("/notifications/{notification_id}/read")
+def mark_notification_as_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    notification = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.id == notification_id,
+            models.Notification.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notification.is_read = True
+    db.commit()
+    return {"message": "Notification marked as read"}

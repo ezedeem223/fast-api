@@ -1,15 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Body
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Query,
+    Request,
+    Body,
+    Response,
+)
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Union
 from .. import models, schemas, oauth2
 from ..database import get_db
+from ..utils import log_user_event, create_notification, get_translated_content
 import logging
 from datetime import date, timedelta
 from sqlalchemy import func
 from fastapi.responses import HTMLResponse, StreamingResponse
 import csv
 from io import StringIO
-from ..utils import log_user_event
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["Communities"])
@@ -28,7 +37,6 @@ def create_community(
     )
     new_community.members.append(current_user)
 
-    # إضافة التصنيف
     if community.category_id:
         category = (
             db.query(models.Category)
@@ -39,7 +47,6 @@ def create_community(
             raise HTTPException(status_code=404, detail="Category not found")
         new_community.category = category
 
-    # إضافة الوسوم
     for tag_id in community.tags:
         tag = db.query(models.Tag).filter(models.Tag.id == tag_id).first()
         if tag:
@@ -48,15 +55,25 @@ def create_community(
     db.add(new_community)
     db.commit()
     db.refresh(new_community)
+
     log_user_event(
         db, current_user.id, "create_community", {"community_id": new_community.id}
+    )
+
+    create_notification(
+        db,
+        current_user.id,
+        f"Вы создали новое сообщество: {new_community.name}",
+        f"/community/{new_community.id}",
+        "new_community",
+        new_community.id,
     )
 
     return schemas.CommunityOut.from_orm(new_community)
 
 
 @router.get("/", response_model=List[schemas.CommunityOut])
-def get_communities(
+async def get_communities(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     skip: int = Query(0, ge=0),
@@ -67,6 +84,7 @@ def get_communities(
     if search:
         query = query.filter(models.Community.name.ilike(f"%{search}%"))
     communities = query.offset(skip).limit(limit).all()
+
     for community in communities:
         community.name = await get_translated_content(
             community.name, current_user, community.language
@@ -79,7 +97,7 @@ def get_communities(
 
 
 @router.get("/{id}", response_model=schemas.CommunityOut)
-def get_community(
+async def get_community(
     id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -122,7 +140,6 @@ def update_community(
 
     update_data = updated_community.dict(exclude_unset=True)
 
-    # تحديث التصنيف
     if "category_id" in update_data:
         category = (
             db.query(models.Category)
@@ -134,7 +151,6 @@ def update_community(
         community.category = category
         del update_data["category_id"]
 
-    # تحديث الوسوم
     if "tags" in update_data:
         community.tags.clear()
         for tag_id in update_data["tags"]:
@@ -146,6 +162,16 @@ def update_community(
     community_query.update(update_data, synchronize_session=False)
     db.commit()
     db.refresh(community)
+
+    create_notification(
+        db,
+        current_user.id,
+        f"Вы обновили сообщество: {community.name}",
+        f"/community/{community.id}",
+        "update_community",
+        community.id,
+    )
+
     return schemas.CommunityOut.from_orm(community)
 
 
@@ -169,6 +195,16 @@ def delete_community(
         )
     community_query.delete(synchronize_session=False)
     db.commit()
+
+    create_notification(
+        db,
+        current_user.id,
+        f"Вы удалили сообщество: {community.name}",
+        "/communities",
+        "delete_community",
+        None,
+    )
+
     return {"message": "Community deleted successfully"}
 
 
@@ -192,6 +228,16 @@ def join_community(
     community.members.append(current_user)
     db.commit()
     db.refresh(community)
+
+    create_notification(
+        db,
+        current_user.id,
+        f"Вы присоединились к сообществу: {community.name}",
+        f"/community/{community.id}",
+        "join_community",
+        community.id,
+    )
+
     return {"message": "Joined the community successfully"}
 
 
@@ -220,6 +266,16 @@ def leave_community(
     community.members.remove(current_user)
     db.commit()
     db.refresh(community)
+
+    create_notification(
+        db,
+        current_user.id,
+        f"Вы покинули сообщество: {community.name}",
+        f"/community/{community.id}",
+        "leave_community",
+        community.id,
+    )
+
     return {"message": "Left the community successfully"}
 
 
@@ -274,6 +330,15 @@ async def create_content(
     db.commit()
     db.refresh(new_content)
 
+    create_notification(
+        db,
+        community.owner_id,
+        f"Новый контент в вашем сообществе: {community.name}",
+        f"/community/{community_id}",
+        f"new_{content_type.lower()}",
+        new_content.id,
+    )
+
     response_schema = getattr(schemas, f"{content_type}Out")
     return response_schema.from_orm(new_content)
 
@@ -299,13 +364,6 @@ async def get_community_content(
 
     content_type = request.url.path.split("/")[-1]  # reels, articles, or posts
     model = getattr(models, content_type.capitalize()[:-1])  # Reel, Article, or Post
-    for article in articles:
-        article.title = await get_translated_content(
-            article.title, current_user, article.language
-        )
-        article.content = await get_translated_content(
-            article.content, current_user, article.language
-        )
     content = (
         db.query(model)
         .filter(model.community_id == community_id)
@@ -322,7 +380,7 @@ async def get_community_content(
             item.content = await get_translated_content(
                 item.content, current_user, item.language
             )
-        if hasattr(item, "description"):  # للملفات الصوتية
+        if hasattr(item, "description"):
             item.description = await get_translated_content(
                 item.description, current_user, item.language
             )
@@ -347,11 +405,6 @@ async def get_community_content(
     ]
 
 
-@router.post(
-    "/{community_id}/posts",
-    status_code=status.HTTP_201_CREATED,
-    response_model=schemas.PostOut,
-)
 def create_community_post(
     community_id: int,
     post: schemas.PostCreate,
@@ -380,6 +433,15 @@ def create_community_post(
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
+
+    create_notification(
+        db,
+        community.owner_id,
+        f"Новый пост в вашем сообществе: {community.name}",
+        f"/post/{new_post.id}",
+        "new_community_post",
+        new_post.id,
+    )
     return schemas.PostOut(
         **new_post.__dict__,
         owner=schemas.UserOut.from_orm(current_user),
@@ -434,6 +496,15 @@ def invite_friend_to_community(
     db.add(new_invitation)
     db.commit()
     db.refresh(new_invitation)
+
+    create_notification(
+        db,
+        invitation.invitee_id,
+        f"Вас пригласили в сообщество: {community.name}",
+        f"/community/{community_id}",
+        "community_invitation",
+        new_invitation.id,
+    )
     return schemas.CommunityInvitationOut.from_orm(new_invitation)
 
 
@@ -512,6 +583,15 @@ def accept_invitation(
     community.members.append(current_user)
     invitation.status = "accepted"
     db.commit()
+
+    create_notification(
+        db,
+        invitation.inviter_id,
+        f"{current_user.username} принял(а) ваше приглашение в сообщество {community.name}",
+        f"/community/{community.id}",
+        "invitation_accepted",
+        invitation.id,
+    )
     return {"message": "Invitation accepted successfully"}
 
 
@@ -542,6 +622,14 @@ def reject_invitation(
 
     invitation.status = "rejected"
     db.commit()
+    create_notification(
+        db,
+        invitation.inviter_id,
+        f"{current_user.username} отклонил(а) ваше приглашение в сообщество",
+        f"/community/{invitation.community_id}",
+        "invitation_rejected",
+        invitation.id,
+    )
     return {"message": "Invitation rejected successfully"}
 
 
@@ -587,6 +675,14 @@ def update_member_role(
     db.commit()
     db.refresh(member)
 
+    create_notification(
+        db,
+        user_id,
+        f"Ваша роль в сообществе {community.name} изменена на {role_update.role}",
+        f"/community/{community_id}",
+        "role_updated",
+        community_id,
+    )
     return schemas.CommunityMemberOut.from_orm(member)
 
 
@@ -645,6 +741,14 @@ def update_member_activity(
     if member.activity_score >= 1000 and member.role == models.CommunityRole.MEMBER:
         member.role = models.CommunityRole.VIP
 
+    create_notification(
+        db,
+        user_id,
+        f"Поздравляем! Вы стали VIP-участником сообщества {community.name}",
+        f"/community/{community_id}",
+        "vip_status",
+        community_id,
+    )
     db.commit()
     db.refresh(member)
 
@@ -673,6 +777,15 @@ def add_community_rule(
     db.add(new_rule)
     db.commit()
     db.refresh(new_rule)
+    for member in community.members:
+        create_notification(
+            db,
+            member.id,
+            f"Новое правило добавлено в сообщество {community.name}",
+            f"/community/{community_id}",
+            "new_rule",
+            new_rule.id,
+        )
     return new_rule
 
 
@@ -711,6 +824,15 @@ def update_community_rule(
 
     db.commit()
     db.refresh(db_rule)
+    for member in community.members:
+        create_notification(
+            db,
+            member.id,
+            f"Правило сообщества {community.name} было обновлено",
+            f"/community/{community_id}",
+            "rule_updated",
+            rule_id,
+        )
     return db_rule
 
 
@@ -745,6 +867,15 @@ def delete_community_rule(
 
     db.delete(db_rule)
     db.commit()
+    for member in community.members:
+        create_notification(
+            db,
+            member.id,
+            f"Правило в сообществе {community.name} было удалено",
+            f"/community/{community_id}",
+            "rule_deleted",
+            rule_id,
+        )
     return Response(status_code=204)
 
 

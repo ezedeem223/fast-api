@@ -19,11 +19,15 @@ import clamd
 import os
 import re
 from uuid import uuid4
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import emoji
 from ..link_preview import extract_link_preview
-from ..utils import log_user_event
-
+from ..utils import (
+    log_user_event,
+    create_notification,
+    detect_language,
+    get_translated_content,
+)
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
@@ -85,9 +89,7 @@ async def create_message(
         content=message.content,
         message_type=schemas.MessageType.TEXT,
     )
-    new_message.language = detect_language(
-        new_message.content
-    )  # Assume you have a function to detect language
+    new_message.language = detect_language(new_message.content)
 
     if message.content and emoji.emoji_count(message.content) > 0:
         new_message.has_emoji = True
@@ -96,7 +98,7 @@ async def create_message(
         new_message.message_type = schemas.MessageType.FILE
         for file in files:
             file_extension = os.path.splitext(file.filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
+            unique_filename = f"{uuid4()}{file_extension}"
             file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -133,7 +135,6 @@ async def create_message(
     )
 
     if urls:
-        # استخدام مهمة خلفية لاستخراج معاينة الرابط
         background_tasks.add_task(update_link_preview, db, new_message.id, urls[0])
 
     db.add(new_message)
@@ -143,52 +144,26 @@ async def create_message(
         db, current_user.id, "send_message", {"receiver_id": message.receiver_id}
     )
 
-    # تحديث إحصائيات المحادثة
-    conversation_stats = (
-        db.query(models.ConversationStatistics)
-        .filter(models.ConversationStatistics.conversation_id == conversation_id)
-        .first()
+    # Обновление статистики разговора
+    update_conversation_statistics(db, conversation_id, new_message)
+
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        message.receiver_id,
+        f"لديك رسالة جديدة من {current_user.username}",
+        f"/messages/{current_user.id}",
+        "new_message",
+        new_message.id,
     )
 
-    if not conversation_stats:
-        conversation_stats = models.ConversationStatistics(
-            conversation_id=conversation_id,
-            user1_id=min(current_user.id, message.receiver_id),
-            user2_id=max(current_user.id, message.receiver_id),
-        )
-        db.add(conversation_stats)
-
-    conversation_stats.total_messages += 1
-    conversation_stats.last_message_at = func.now()
-
-    # تحديث إحصائيات إضافية
-    if files:
-        conversation_stats.total_files += len(files)
-    if new_message.has_emoji:
-        conversation_stats.total_emojis += 1
-    if new_message.message_type == schemas.MessageType.STICKER:
-        conversation_stats.total_stickers += 1
-
-    # حساب متوسط وقت الرد
-    last_message = (
-        db.query(models.Message)
-        .filter(
-            models.Message.conversation_id == conversation_id,
-            models.Message.id != new_message.id,
-        )
-        .order_by(models.Message.created_at.desc())
-        .first()
+    # Отправка уведомления в реальном времени
+    background_tasks.add_task(
+        notifications.send_real_time_notification,
+        message.receiver_id,
+        f"Новое сообщение от {current_user.username}",
     )
 
-    if last_message:
-        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
-        conversation_stats.total_response_time += time_diff
-        conversation_stats.total_responses += 1
-        conversation_stats.average_response_time = (
-            conversation_stats.total_response_time / conversation_stats.total_responses
-        )
-
-    db.commit()
     new_message.content = await get_translated_content(
         new_message.content, current_user, new_message.language
     )
@@ -307,7 +282,6 @@ def get_messages(
             message.is_read = True
             message.read_at = datetime.now()
 
-    for message in messages:
         message.content = await get_translated_content(
             message.content, current_user, message.language
         )
@@ -348,10 +322,9 @@ async def send_file(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    # Check if file is empty
     await file.seek(0)
     file_content = await file.read()
-    await file.seek(0)  # Reset file pointer
+    await file.seek(0)
 
     if len(file_content) == 0 or file.filename == "":
         raise HTTPException(
@@ -396,6 +369,16 @@ async def send_file(
         to=recipient.email,
         subject="New File Received",
         body=f"You have received a file from {current_user.email}.",
+    )
+
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        recipient_id,
+        f"Новый файл от {current_user.username}",
+        f"/messages/{current_user.id}",
+        "new_file",
+        new_message.id,
     )
 
     return {"message": "File sent successfully"}
@@ -461,6 +444,18 @@ def send_location(
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+
+    # Создание уведомления для получателя
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        location.receiver_id,
+        f"{current_user.username} поделился местоположением",
+        f"/messages/{current_user.id}",
+        "shared_location",
+        new_message.id,
+    )
+
     return new_message
 
 
@@ -492,6 +487,17 @@ async def create_audio_message(
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
+
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        receiver_id,
+        f"{current_user.username} отправил аудиосообщение",
+        f"/messages/{current_user.id}",
+        "new_audio_message",
+        new_message.id,
+    )
+
     return new_message
 
 
@@ -548,6 +554,16 @@ async def update_message(
         f"Message {message_id} has been edited",
     )
 
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        message.receiver_id,
+        f"{current_user.username} отредактировал сообщение",
+        f"/messages/{current_user.id}",
+        "message_edited",
+        message.id,
+    )
+
     return message
 
 
@@ -581,6 +597,16 @@ async def delete_message(
         notifications.send_real_time_notification,
         recipient.id,
         f"Message {message_id} has been deleted",
+    )
+
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        message.receiver_id,
+        f"{current_user.username} удалил сообщение",
+        f"/messages/{current_user.id}",
+        "message_deleted",
+        None,
     )
 
     return {"detail": "Message deleted successfully"}
@@ -684,3 +710,49 @@ def update_link_preview(db: Session, message_id: int, url: str):
             {"link_preview": link_preview}
         )
         db.commit()
+
+
+def update_conversation_statistics(
+    db: Session, conversation_id: str, new_message: models.Message
+):
+    stats = (
+        db.query(models.ConversationStatistics)
+        .filter(models.ConversationStatistics.conversation_id == conversation_id)
+        .first()
+    )
+
+    if not stats:
+        stats = models.ConversationStatistics(
+            conversation_id=conversation_id,
+            user1_id=min(new_message.sender_id, new_message.receiver_id),
+            user2_id=max(new_message.sender_id, new_message.receiver_id),
+        )
+        db.add(stats)
+
+    stats.total_messages += 1
+    stats.last_message_at = func.now()
+
+    if new_message.attachments:
+        stats.total_files += len(new_message.attachments)
+    if new_message.has_emoji:
+        stats.total_emojis += 1
+    if new_message.message_type == schemas.MessageType.STICKER:
+        stats.total_stickers += 1
+
+    last_message = (
+        db.query(models.Message)
+        .filter(
+            models.Message.conversation_id == conversation_id,
+            models.Message.id != new_message.id,
+        )
+        .order_by(models.Message.created_at.desc())
+        .first()
+    )
+
+    if last_message:
+        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
+        stats.total_response_time += time_diff
+        stats.total_responses += 1
+        stats.average_response_time = stats.total_response_time / stats.total_responses
+
+    db.commit()

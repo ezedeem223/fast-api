@@ -395,6 +395,7 @@ class User(Base):
         back_populates="receiver",
     )
     search_history = relationship("SearchStatistics", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
 
 
 class UserActivity(Base):
@@ -688,7 +689,10 @@ class Notification(Base):
     link = Column(String)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
-    notification_type = Column(String)  # Новое поле
+    notification_type = Column(String)
+    related_id = Column(
+        Integer
+    )  # يمكن أن يكون معرف المنشور أو التعليق أو المستخدم، إلخ
 
     user = relationship("User", back_populates="notifications")
 

@@ -19,7 +19,14 @@ from ..utils import (
     validate_urls,
     log_user_event,
     update_post_score,
+    create_notification,
+    analyze_sentiment,
+    is_valid_image_url,
+    is_valid_video_url,
+    get_translated_content,
+    detect_language,
 )
+
 from datetime import datetime, timedelta
 from ..config import settings
 import emoji
@@ -47,18 +54,20 @@ async def create_comment(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    # Проверка верификации пользователя
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
         )
 
+    # Проверка существования поста
     post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
 
-    # التحقق من قواعد المجتمع
+    # Проверка правил сообщества
     if post.community_id:
         community = (
             db.query(models.Community)
@@ -72,7 +81,7 @@ async def create_comment(
                 detail="Comment content violates community rules",
             )
 
-    # التحقق من وجود التعليق الأصلي إذا كان هذا رداً
+    # Проверка родительского комментария
     if comment.parent_id:
         parent_comment = (
             db.query(models.Comment)
@@ -89,6 +98,7 @@ async def create_comment(
                 detail="Parent comment does not belong to the same post",
             )
 
+    # Создание нового комментария
     new_comment = models.Comment(
         owner_id=current_user.id,
         post_id=comment.post_id,
@@ -101,10 +111,11 @@ async def create_comment(
         sticker_id=comment.sticker_id,
     )
 
+    # Проверка блокировки
     block = (
         db.query(models.Block)
         .filter(
-            models.Block.blocker_id == comment.post.owner_id,
+            models.Block.blocker_id == post.owner_id,
             models.Block.blocked_id == current_user.id,
             models.Block.ends_at > datetime.now(),
         )
@@ -118,25 +129,24 @@ async def create_comment(
         raise HTTPException(
             status_code=403, detail="You are blocked from commenting on this post"
         )
-    # التحقق من صحة الروابط
-    if comment.image_url and not utils.is_valid_image_url(comment.image_url):
+
+    # Проверка URL-адресов
+    if comment.image_url and not is_valid_image_url(comment.image_url):
         raise HTTPException(status_code=400, detail="Invalid image URL")
-    if comment.video_url and not utils.is_valid_video_url(comment.video_url):
+    if comment.video_url and not is_valid_video_url(comment.video_url):
         raise HTTPException(status_code=400, detail="Invalid video URL")
 
-    # فحص المحتوى غير اللائق والروابط
+    # Проверка содержания
     new_comment.contains_profanity = check_for_profanity(comment.content)
     new_comment.has_invalid_urls = not validate_urls(comment.content)
-    new_comment.language = detect_language(
-        new_comment.content
-    )  # Assume you have a function to detect language
+    new_comment.language = detect_language(new_comment.content)
 
-    # إذا كان هناك محتوى غير لائق أو روابط غير صالحة، نضع علامة على التعليق
+    # Обработка флагов
     if new_comment.contains_profanity or new_comment.has_invalid_urls:
         new_comment.is_flagged = True
         new_comment.flag_reason = "Automatic content check"
 
-        # إرسال إشعار للمشرفين
+        # Уведомление модераторов
         moderators = db.query(models.User).filter(models.User.role == "moderator").all()
         for moderator in moderators:
             background_tasks.add_task(
@@ -145,17 +155,21 @@ async def create_comment(
                 subject="New flagged comment",
                 body=f"A new comment has been automatically flagged. Comment ID: {new_comment.id}",
             )
+
+    # Анализ настроения
     sentiment_score = analyze_sentiment(comment.content)
     new_comment.sentiment_score = sentiment_score
 
-    # تحديث إحصائيات المستخدم والمنشور
+    # Обновление статистики
     current_user.comment_count += 1
-    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
     post.comment_count += 1
 
+    # Сохранение комментария
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+
+    # Логирование события
     log_user_event(
         db,
         current_user.id,
@@ -163,19 +177,49 @@ async def create_comment(
         {"comment_id": new_comment.id, "post_id": comment.post_id},
     )
 
-    # إرسال إشعار لصاحب المنشور
+    # Уведомление владельца поста
     background_tasks.add_task(
         send_email_notification,
         to=post.owner.email,
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post titled '{post.title}'.",
     )
+
+    # Создание уведомления для владельца поста
+    create_notification(
+        db,
+        post.owner_id,
+        f"{current_user.username} прокомментировал ваш пост",
+        f"/post/{post.id}",
+        "new_comment",
+        new_comment.id,
+    )
+
+    # Если это ответ на комментарий, уведомить автора родительского комментария
+    if comment.parent_id:
+        parent_comment_owner = (
+            db.query(models.User)
+            .filter(models.User.id == parent_comment.owner_id)
+            .first()
+        )
+        if (
+            parent_comment_owner.id != post.owner_id
+        ):  # Избегаем дублирования уведомлений
+            create_notification(
+                db,
+                parent_comment_owner.id,
+                f"{current_user.username} ответил на ваш комментарий",
+                f"/post/{post.id}#comment-{new_comment.id}",
+                "reply_to_comment",
+                new_comment.id,
+            )
+
+    # Перевод содержания
     new_comment.content = await get_translated_content(
         new_comment.content, current_user, new_comment.language
     )
 
-    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
-    post.comment_count += 1
+    # Обновление рейтинга поста
     update_post_score(db, post)
 
     return new_comment

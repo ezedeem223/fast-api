@@ -750,3 +750,24 @@ async def get_translated_content(content: str, user: User, source_lang: str):
             content, source_lang, user.preferred_language
         )
     return content
+
+
+def create_notification(
+    db: Session,
+    user_id: int,
+    content: str,
+    link: str,
+    notification_type: str,
+    related_id: Optional[int] = None,
+):
+    new_notification = models.Notification(
+        user_id=user_id,
+        content=content,
+        link=link,
+        notification_type=notification_type,
+        related_id=related_id,
+    )
+    db.add(new_notification)
+    db.commit()
+    db.refresh(new_notification)
+    return new_notification

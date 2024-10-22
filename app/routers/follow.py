@@ -7,7 +7,7 @@ from typing import List
 from ..notifications import send_email_notification
 from ..cache import cache
 from datetime import datetime, timedelta
-from ..utils import log_user_event
+from ..utils import log_user_event, create_notification
 
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
@@ -75,6 +75,14 @@ async def follow_user(
         to=user_to_follow.email,
         subject="New Follower",
         body=f"You have a new follower: {current_user.email}",
+    )
+    create_notification(
+        db,
+        user_id,
+        f"{current_user.username} بدأ بمتابعتك",
+        f"/profile/{current_user.id}",
+        "new_follower",
+        current_user.id,
     )
 
     return {"message": "Successfully followed user"}

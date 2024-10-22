@@ -734,6 +734,7 @@ class NotificationOut(BaseModel):
     is_read: bool
     created_at: datetime
     notification_type: str
+    related_id: Optional[int]
 
     model_config = ConfigDict(from_attributes=True)
 

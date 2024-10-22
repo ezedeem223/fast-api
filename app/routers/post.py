@@ -31,6 +31,7 @@ from ..utils import (
     process_mentions,
     get_or_create_hashtag,
     is_content_offensive,
+    create_notification,
 )
 
 from sqlalchemy.dialects.postgresql import JSONB
@@ -335,6 +336,20 @@ def create_posts(
             send_mention_notification, user.email, current_user.username, new_post.id
         )
 
+    followers = (
+        db.query(models.Follow)
+        .filter(models.Follow.followed_id == current_user.id)
+        .all()
+    )
+    for follower in followers:
+        create_notification(
+            db,
+            follower.follower_id,
+            f"{current_user.username} نشر منشورًا جديدًا",
+            f"/post/{new_post.id}",
+            "new_post",
+            new_post.id,
+        )
     return new_post
 
 
@@ -484,6 +499,20 @@ def update_post(
     post.category_id = updated_post.category_id
     post.is_help_request = updated_post.is_help_request
 
+    followers = (
+        db.query(models.Follow)
+        .filter(models.Follow.followed_id == current_user.id)
+        .all()
+    )
+    for follower in followers:
+        create_notification(
+            db,
+            follower.follower_id,
+            f"{current_user.username} قام بتحديث منشور",
+            f"/post/{post.id}",
+            "post_update",
+            post.id,
+        )
     if updated_post.analyze_content:
         analysis_result = analyze_content(updated_post.content)
         post.sentiment = analysis_result["sentiment"]["sentiment"]
