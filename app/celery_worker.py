@@ -5,10 +5,14 @@ from typing import List
 from app.config import settings
 from app.database import SessionLocal
 from app import models
-from datetime import datetime
+from datetime import datetime, timedelta
 from .routers.post import send_notifications_and_share
 from app.utils import is_content_offensive
-
+from celery.schedules import crontab
+from sqlalchemy.orm import Session
+import firebase_admin
+from firebase_admin import credentials, messaging
+from . import models
 
 # إعداد Celery
 celery_app = Celery(
@@ -36,6 +40,170 @@ celery_app.conf.beat_schedule["check-old-posts-content"] = {
     "task": "app.celery_worker.check_old_posts_content",
     "schedule": crontab(hour=3, minute=0),  # تشغيل كل يوم في الساعة 3 صباحًا
 }
+
+
+celery_app.conf.beat_schedule.update(
+    {
+        "cleanup-old-notifications": {
+            "task": "app.celery_worker.cleanup_old_notifications",
+            "schedule": crontab(hour=0, minute=0),  # تشغيل يومياً في منتصف الليل
+        },
+        "process-scheduled-notifications": {
+            "task": "app.celery_worker.process_scheduled_notifications",
+            "schedule": 60.0,  # تشغيل كل دقيقة
+        },
+        "update-notification-analytics": {
+            "task": "app.celery_worker.update_notification_analytics",
+            "schedule": crontab(hour="*/1"),  # تشغيل كل ساعة
+        },
+    }
+)
+
+
+@celery_app.task
+def cleanup_old_notifications():
+    """تنظيف الإشعارات القديمة وتحديث الإحصائيات"""
+    db = SessionLocal()
+    try:
+        # أرشفة الإشعارات القديمة المقروءة
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        db.query(models.Notification).filter(
+            models.Notification.is_read == True,
+            models.Notification.created_at < thirty_days_ago,
+            models.Notification.is_archived == False,
+        ).update({"is_archived": True})
+
+        # حذف الإشعارات القديمة جداً
+        ninety_days_ago = datetime.utcnow() - timedelta(days=90)
+        db.query(models.Notification).filter(
+            models.Notification.created_at < ninety_days_ago,
+            models.Notification.is_archived == True,
+        ).update({"is_deleted": True})
+
+        db.commit()
+    finally:
+        db.close()
+
+
+@celery_app.task
+def process_scheduled_notifications():
+    """معالجة الإشعارات المجدولة"""
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        scheduled_notifications = (
+            db.query(models.Notification)
+            .filter(
+                models.Notification.scheduled_for <= now,
+                models.Notification.is_delivered == False,
+            )
+            .all()
+        )
+
+        for notification in scheduled_notifications:
+            deliver_notification.delay(notification.id)
+            notification.is_delivered = True
+
+        db.commit()
+    finally:
+        db.close()
+
+
+@celery_app.task
+def deliver_notification(notification_id: int):
+    """تسليم الإشعار عبر جميع القنوات المكونة"""
+    db = SessionLocal()
+    try:
+        notification = db.query(models.Notification).get(notification_id)
+        if not notification:
+            return
+
+        user_prefs = (
+            db.query(models.NotificationPreferences)
+            .filter(models.NotificationPreferences.user_id == notification.user_id)
+            .first()
+        )
+
+        if not user_prefs:
+            return
+
+        # إرسال إشعار البريد الإلكتروني
+        if user_prefs.email_notifications:
+            send_email_notification.delay(notification_id)
+
+        # إرسال إشعار Push
+        if user_prefs.push_notifications:
+            send_push_notification.delay(notification_id)
+
+    finally:
+        db.close()
+
+
+@celery_app.task
+def send_push_notification(notification_id: int):
+    """إرسال إشعار Push باستخدام Firebase"""
+    db = SessionLocal()
+    try:
+        notification = db.query(models.Notification).get(notification_id)
+        if not notification:
+            return
+
+        devices = (
+            db.query(models.UserDevice)
+            .filter(
+                models.UserDevice.user_id == notification.user_id,
+                models.UserDevice.is_active == True,
+            )
+            .all()
+        )
+
+        for device in devices:
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title="New Notification", body=notification.content
+                ),
+                data={
+                    "notification_id": str(notification.id),
+                    "type": notification.notification_type,
+                    "link": notification.link or "",
+                },
+                token=device.fcm_token,
+            )
+            messaging.send(message)
+
+    except Exception as e:
+        print(f"Error sending push notification: {str(e)}")
+    finally:
+        db.close()
+
+
+@celery_app.task
+def update_notification_analytics():
+    """تحديث تحليلات الإشعارات"""
+    db = SessionLocal()
+    try:
+        users = db.query(models.User).all()
+        for user in users:
+            analytics = calculate_user_notification_analytics(db, user.id)
+
+            user_analytics = (
+                db.query(models.NotificationAnalytics)
+                .filter(models.NotificationAnalytics.user_id == user.id)
+                .first()
+            )
+
+            if not user_analytics:
+                user_analytics = models.NotificationAnalytics(user_id=user.id)
+                db.add(user_analytics)
+
+            user_analytics.engagement_rate = analytics["engagement_rate"]
+            user_analytics.response_time = analytics["response_time"]
+            user_analytics.peak_hours = analytics["peak_hours"]
+            user_analytics.updated_at = datetime.utcnow()
+
+        db.commit()
+    finally:
+        db.close()
 
 
 @celery_app.task

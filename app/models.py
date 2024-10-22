@@ -604,6 +604,59 @@ class Post(Base):
     )
 
 
+User.notification_preferences = relationship(
+    "NotificationPreferences", back_populates="user", uselist=False
+)
+
+
+class NotificationPriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class NotificationCategory(str, enum.Enum):
+    SYSTEM = "system"
+    SOCIAL = "social"
+    SECURITY = "security"
+    PROMOTIONAL = "promotional"
+    COMMUNITY = "community"
+
+
+class NotificationPreferences(Base):
+    __tablename__ = "notification_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    email_notifications = Column(Boolean, default=True)
+    push_notifications = Column(Boolean, default=True)
+    in_app_notifications = Column(Boolean, default=True)
+    quiet_hours_start = Column(Time, nullable=True)
+    quiet_hours_end = Column(Time, nullable=True)
+    categories_preferences = Column(JSONB, default={})
+    notification_frequency = Column(
+        String, default="realtime"
+    )  # realtime, hourly, daily, weekly
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="notification_preferences")
+
+
+class NotificationGroup(Base):
+    __tablename__ = "notification_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_type = Column(String, nullable=False)  # e.g., "comment_thread", "post_likes"
+    last_updated = Column(DateTime(timezone=True), server_default=func.now())
+    count = Column(Integer, default=1)
+    sample_notification_id = Column(Integer, ForeignKey("notifications.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    notifications = relationship("Notification", back_populates="group")
+
+
 class TokenBlacklist(Base):
     __tablename__ = "token_blacklist"
 
@@ -683,18 +736,28 @@ class CopyrightType(str, PyEnum):
 
 class Notification(Base):
     __tablename__ = "notifications"
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    content = Column(String)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    content = Column(String, nullable=False)
     link = Column(String)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
     notification_type = Column(String)
-    related_id = Column(
-        Integer
-    )  # يمكن أن يكون معرف المنشور أو التعليق أو المستخدم، إلخ
+    priority = Column(Enum(NotificationPriority), default=NotificationPriority.MEDIUM)
+    category = Column(Enum(NotificationCategory), default=NotificationCategory.SYSTEM)
+    is_read = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False)
+    is_deleted = Column(Boolean, default=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    scheduled_for = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    related_id = Column(Integer)
+    metadata = Column(JSONB, default={})
+    group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="notifications")
+    group = relationship("NotificationGroup", back_populates="notifications")
 
 
 User.notifications = relationship("Notification", back_populates="user")

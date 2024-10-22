@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     twitter_access_token_secret: str
     refresh_secret_key: str
     DEFAULT_LANGUAGE = "ar"
+    firebase_api_key: str
+    firebase_auth_domain: str
+    firebase_project_id: str
+    firebase_storage_bucket: str
+    firebase_messaging_sender_id: str
+    firebase_app_id: str
+    firebase_measurement_id: str
 
     rsa_private_key_path: str
     rsa_public_key_path: str

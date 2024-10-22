@@ -58,6 +58,7 @@ from .utils import update_search_vector, spell, update_post_score
 from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
 from .middleware.language import language_middleware
 import gettext
+from .firebase_config import initialize_firebase
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -215,6 +216,20 @@ async def startup_event():
     update_search_vector()
     arabic_words_path = Path(__file__).parent / "arabic_words.txt"
     spell.word_frequency.load_dictionary(str(arabic_words_path))
+    celery_app.conf.beat_schedule = {
+        "check-scheduled-posts": {
+            "task": "app.celery_worker.schedule_post_publication",
+            "schedule": 60.0,  # كل دقيقة
+        },
+    }
+    print("Loading content analysis model...")
+    model.eval()
+    print("Content analysis model loaded successfully!")
+
+    if not initialize_firebase():
+        logger.warning(
+            "Firebase initialization failed - push notifications will be disabled"
+        )
 
 
 @app.middleware("http")
@@ -261,20 +276,6 @@ scheduler.start()
 @app.on_event("shutdown")
 def shutdown_event():
     scheduler.shutdown()
-
-
-@app.on_event("startup")
-async def startup_event():
-    # ... (الكود الموجود)
-    celery_app.conf.beat_schedule = {
-        "check-scheduled-posts": {
-            "task": "app.celery_worker.schedule_post_publication",
-            "schedule": 60.0,  # كل دقيقة
-        },
-    }
-    print("Loading content analysis model...")
-    model.eval()
-    print("Content analysis model loaded successfully!")
 
 
 @app.on_event("startup")

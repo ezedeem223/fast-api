@@ -727,14 +727,70 @@ class RepostCreate(PostCreate):
     repost_settings: Optional[RepostSettings] = None
 
 
+class NotificationPreferencesUpdate(BaseModel):
+    email_notifications: Optional[bool] = None
+    push_notifications: Optional[bool] = None
+    in_app_notifications: Optional[bool] = None
+    quiet_hours_start: Optional[time] = None
+    quiet_hours_end: Optional[time] = None
+    categories_preferences: Optional[Dict[str, bool]] = None
+    notification_frequency: Optional[str] = None
+
+
+class NotificationPreferencesOut(BaseModel):
+    id: int
+    user_id: int
+    email_notifications: bool
+    push_notifications: bool
+    in_app_notifications: bool
+    quiet_hours_start: Optional[time]
+    quiet_hours_end: Optional[time]
+    categories_preferences: Dict[str, bool]
+    notification_frequency: str
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationStatistics(BaseModel):
+    total_count: int
+    unread_count: int
+    categories_distribution: List[Tuple[str, int]]
+    priorities_distribution: List[Tuple[str, int]]
+    daily_notifications: List[Tuple[date, int]]
+
+
+class NotificationAnalytics(BaseModel):
+    engagement_rate: float
+    response_time: float
+    peak_activity_hours: List[Dict[str, Union[int, int]]]
+    most_interacted_types: List[Dict[str, Union[str, int]]]
+
+
+class NotificationGroupOut(BaseModel):
+    id: int
+    group_type: str
+    count: int
+    last_updated: datetime
+    sample_notification: "NotificationOut"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class NotificationOut(BaseModel):
     id: int
     content: str
-    link: str
-    is_read: bool
-    created_at: datetime
     notification_type: str
-    related_id: Optional[int]
+    priority: NotificationPriority
+    category: NotificationCategory
+    link: Optional[str]
+    is_read: bool
+    is_archived: bool
+    read_at: Optional[datetime]
+    created_at: datetime
+    group: Optional[NotificationGroupOut]
+    metadata: Dict[str, Any]
 
     model_config = ConfigDict(from_attributes=True)
 
