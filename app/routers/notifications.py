@@ -349,3 +349,25 @@ async def send_push(
         data=notification.extra_data,
     )
     return {"success": bool(response), "message_id": response if response else None}
+
+
+@router.get("/statistics/delivery", response_model=Dict[str, Any])
+async def get_delivery_statistics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    stats = await notification_service.get_delivery_statistics()
+    return stats
+
+
+@router.post("/bulk", response_model=List[schemas.NotificationOut])
+async def create_bulk_notifications(
+    notifications: List[schemas.NotificationCreate],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_admin),
+):
+    return await notification_service.bulk_create_notifications(notifications)

@@ -753,6 +753,35 @@ class NotificationPreferencesOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class NotificationBase(BaseModel):
+    content: str
+    notification_type: str
+    priority: NotificationPriority
+    category: NotificationCategory
+
+
+class NotificationCreate(NotificationBase):
+    user_id: int
+    link: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    scheduled_for: Optional[datetime] = None
+    notification_channel: Optional[str] = "in_app"
+    importance_level: Optional[int] = 1
+
+
+class NotificationUpdate(BaseModel):
+    is_read: Optional[bool] = None
+    is_archived: Optional[bool] = None
+    interaction_count: Optional[int] = None
+
+
+class NotificationDeliveryStatus(BaseModel):
+    success: bool
+    channel: str
+    timestamp: datetime
+    error_message: Optional[str] = None
+
+
 class NotificationStatistics(BaseModel):
     total_count: int
     unread_count: int

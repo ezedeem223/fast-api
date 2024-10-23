@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     firebase_messaging_sender_id: str
     firebase_app_id: str
     firebase_measurement_id: str
+    NOTIFICATION_RETENTION_DAYS: int = 90
+    MAX_BULK_NOTIFICATIONS: int = 1000
+    NOTIFICATION_QUEUE_TIMEOUT: int = 30
+    NOTIFICATION_BATCH_SIZE: int = 100
+    DEFAULT_NOTIFICATION_CHANNEL: str = "in_app"
 
     rsa_private_key_path: str
     rsa_public_key_path: str

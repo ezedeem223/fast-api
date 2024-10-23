@@ -171,6 +171,17 @@ class BlockAppeal(Base):
     user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
     reviewer = relationship("User", foreign_keys=[reviewer_id])
 
+class NotificationType(str, Enum):
+    NEW_FOLLOWER = "new_follower"
+    NEW_COMMENT = "new_comment"
+    NEW_REACTION = "new_reaction"
+    NEW_MESSAGE = "new_message"
+    MENTION = "mention"
+    POST_SHARE = "post_share"
+    COMMUNITY_INVITE = "community_invite"
+    REPORT_UPDATE = "report_update"
+    ACCOUNT_SECURITY = "account_security"
+    SYSTEM_UPDATE = "system_update"
 
 class Hashtag(Base):
     __tablename__ = "hashtags"
@@ -768,11 +779,28 @@ class Notification(Base):
     retry_count = Column(Integer, default=0)  # جديد
     last_retry = Column(DateTime(timezone=True), nullable=True)  # جديد
     delivery_attempts = Column(JSONB, default=list)
+    notification_version = Column(Integer, default=1)
+    importance_level = Column(Integer, default=1)
+    seen_at = Column(DateTime(timezone=True), nullable=True)
+    interaction_count = Column(Integer, default=0)
+    custom_data = Column(JSONB, default={})
+    device_info = Column(JSONB, nullable=True)
+    notification_channel = Column(String, default="in_app")  # in_app, email, push
+    failure_reason = Column(String, nullable=True)
+    batch_id = Column(String, nullable=True)
     user = relationship("User", back_populates="notifications")
     group = relationship("NotificationGroup", back_populates="notifications")
 
+    __table_args__ = (
+        Index('idx_notifications_user_created', 'user_id', 'created_at'),
+        Index('idx_notifications_type', 'notification_type'),
+        Index('idx_notifications_status', 'status'),
+    )
     delivery_logs = relationship(
         "NotificationDeliveryLog", back_populates="notification"
+    )
+    delivery_attempts = relationship(
+        "NotificationDeliveryAttempt", back_populates="notification"
     )
 
 

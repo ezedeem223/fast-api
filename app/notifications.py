@@ -77,6 +77,10 @@ class NotificationService:
         self.background_tasks = background_tasks
         self.max_retries = 3
         self.retry_delay = 300
+        self.email_service = EmailNotificationService()
+        self.push_service = PushNotificationService()
+        self.websocket_manager = WebSocketManager()
+        self.analytics_service = NotificationAnalyticsService()
 
     async def create_notification(
         self,
@@ -141,6 +145,34 @@ class NotificationService:
             logger.error(f"Error creating notification: {str(e)}")
             self.db.rollback()
             raise
+
+    async def handle_notification_failure(
+        self, notification: models.Notification, error: Exception
+    ):
+        notification.status = models.NotificationStatus.FAILED
+        notification.failure_reason = str(error)
+        self.db.commit()
+
+        if notification.retry_count < self.max_retries:
+            await self.schedule_retry(notification)
+
+    async def get_user_notification_stats(self, user_id: int) -> Dict[str, Any]:
+        return await self.analytics_service.get_user_stats(user_id)
+
+    async def bulk_create_notifications(
+        self,
+        notifications: List[schemas.NotificationCreate],
+        batch_id: Optional[str] = None,
+    ):
+        batch_id = batch_id or str(uuid.uuid4())
+        created_notifications = []
+
+        for notification in notifications:
+            notification.batch_id = batch_id
+            created = await self.create_notification(**notification.dict())
+            created_notifications.append(created)
+
+        return created_notifications
 
     async def deliver_notification(self, notification: models.Notification):
         """تحسين تسليم الإشعار مع تتبع محاولات التسليم"""
