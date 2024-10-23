@@ -1243,3 +1243,38 @@ def request_to_join(community_id: int, user_id: int, db: Session = Depends(get_d
         db.add(join_request)
         db.commit()
         return {"message": "Join request submitted successfully"}
+
+
+class CommunityNotificationHandler:
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_community_invitation(self, invitation: models.CommunityInvitation):
+        """معالجة إشعارات دعوات المجتمع"""
+        await self.notification_service.create_notification(
+            user_id=invitation.invitee_id,
+            content=f"{invitation.inviter.username} دعاك للانضمام إلى مجتمع {invitation.community.name}",
+            notification_type="community_invitation",
+            priority=models.NotificationPriority.MEDIUM,
+            category=models.NotificationCategory.COMMUNITY,
+            link=f"/community/{invitation.community_id}",
+            metadata={
+                "invitation_id": invitation.id,
+                "community_id": invitation.community_id,
+                "community_name": invitation.community.name,
+                "inviter_id": invitation.inviter_id,
+            },
+        )
+
+    async def handle_role_change(self, member: models.CommunityMember, old_role: str):
+        """معالجة إشعارات تغيير الأدوار في المجتمع"""
+        await self.notification_service.create_notification(
+            user_id=member.user_id,
+            content=f"تم تغيير دورك في مجتمع {member.community.name} من {old_role} إلى {member.role}",
+            notification_type="role_change",
+            priority=models.NotificationPriority.HIGH,
+            category=models.NotificationCategory.COMMUNITY,
+            link=f"/community/{member.community_id}",
+        )

@@ -585,3 +585,41 @@ def pin_comment(
     db.commit()
     db.refresh(comment)
     return comment
+
+
+class CommentNotificationHandler:
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_comment_creation(self, comment: models.Comment, post: models.Post):
+        """معالجة إشعارات التعليقات الجديدة"""
+        # إشعار صاحب المنشور
+        if comment.owner_id != post.owner_id:
+            await self.notification_service.create_notification(
+                user_id=post.owner_id,
+                content=f"{comment.owner.username} علق على منشورك",
+                notification_type="new_comment",
+                priority=models.NotificationPriority.MEDIUM,
+                category=models.NotificationCategory.SOCIAL,
+                link=f"/post/{post.id}#comment-{comment.id}",
+            )
+
+        # إشعار في حالة الرد على تعليق
+        if comment.parent_id:
+            parent_comment = (
+                self.db.query(models.Comment)
+                .filter(models.Comment.id == comment.parent_id)
+                .first()
+            )
+
+            if parent_comment and parent_comment.owner_id != comment.owner_id:
+                await self.notification_service.create_notification(
+                    user_id=parent_comment.owner_id,
+                    content=f"{comment.owner.username} رد على تعليقك",
+                    notification_type="comment_reply",
+                    priority=models.NotificationPriority.MEDIUM,
+                    category=models.NotificationCategory.SOCIAL,
+                    link=f"/post/{post.id}#comment-{comment.id}",
+                )

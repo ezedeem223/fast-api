@@ -655,3 +655,217 @@ __all__ = [
     "create_notification",
     "deliver_scheduled_notification",
 ]
+
+
+class NotificationManager:
+    """مدير مركزي للإشعارات يتكامل مع جميع وحدات النظام"""
+
+    def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_post_action(self, post_id: int, action_type: str, actor_id: int):
+        """معالجة الإشعارات المتعلقة بالمنشورات"""
+        post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
+        if not post:
+            return
+
+        notifications = []
+
+        # إشعار صاحب المنشور
+        if action_type == "comment":
+            notifications.append(
+                {
+                    "user_id": post.owner_id,
+                    "content": f"علق شخص ما على منشورك",
+                    "type": "post_comment",
+                    "link": f"/post/{post_id}",
+                }
+            )
+
+        # إشعار المتابعين
+        elif action_type == "new_post":
+            followers = (
+                self.db.query(models.Follow)
+                .filter(models.Follow.followed_id == actor_id)
+                .all()
+            )
+
+            for follower in followers:
+                notifications.append(
+                    {
+                        "user_id": follower.follower_id,
+                        "content": f"قام {post.owner.username} بنشر منشور جديد",
+                        "type": "new_post",
+                        "link": f"/post/{post_id}",
+                    }
+                )
+
+        # إرسال الإشعارات
+        for notification in notifications:
+            await self.notification_service.create_notification(
+                user_id=notification["user_id"],
+                content=notification["content"],
+                notification_type=notification["type"],
+                link=notification["link"],
+            )
+
+    async def handle_message_action(self, message_id: int, action_type: str):
+        """معالجة الإشعارات المتعلقة بالرسائل"""
+        message = (
+            self.db.query(models.Message)
+            .filter(models.Message.id == message_id)
+            .first()
+        )
+        if not message:
+            return
+
+        if action_type == "new_message":
+            await self.notification_service.create_notification(
+                user_id=message.receiver_id,
+                content=f"لديك رسالة جديدة من {message.sender.username}",
+                notification_type="new_message",
+                link=f"/messages/{message.sender_id}",
+            )
+
+    async def handle_community_action(
+        self, community_id: int, action_type: str, actor_id: int
+    ):
+        """معالجة الإشعارات المتعلقة بالمجتمعات"""
+        community = (
+            self.db.query(models.Community)
+            .filter(models.Community.id == community_id)
+            .first()
+        )
+        if not community:
+            return
+
+        if action_type == "new_post":
+            members = (
+                self.db.query(models.CommunityMember)
+                .filter(models.CommunityMember.community_id == community_id)
+                .all()
+            )
+
+            for member in members:
+                if member.user_id != actor_id:
+                    await self.notification_service.create_notification(
+                        user_id=member.user_id,
+                        content=f"منشور جديد في مجتمع {community.name}",
+                        notification_type="community_post",
+                        link=f"/community/{community_id}",
+                    )
+
+
+# 2. تحسين آلية التتبع والتحليل
+class NotificationAnalytics:
+    """تحليلات وإحصائيات الإشعارات"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_delivery_stats(self, user_id: Optional[int] = None):
+        """الحصول على إحصائيات تسليم الإشعارات"""
+        query = self.db.query(models.NotificationDeliveryLog)
+
+        if user_id:
+            query = query.join(models.Notification).filter(
+                models.Notification.user_id == user_id
+            )
+
+        total = query.count()
+        successful = query.filter(
+            models.NotificationDeliveryLog.status == "delivered"
+        ).count()
+        failed = query.filter(models.NotificationDeliveryLog.status == "failed").count()
+
+        return {
+            "total": total,
+            "successful": successful,
+            "failed": failed,
+            "success_rate": (successful / total * 100) if total > 0 else 0,
+        }
+
+    def get_user_engagement(self, user_id: int, days: int = 30):
+        """تحليل تفاعل المستخدم مع الإشعارات"""
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        notifications = (
+            self.db.query(models.Notification)
+            .filter(
+                models.Notification.user_id == user_id,
+                models.Notification.created_at >= cutoff_date,
+            )
+            .all()
+        )
+
+        total_notifications = len(notifications)
+        read_notifications = sum(1 for n in notifications if n.is_read)
+
+        return {
+            "total_notifications": total_notifications,
+            "read_notifications": read_notifications,
+            "engagement_rate": (
+                (read_notifications / total_notifications * 100)
+                if total_notifications > 0
+                else 0
+            ),
+        }
+
+
+# 3. تحسين معالجة الأخطاء وإعادة المحاولة
+class NotificationRetryHandler:
+    """معالج إعادة محاولة إرسال الإشعارات الفاشلة"""
+
+    def __init__(self, db: Session):
+        self.db = db
+        self.max_retries = 3
+        self.retry_delays = [300, 600, 1800]  # 5 mins, 10 mins, 30 mins
+
+    async def handle_failed_notification(self, notification_id: int):
+        """معالجة الإشعارات الفاشلة"""
+        notification = (
+            self.db.query(models.Notification)
+            .filter(models.Notification.id == notification_id)
+            .first()
+        )
+        if not notification:
+            return
+
+        if notification.retry_count >= self.max_retries:
+            notification.status = "permanently_failed"
+            self.db.commit()
+            return
+
+        delay = self.retry_delays[notification.retry_count]
+        notification.retry_count += 1
+        notification.status = "retrying"
+        notification.next_retry = datetime.now() + timedelta(seconds=delay)
+
+        self.db.commit()
+
+        # جدولة إعادة المحاولة
+        background_tasks.add_task(self.retry_notification, notification_id, delay)
+
+    async def retry_notification(self, notification_id: int, delay: int):
+        """إعادة محاولة إرسال الإشعار"""
+        await asyncio.sleep(delay)
+
+        notification = (
+            self.db.query(models.Notification)
+            .filter(models.Notification.id == notification_id)
+            .first()
+        )
+        if not notification or notification.status != "retrying":
+            return
+
+        notification_service = NotificationService(self.db)
+        success = await notification_service.deliver_notification(notification)
+
+        if success:
+            notification.status = "delivered"
+        else:
+            await self.handle_failed_notification(notification_id)
+
+        self.db.commit()

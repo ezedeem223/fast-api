@@ -781,15 +781,18 @@ User.notifications = relationship("Notification", back_populates="user")
 
 class NotificationDeliveryLog(Base):
     __tablename__ = "notification_delivery_logs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    notification_id = Column(Integer, ForeignKey("notifications.id", ondelete="CASCADE"))
+    notification_id = Column(
+        Integer, ForeignKey("notifications.id", ondelete="CASCADE")
+    )
     attempt_time = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String)
     error_message = Column(String, nullable=True)
     delivery_channel = Column(String)  # email, push, websocket
-    
+
     notification = relationship("Notification", back_populates="delivery_logs")
+
 
 class Comment(Base):
     __tablename__ = "comments"

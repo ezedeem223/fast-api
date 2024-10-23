@@ -756,3 +756,35 @@ def update_conversation_statistics(
         stats.average_response_time = stats.total_response_time / stats.total_responses
 
     db.commit()
+
+
+class MessageNotificationHandler:
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_new_message(self, message: models.Message):
+        """معالجة إشعارات الرسائل الجديدة"""
+        # التحقق من تفضيلات المستخدم للإشعارات
+        user_prefs = (
+            self.db.query(models.NotificationPreferences)
+            .filter(models.NotificationPreferences.user_id == message.receiver_id)
+            .first()
+        )
+
+        if not user_prefs or user_prefs.message_notifications:
+            await self.notification_service.create_notification(
+                user_id=message.receiver_id,
+                content=f"رسالة جديدة من {message.sender.username}",
+                notification_type="new_message",
+                priority=models.NotificationPriority.HIGH,
+                category=models.NotificationCategory.SOCIAL,
+                link=f"/messages/{message.sender_id}",
+                metadata={
+                    "sender_id": message.sender_id,
+                    "sender_name": message.sender.username,
+                    "message_type": message.message_type.value,
+                    "conversation_id": message.conversation_id,
+                },
+            )

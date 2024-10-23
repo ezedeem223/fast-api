@@ -46,6 +46,7 @@ from ..media_processing import process_media_file
 from io import BytesIO
 from xhtml2pdf import pisa
 from fastapi.responses import StreamingResponse
+from app.notifications import NotificationService, send_real_time_notification
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
@@ -1294,3 +1295,54 @@ async def get_translated_content(content: str, user: User, source_lang: str):
     if user.auto_translate and user.preferred_language != source_lang:
         return await translate_text(content, source_lang, user.preferred_language)
     return content
+
+
+class PostNotificationHandler:
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_post_creation(self, post: models.Post, current_user: models.User):
+        """معالجة إشعارات إنشاء المنشور الجديد"""
+        # إشعار المتابعين
+        followers = (
+            self.db.query(models.Follow)
+            .filter(models.Follow.followed_id == current_user.id)
+            .all()
+        )
+
+        for follower in followers:
+            await self.notification_service.create_notification(
+                user_id=follower.follower_id,
+                content=f"{current_user.username} نشر منشوراً جديداً",
+                notification_type="new_post",
+                priority=models.NotificationPriority.MEDIUM,
+                category=models.NotificationCategory.SOCIAL,
+                link=f"/post/{post.id}",
+                metadata={
+                    "post_id": post.id,
+                    "post_title": post.title,
+                    "author_id": current_user.id,
+                    "author_name": current_user.username,
+                },
+            )
+
+        # إشعار أعضاء المجتمع إذا كان المنشور في مجتمع
+        if post.community_id:
+            members = (
+                self.db.query(models.CommunityMember)
+                .filter(models.CommunityMember.community_id == post.community_id)
+                .all()
+            )
+
+            for member in members:
+                if member.user_id != current_user.id:
+                    await self.notification_service.create_notification(
+                        user_id=member.user_id,
+                        content=f"منشور جديد في المجتمع من {current_user.username}",
+                        notification_type="community_post",
+                        priority=models.NotificationPriority.LOW,
+                        category=models.NotificationCategory.COMMUNITY,
+                        link=f"/post/{post.id}",
+                    )
