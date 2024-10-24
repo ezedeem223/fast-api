@@ -28,6 +28,7 @@ from ..utils import (
     detect_language,
     get_translated_content,
 )
+from ..ai_chat.amenhotep import AmenhotepAI
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
@@ -788,3 +789,29 @@ class MessageNotificationHandler:
                     "conversation_id": message.conversation_id,
                 },
             )
+
+
+class MessageRouter:
+    def __init__(self):
+        self.amenhotep = AmenhotepAI()
+
+    @router.websocket("/ws/amenhotep/{user_id}")
+    async def amenhotep_chat(self, websocket: WebSocket, user_id: int):
+        await websocket.accept()
+
+        # إرسال رسالة الترحيب
+        await websocket.send_text(self.amenhotep.get_welcome_message())
+
+        try:
+            while True:
+                # استقبال رسالة من المستخدم
+                message = await websocket.receive_text()
+
+                # الحصول على رد من النموذج
+                response = await self.amenhotep.get_response(message)
+
+                # إرسال الرد للمستخدم
+                await websocket.send_text(response)
+
+        except WebSocketDisconnect:
+            print(f"User {user_id} disconnected from Amenhotep chat")

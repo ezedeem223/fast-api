@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
+    AI_MODEL_PATH: str = "bigscience/bloom-1b7"
+    AI_MAX_LENGTH: int = 150
+    AI_TEMPERATURE: float = 0.7
     database_hostname: str
     database_port: str
     database_password: str

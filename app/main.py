@@ -59,6 +59,7 @@ from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
 from .middleware.language import language_middleware
 import gettext
 from .firebase_config import initialize_firebase
+from .ai_chat.amenhotep import AmenhotepAI
 
 logger = logging.getLogger(__name__)
 train_content_classifier()
@@ -215,6 +216,8 @@ async def startup_event():
     db.close()
     update_search_vector()
     arabic_words_path = Path(__file__).parent / "arabic_words.txt"
+    app.state.amenhotep = AmenhotepAI()
+
     spell.word_frequency.load_dictionary(str(arabic_words_path))
     celery_app.conf.beat_schedule = {
         "check-scheduled-posts": {
