@@ -44,6 +44,7 @@ from .routers import (
     moderation,
     category_management,
     social_auth,
+    amenhotep,
 )
 from .config import settings
 from .notifications import ConnectionManager, send_real_time_notification
@@ -172,6 +173,7 @@ app.include_router(ip_ban.router)
 app.include_router(moderation.router)
 app.include_router(category_management.router)
 app.include_router(social_auth.router)
+app.include_router(amenhotep.router)
 
 app.middleware("http")(language_middleware)
 
