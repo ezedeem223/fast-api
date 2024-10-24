@@ -171,6 +171,7 @@ class BlockAppeal(Base):
     user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
     reviewer = relationship("User", foreign_keys=[reviewer_id])
 
+
 class NotificationType(str, Enum):
     NEW_FOLLOWER = "new_follower"
     NEW_COMMENT = "new_comment"
@@ -182,6 +183,7 @@ class NotificationType(str, Enum):
     REPORT_UPDATE = "report_update"
     ACCOUNT_SECURITY = "account_security"
     SYSTEM_UPDATE = "system_update"
+
 
 class Hashtag(Base):
     __tablename__ = "hashtags"
@@ -788,13 +790,24 @@ class Notification(Base):
     notification_channel = Column(String, default="in_app")  # in_app, email, push
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
+    priority_level = Column(Integer, default=1)
+    expiration_date = Column(DateTime(timezone=True), nullable=True)
+    delivery_tracking = Column(JSONB, default={})
+    retry_strategy = Column(String, nullable=True)  # exponential, linear, etc.
+    max_retries = Column(Integer, default=3)
+    current_retry_count = Column(Integer, default=0)
+    last_retry_timestamp = Column(DateTime(timezone=True), nullable=True)
+
     user = relationship("User", back_populates="notifications")
     group = relationship("NotificationGroup", back_populates="notifications")
+    analytics = relationship(
+        "NotificationAnalytics", back_populates="notification", uselist=False
+    )
 
     __table_args__ = (
-        Index('idx_notifications_user_created', 'user_id', 'created_at'),
-        Index('idx_notifications_type', 'notification_type'),
-        Index('idx_notifications_status', 'status'),
+        Index("idx_notifications_user_created", "user_id", "created_at"),
+        Index("idx_notifications_type", "notification_type"),
+        Index("idx_notifications_status", "status"),
     )
     delivery_logs = relationship(
         "NotificationDeliveryLog", back_populates="notification"
@@ -803,8 +816,71 @@ class Notification(Base):
         "NotificationDeliveryAttempt", back_populates="notification"
     )
 
+    def should_retry(self) -> bool:
+        """التحقق مما إذا كان يجب إعادة محاولة الإشعار"""
+        if self.status != NotificationStatus.FAILED:
+            return False
+        if self.current_retry_count >= self.max_retries:
+            return False
+        if self.expiration_date and datetime.now(timezone.utc) > self.expiration_date:
+            return False
+        return True
+
+    def get_next_retry_delay(self) -> int:
+        """حساب التأخير قبل المحاولة التالية"""
+        if self.retry_strategy == "exponential":
+            return 300 * (2**self.current_retry_count)  # 5 minutes * 2^retry_count
+        return 300  # 5 minutes default
+
 
 User.notifications = relationship("Notification", back_populates="user")
+
+
+class NotificationDeliveryAttempt(Base):
+    __tablename__ = "notification_delivery_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    notification_id = Column(
+        Integer, ForeignKey("notifications.id", ondelete="CASCADE")
+    )
+    attempt_number = Column(Integer, nullable=False)
+    attempt_time = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String, nullable=False)  # success, failure
+    error_message = Column(String, nullable=True)
+    delivery_channel = Column(String, nullable=False)
+    response_time = Column(Float)  # في الثواني
+    metadata = Column(JSONB, default={})
+
+    notification = relationship("Notification", back_populates="delivery_attempts")
+
+    __table_args__ = (
+        Index(
+            "idx_delivery_attempts_notification", "notification_id", "attempt_number"
+        ),
+    )
+
+
+class NotificationAnalytics(Base):
+    __tablename__ = "notification_analytics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    notification_id = Column(
+        Integer, ForeignKey("notifications.id", ondelete="CASCADE")
+    )
+    delivery_attempts = Column(Integer, default=0)
+    first_delivery_attempt = Column(DateTime(timezone=True), server_default=func.now())
+    last_delivery_attempt = Column(DateTime(timezone=True), onupdate=func.now())
+    successful_delivery = Column(Boolean, default=False)
+    delivery_channel = Column(String)
+    device_info = Column(JSONB, default={})
+    performance_metrics = Column(JSONB, default={})
+
+    notification = relationship("Notification", back_populates="analytics")
+
+    __table_args__ = (
+        Index("idx_notification_analytics_notification_id", "notification_id"),
+        Index("idx_notification_analytics_successful_delivery", "successful_delivery"),
+    )
 
 
 class NotificationDeliveryLog(Base):

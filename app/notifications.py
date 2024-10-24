@@ -17,11 +17,282 @@ from .utils import get_translated_content
 import asyncio
 from cachetools import TTLCache
 from .i18n import translate_text, detect_language
+from .models import (
+    Notification,
+    NotificationDeliveryLog,
+    NotificationGroup,
+    NotificationAnalytics,
+    NotificationStatus,
+    NotificationPriority,
+    NotificationCategory,
+    User,
+    NotificationPreferences,
+)
 
 logger = logging.getLogger(__name__)
 
 # كاش للإشعارات
 notification_cache = TTLCache(maxsize=1000, ttl=300)
+delivery_status_cache = TTLCache(maxsize=5000, ttl=3600)
+priority_notification_cache = TTLCache(maxsize=500, ttl=60)  # للإشعارات العاجلة
+
+
+class NotificationBatcher:
+    """معالج للإشعارات الجماعية"""
+
+    def __init__(self, max_batch_size: int = 100, max_wait_time: float = 1.0):
+        self.batch = []
+        self.max_batch_size = max_batch_size
+        self.max_wait_time = max_wait_time
+        self._lock = asyncio.Lock()
+        self._last_flush = datetime.now(timezone.utc)
+
+    async def add(self, notification: dict) -> None:
+        async with self._lock:
+            self.batch.append(notification)
+            if (
+                len(self.batch) >= self.max_batch_size
+                or (datetime.now(timezone.utc) - self._last_flush).total_seconds()
+                >= self.max_wait_time
+            ):
+                await self.flush()
+
+    async def flush(self) -> None:
+        async with self._lock:
+            if not self.batch:
+                return
+            try:
+                # معالجة الدفعة الحالية
+                await self._process_batch(self.batch)
+            finally:
+                self.batch = []
+                self._last_flush = datetime.now(timezone.utc)
+
+    async def _process_batch(self, notifications: List[dict]) -> None:
+        # تجميع الإشعارات حسب نوع التسليم
+        email_notifications = []
+        push_notifications = []
+        in_app_notifications = []
+
+        for notif in notifications:
+            if notif.get("channel") == "email":
+                email_notifications.append(notif)
+            elif notif.get("channel") == "push":
+                push_notifications.append(notif)
+            else:
+                in_app_notifications.append(notif)
+
+        # معالجة كل نوع على حدة
+        tasks = []
+        if email_notifications:
+            tasks.append(self._send_batch_emails(email_notifications))
+        if push_notifications:
+            tasks.append(self._send_batch_push(push_notifications))
+        if in_app_notifications:
+            tasks.append(self._send_batch_in_app(in_app_notifications))
+
+        await asyncio.gather(*tasks)
+
+    async def _send_batch_emails(self, notifications: List[dict]) -> None:
+        # تجميع الرسائل حسب المستلم
+        email_groups = {}
+        for notif in notifications:
+            email = notif["recipient"]
+            if email not in email_groups:
+                email_groups[email] = []
+            email_groups[email].append(notif)
+
+        for email, notifs in email_groups.items():
+            message = MessageSchema(
+                subject="New Notifications",
+                recipients=[email],
+                body=self._format_batch_email(notifs),
+                subtype="html",
+            )
+            await fm.send_message(message)
+
+    @staticmethod
+    def _format_batch_email(notifications: List[dict]) -> str:
+        return "\n".join(
+            [
+                f"<div><h3>{n['title']}</h3><p>{n['content']}</p></div>"
+                for n in notifications
+            ]
+        )
+
+
+class NotificationDeliveryManager:
+    """مدير تسليم الإشعارات مع دعم متقدم للمحاولات المتكررة"""
+
+    def __init__(self, db, background_tasks: Optional[BackgroundTasks] = None):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.max_retries = 5  # زيادة عدد المحاولات
+        self.retry_delays = [300, 600, 1200, 2400, 4800]  # تأخير متزايد
+        self.error_tracking = {}
+        self.batcher = NotificationBatcher()
+
+    async def deliver_notification(self, notification: models.Notification) -> bool:
+        """تسليم الإشعار مع دعم للمحاولات المتكررة والتتبع"""
+        try:
+            delivery_key = f"delivery_{notification.id}"
+            if delivery_key in delivery_status_cache:
+                return delivery_status_cache[delivery_key]
+
+            user_prefs = self._get_user_preferences(notification.user_id)
+            # تحضير الإشعار حسب تفضيلات المستخدم
+            content = await self._prepare_notification_content(notification, user_prefs)
+
+            delivery_tasks = []
+            if user_prefs.email_notifications:
+                delivery_tasks.append(self._send_email(notification, content))
+            if user_prefs.push_notifications:
+                delivery_tasks.append(self._send_push(notification, content))
+            if user_prefs.in_app_notifications:
+                delivery_tasks.append(self._send_in_app(notification, content))
+
+            results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
+            success = all(not isinstance(r, Exception) for r in results)
+
+            await self._update_delivery_statistics(notification, success, results)
+
+            delivery_status_cache[delivery_key] = success
+            return success
+
+        except Exception as e:
+            error_details = {
+                "notification_id": notification.id,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            logger.error(f"Delivery error: {error_details}")
+            self.error_tracking[notification.id] = error_details
+
+            if notification.retry_count < self.max_retries:
+                await self._schedule_retry(notification)
+            else:
+                await self._handle_final_failure(notification, error_details)
+
+            return False
+
+    async def _prepare_notification_content(
+        self,
+        notification: models.Notification,
+        user_prefs: models.NotificationPreferences,
+    ) -> str:
+        """تحضير محتوى الإشعار مع دعم الترجمة"""
+        content = notification.content
+        if (
+            user_prefs.auto_translate
+            and user_prefs.preferred_language != notification.language
+        ):
+            content = await get_translated_content(
+                content, user_prefs.preferred_language, notification.language
+            )
+        return content
+
+    async def _update_delivery_status(
+        self, notification: models.Notification, success: bool, results: List[Any]
+    ) -> None:
+        """تحديث حالة تسليم الإشعار"""
+        status = (
+            models.NotificationStatus.DELIVERED
+            if success
+            else models.NotificationStatus.FAILED
+        )
+
+        delivery_log = models.NotificationDeliveryLog(
+            notification_id=notification.id,
+            status=status.value,
+            error_message=str(results) if not success else None,
+            delivery_channel="all",
+        )
+
+        notification.status = status
+        notification.delivery_status = {
+            "success": success,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "channels": self._format_delivery_results(results),
+        }
+
+        self.db.add(delivery_log)
+        self.db.commit()
+
+    def _format_delivery_results(self, results: List[Any]) -> Dict[str, Any]:
+        """تنسيق نتائج التسليم"""
+        return {
+            "email": (
+                not isinstance(results[0], Exception) if len(results) > 0 else None
+            ),
+            "push": not isinstance(results[1], Exception) if len(results) > 1 else None,
+            "in_app": (
+                not isinstance(results[2], Exception) if len(results) > 2 else None
+            ),
+        }
+
+    async def _handle_delivery_failure(
+        self, notification: models.Notification, error: Exception
+    ) -> None:
+        """معالجة فشل تسليم الإشعار"""
+        if notification.retry_count >= self.max_retries:
+            notification.status = models.NotificationStatus.FAILED
+            notification.failure_reason = str(error)
+            self.db.commit()
+            return
+
+        retry_delay = self.retry_delays[notification.retry_count]
+        notification.retry_count += 1
+        notification.status = models.NotificationStatus.RETRYING
+        notification.next_retry = datetime.now(timezone.utc) + timedelta(
+            seconds=retry_delay
+        )
+
+        self.db.commit()
+
+        if self.background_tasks:
+            self.background_tasks.add_task(
+                self.retry_delivery, notification.id, retry_delay
+            )
+
+    async def retry_delivery(self, notification_id: int, delay: int) -> None:
+        """إعادة محاولة تسليم الإشعار"""
+        await asyncio.sleep(delay)
+
+        notification = (
+            self.db.query(models.Notification)
+            .filter(models.Notification.id == notification_id)
+            .first()
+        )
+
+        if (
+            not notification
+            or notification.status != models.NotificationStatus.RETRYING
+        ):
+            return
+
+        await self.deliver_notification(notification)
+
+    def _get_user_preferences(self, user_id: int) -> models.NotificationPreferences:
+        """الحصول على تفضيلات المستخدم مع التخزين المؤقت"""
+        cache_key = f"user_prefs_{user_id}"
+        if cache_key in notification_cache:
+            return notification_cache[cache_key]
+
+        prefs = (
+            self.db.query(models.NotificationPreferences)
+            .filter(models.NotificationPreferences.user_id == user_id)
+            .first()
+        )
+
+        if not prefs:
+            prefs = models.NotificationPreferences(user_id=user_id)
+            self.db.add(prefs)
+            self.db.commit()
+            self.db.refresh(prefs)
+
+        notification_cache[cache_key] = prefs
+        return prefs
 
 
 class ConnectionManager:
