@@ -767,6 +767,109 @@ class AmenhotepMessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AmenhotepAnalyticsBase(BaseModel):
+    session_id: str
+    total_messages: int
+    topics_discussed: List[str]
+    session_duration: int
+    satisfaction_score: Optional[float]
+
+
+class AmenhotepAnalyticsCreate(AmenhotepAnalyticsBase):
+    user_id: int
+
+
+class AmenhotepAnalyticsOut(AmenhotepAnalyticsBase):
+    id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AmenhotepSessionSummary(BaseModel):
+    total_sessions: int
+    average_duration: float
+    most_discussed_topics: List[str]
+    average_satisfaction: float
+
+
+from pydantic import BaseModel, HttpUrl
+from typing import Optional, List, Dict
+from datetime import datetime
+from enum import Enum
+
+
+class SocialMediaType(str, Enum):
+    REDDIT = "reddit"
+    LINKEDIN = "linkedin"
+
+
+class PostStatus(str, Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class SocialAccountBase(BaseModel):
+    platform: SocialMediaType
+    account_username: Optional[str] = None
+
+
+class SocialAccountCreate(SocialAccountBase):
+    pass
+
+
+class SocialAccountOut(SocialAccountBase):
+    id: int
+    user_id: int
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SocialPostBase(BaseModel):
+    title: Optional[str] = None
+    content: str
+    media_urls: Optional[List[HttpUrl]] = None
+    scheduled_for: Optional[datetime] = None
+
+
+class SocialPostCreate(SocialPostBase):
+    platform: SocialMediaType
+
+
+class SocialPostUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    media_urls: Optional[List[HttpUrl]] = None
+    scheduled_for: Optional[datetime] = None
+
+
+class SocialPostOut(SocialPostBase):
+    id: int
+    user_id: int
+    account_id: int
+    platform_post_id: Optional[str]
+    status: PostStatus
+    error_message: Optional[str]
+    engagement_stats: Dict
+    created_at: datetime
+    published_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EngagementStats(BaseModel):
+    upvotes: Optional[int]
+    downvotes: Optional[int]
+    comments: Optional[int]
+    shares: Optional[int]
+    likes: Optional[int]
+
+
 class NotificationBase(BaseModel):
     content: str
     notification_type: str

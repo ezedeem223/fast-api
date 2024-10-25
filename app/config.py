@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     twitter_api_secret: str
     twitter_access_token: str
     twitter_access_token_secret: str
+    # REDDIT_CLIENT_ID: str
+    # REDDIT_CLIENT_SECRET: str
+    # REDDIT_USER_AGENT: str = "YourApp/1.0"
+    # LINKEDIN_CLIENT_ID: str
+    # LINKEDIN_CLIENT_SECRET: str
+    # LINKEDIN_REDIRECT_URI: str
+
     refresh_secret_key: str
     DEFAULT_LANGUAGE = "ar"
     firebase_api_key: str
