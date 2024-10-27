@@ -172,3 +172,29 @@ async def clear_chat_history(
     except Exception as e:
         logger.error(f"Error clearing chat history for user {user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="حدث خطأ أثناء مسح سجل المحادثة")
+
+
+class MessageRouter:
+    def __init__(self):
+        self.amenhotep = AmenhotepAI()
+
+    @router.websocket("/ws/amenhotep/{user_id}")
+    async def amenhotep_chat(self, websocket: WebSocket, user_id: int):
+        await websocket.accept()
+
+        # إرسال رسالة الترحيب
+        await websocket.send_text(self.amenhotep.get_welcome_message())
+
+        try:
+            while True:
+                # استقبال رسالة من المستخدم
+                message = await websocket.receive_text()
+
+                # الحصول على رد من النموذج
+                response = await self.amenhotep.get_response(message)
+
+                # إرسال الرد للمستخدم
+                await websocket.send_text(response)
+
+        except WebSocketDisconnect:
+            print(f"User {user_id} disconnected from Amenhotep chat")

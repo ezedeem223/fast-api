@@ -9,39 +9,6 @@ from ..celery_worker import celery_app, unblock_user
 router = APIRouter(prefix="/block", tags=["Block"])
 
 
-@celery_app.task
-def unblock_user(blocker_id: int, blocked_id: int):
-    """Celery task to unblock a user after a specified duration."""
-    with database.SessionLocal() as db:
-        block = (
-            db.query(models.Block)
-            .filter(
-                models.Block.blocker_id == blocker_id,
-                models.Block.blocked_id == blocked_id,
-            )
-            .first()
-        )
-        if block:
-            db.delete(block)
-            db.commit()
-            utils.log_event(
-                db, "unblock_user", {"blocker_id": blocker_id, "blocked_id": blocked_id}
-            )
-
-
-@celery_app.task
-def clean_expired_blocks():
-    """Celery task to clean expired blocks."""
-    with database.SessionLocal() as db:
-        expired_blocks = (
-            db.query(models.Block).filter(models.Block.ends_at < datetime.now()).all()
-        )
-        for block in expired_blocks:
-            db.delete(block)
-        db.commit()
-        utils.log_event(db, "clean_expired_blocks", {"count": len(expired_blocks)})
-
-
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.BlockOut)
 def block_user(
     block: schemas.BlockCreate,

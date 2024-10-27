@@ -416,18 +416,22 @@ class User(Base):
     )
     search_history = relationship("SearchStatistics", back_populates="user")
     notifications = relationship("Notification", back_populates="user")
-    User.amenhotep_analytics = relationship("AmenhotepChatAnalytics", back_populates="user")
-    User.social_accounts = relationship("SocialMediaAccount", back_populates="user")
-User.social_posts = relationship("SocialMediaPost", back_populates="user")
+    User.amenhotep_analytics = relationship(
+        "AmenhotepChatAnalytics", back_populates="user"
+    )
+
+
 class PostStatus(str, enum.Enum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     PUBLISHED = "published"
     FAILED = "failed"
 
+
 class SocialMediaType(str, enum.Enum):
     REDDIT = "reddit"
     LINKEDIN = "linkedin"
+
 
 class SocialMediaAccount(Base):
     __tablename__ = "social_media_accounts"
@@ -445,6 +449,7 @@ class SocialMediaAccount(Base):
 
     user = relationship("User", back_populates="social_accounts")
     posts = relationship("SocialMediaPost", back_populates="account")
+
 
 class SocialMediaPost(Base):
     __tablename__ = "social_media_posts"
@@ -1009,18 +1014,19 @@ class Comment(Base):
 
 class AmenhotepMessage(Base):
     __tablename__ = "amenhotep_messages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     message = Column(String, nullable=False)
     response = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     user = relationship("User", back_populates="amenhotep_messages")
+
 
 class AmenhotepChatAnalytics(Base):
     __tablename__ = "amenhotep_chat_analytics"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, index=True)
@@ -1029,7 +1035,7 @@ class AmenhotepChatAnalytics(Base):
     session_duration = Column(Integer)  # بالثواني
     satisfaction_score = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     user = relationship("User", back_populates="amenhotep_analytics")
 
 

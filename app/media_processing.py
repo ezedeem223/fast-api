@@ -32,3 +32,11 @@ def process_media_file(file_path):
         return ""
 
     return speech_to_text(audio_path)
+
+
+def scan_file_for_viruses(file_path: str) -> bool:
+    cd = clamd.ClamdNetworkSocket()
+    result = cd.scan(file_path)
+    if result and result[file_path][0] == "FOUND":
+        return False
+    return True

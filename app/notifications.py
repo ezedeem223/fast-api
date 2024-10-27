@@ -1172,3 +1172,13 @@ class NotificationRetryHandler:
             await self.handle_failed_notification(notification_id)
 
         self.db.commit()
+
+    # Создание уведомления для получателя
+    create_notification(
+        db,
+        message.receiver_id,
+        f"{current_user.username} отредактировал сообщение",
+        f"/messages/{current_user.id}",
+        "message_edited",
+        message.id,
+    )

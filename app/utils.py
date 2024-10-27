@@ -771,3 +771,12 @@ def create_notification(
     db.commit()
     db.refresh(new_notification)
     return new_notification
+
+
+def update_link_preview(db: Session, message_id: int, url: str):
+    link_preview = extract_link_preview(url)
+    if link_preview:
+        db.query(models.Message).filter(models.Message.id == message_id).update(
+            {"link_preview": link_preview}
+        )
+        db.commit()

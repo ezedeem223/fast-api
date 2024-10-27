@@ -174,3 +174,49 @@ def generate_search_trends_chart():
     graphic = graphic.decode("utf-8")
 
     return graphic
+
+
+def update_conversation_statistics(
+    db: Session, conversation_id: str, new_message: models.Message
+):
+    stats = (
+        db.query(models.ConversationStatistics)
+        .filter(models.ConversationStatistics.conversation_id == conversation_id)
+        .first()
+    )
+
+    if not stats:
+        stats = models.ConversationStatistics(
+            conversation_id=conversation_id,
+            user1_id=min(new_message.sender_id, new_message.receiver_id),
+            user2_id=max(new_message.sender_id, new_message.receiver_id),
+        )
+        db.add(stats)
+
+    stats.total_messages += 1
+    stats.last_message_at = func.now()
+
+    if new_message.attachments:
+        stats.total_files += len(new_message.attachments)
+    if new_message.has_emoji:
+        stats.total_emojis += 1
+    if new_message.message_type == schemas.MessageType.STICKER:
+        stats.total_stickers += 1
+
+    last_message = (
+        db.query(models.Message)
+        .filter(
+            models.Message.conversation_id == conversation_id,
+            models.Message.id != new_message.id,
+        )
+        .order_by(models.Message.created_at.desc())
+        .first()
+    )
+
+    if last_message:
+        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
+        stats.total_response_time += time_diff
+        stats.total_responses += 1
+        stats.average_response_time = stats.total_response_time / stats.total_responses
+
+    db.commit()

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, asc, func
 from .. import models, schemas, oauth2
 from ..database import get_db
@@ -9,10 +9,10 @@ from ..cache import cache
 from datetime import datetime, timedelta
 from ..utils import log_user_event, create_notification
 
-
 router = APIRouter(prefix="/follow", tags=["Follow"])
 
 
+# Follow Management
 @router.post("/{user_id}", status_code=status.HTTP_201_CREATED)
 async def follow_user(
     user_id: int,
@@ -20,17 +20,21 @@ async def follow_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """متابعة مستخدم"""
+    # التحقق من عدم متابعة النفس
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot follow yourself"
         )
 
+    # التحقق من وجود المستخدم المراد متابعته
     user_to_follow = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_to_follow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User to follow not found"
         )
 
+    # التحقق من عدم وجود متابعة مسبقة
     existing_follow = (
         db.query(models.Follow)
         .filter(
@@ -46,6 +50,7 @@ async def follow_user(
             detail="You already follow this user",
         )
 
+    # إنشاء علاقة المتابعة
     new_follow = models.Follow(follower_id=current_user.id, followed_id=user_id)
     db.add(new_follow)
 
@@ -63,19 +68,23 @@ async def follow_user(
         new_follow.is_mutual = True
         mutual_follow.is_mutual = True
 
+    # تحديث عداد المتابعين
     user_to_follow.followers_count += 1
     current_user.following_count += 1
 
     db.commit()
 
+    # تسجيل الحدث
     log_user_event(db, current_user.id, "follow_user", {"followed_id": user_id})
 
+    # إرسال الإشعارات
     background_tasks.add_task(
         send_email_notification,
         to=user_to_follow.email,
         subject="New Follower",
         body=f"You have a new follower: {current_user.email}",
     )
+
     create_notification(
         db,
         user_id,
@@ -95,6 +104,7 @@ async def unfollow_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """إلغاء متابعة مستخدم"""
     follow = (
         db.query(models.Follow)
         .filter(
@@ -112,10 +122,10 @@ async def unfollow_user(
     user_unfollowed = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_unfollowed:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User to unfollow not found",
+            status_code=status.HTTP_404_NOT_FOUND, detail="User to unfollow not found"
         )
 
+    # إلغاء علامة المتابعة المتبادلة إذا وجدت
     if follow.is_mutual:
         mutual_follow = (
             db.query(models.Follow)
@@ -130,11 +140,13 @@ async def unfollow_user(
 
     db.delete(follow)
 
+    # تحديث عداد المتابعين
     user_unfollowed.followers_count -= 1
     current_user.following_count -= 1
 
     db.commit()
 
+    # إرسال إشعار بالبريد
     background_tasks.add_task(
         send_email_notification,
         to=user_unfollowed.email,
@@ -145,6 +157,7 @@ async def unfollow_user(
     return None
 
 
+# Followers and Following Lists
 @router.get("/followers", response_model=schemas.FollowersListOut)
 @cache(expire=300)
 async def get_followers(
@@ -155,8 +168,10 @@ async def get_followers(
     skip: int = 0,
     limit: int = 100,
 ):
+    """الحصول على قائمة المتابعين"""
     query = db.query(models.Follow).filter(models.Follow.followed_id == current_user.id)
 
+    # تطبيق الترتيب
     if sort_by == "date":
         order_column = models.Follow.created_at
     elif sort_by == "username":
@@ -201,8 +216,10 @@ async def get_following(
     skip: int = 0,
     limit: int = 100,
 ):
+    """الحصول على قائمة المتابَعين"""
     query = db.query(models.Follow).filter(models.Follow.follower_id == current_user.id)
 
+    # تطبيق الترتيب
     if sort_by == "date":
         order_column = models.Follow.created_at
     elif sort_by == "username":
@@ -236,22 +253,26 @@ async def get_following(
     }
 
 
+# Statistics and Analytics
 @router.get("/statistics", response_model=schemas.FollowStatistics)
 def get_follow_statistics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """الحصول على إحصائيات المتابعة"""
     # حساب نمو المتابعين في الأيام الـ 30 الماضية
     thirty_days_ago = datetime.now() - timedelta(days=30)
     daily_growth = (
         db.query(func.date(models.Follow.created_at), func.count())
-        .filter(models.Follow.followed_id == current_user.id)
-        .filter(models.Follow.created_at >= thirty_days_ago)
+        .filter(
+            models.Follow.followed_id == current_user.id,
+            models.Follow.created_at >= thirty_days_ago,
+        )
         .group_by(func.date(models.Follow.created_at))
         .all()
     )
 
-    # حساب معدل التفاعل (يمكن تعديله حسب تعريفك للتفاعل)
+    # حساب معدل التفاعل
     interaction_rate = (
         db.query(func.count(models.Post.id) + func.count(models.Comment.id))
         .filter(
@@ -277,11 +298,14 @@ def get_mutual_followers(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """الحصول على قائمة المتابعين المتبادلين"""
     mutual_followers = (
         db.query(models.User)
         .join(models.Follow, models.User.id == models.Follow.follower_id)
-        .filter(models.Follow.followed_id == current_user.id)
-        .filter(models.Follow.is_mutual == True)
+        .filter(
+            models.Follow.followed_id == current_user.id,
+            models.Follow.is_mutual == True,
+        )
         .all()
     )
     return mutual_followers

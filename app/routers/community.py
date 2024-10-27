@@ -1,3 +1,4 @@
+# تحسين الاستيرادات - إضافة المكتبات اللازمة للوظائف الجديدة
 from fastapi import (
     APIRouter,
     Depends,
@@ -7,15 +8,30 @@ from fastapi import (
     Request,
     Body,
     Response,
+    BackgroundTasks,
 )
 from sqlalchemy.orm import Session, joinedload
-from typing import List, Union
+from sqlalchemy import func, or_, desc, asc
+from typing import List, Union, Optional
 from .. import models, schemas, oauth2
 from ..database import get_db
-from ..utils import log_user_event, create_notification, get_translated_content
+from ..utils import (
+    log_user_event,
+    create_notification,
+    get_translated_content,
+    check_content_against_rules,
+    check_for_profanity,
+    validate_urls,
+    analyze_sentiment,
+    is_valid_image_url,
+    is_valid_video_url,
+    detect_language,
+    update_post_score,
+)
+from ..config import settings
 import logging
-from datetime import date, timedelta
-from sqlalchemy import func
+from datetime import date, timedelta, datetime, timezone
+import emoji
 from fastapi.responses import HTMLResponse, StreamingResponse
 import csv
 from io import StringIO
@@ -23,863 +39,45 @@ from io import StringIO
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["Communities"])
 
+# ==================== الثوابت العامة ====================
 
-@router.post(
-    "/", status_code=status.HTTP_201_CREATED, response_model=schemas.CommunityOut
-)
-def create_community(
-    community: schemas.CommunityCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    new_community = models.Community(
-        owner_id=current_user.id, **community.dict(exclude={"tags"})
-    )
-    new_community.members.append(current_user)
+MAX_PINNED_POSTS = 5
+MAX_RULES = 20
+ACTIVITY_THRESHOLD_VIP = 1000
+INACTIVE_DAYS_THRESHOLD = 30
 
-    if community.category_id:
-        category = (
-            db.query(models.Category)
-            .filter(models.Category.id == community.category_id)
-            .first()
-        )
-        if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
-        new_community.category = category
-
-    for tag_id in community.tags:
-        tag = db.query(models.Tag).filter(models.Tag.id == tag_id).first()
-        if tag:
-            new_community.tags.append(tag)
-
-    db.add(new_community)
-    db.commit()
-    db.refresh(new_community)
-
-    log_user_event(
-        db, current_user.id, "create_community", {"community_id": new_community.id}
-    )
-
-    create_notification(
-        db,
-        current_user.id,
-        f"Вы создали новое сообщество: {new_community.name}",
-        f"/community/{new_community.id}",
-        "new_community",
-        new_community.id,
-    )
-
-    return schemas.CommunityOut.from_orm(new_community)
+# ==================== المساعدة والأدوات المساعدة ====================
 
 
-@router.get("/", response_model=List[schemas.CommunityOut])
-async def get_communities(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    search: str = "",
-):
-    query = db.query(models.Community)
-    if search:
-        query = query.filter(models.Community.name.ilike(f"%{search}%"))
-    communities = query.offset(skip).limit(limit).all()
-
-    for community in communities:
-        community.name = await get_translated_content(
-            community.name, current_user, community.language
-        )
-        community.description = await get_translated_content(
-            community.description, current_user, community.language
-        )
-
-    return [schemas.CommunityOut.from_orm(community) for community in communities]
-
-
-@router.get("/{id}", response_model=schemas.CommunityOut)
-async def get_community(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = db.query(models.Community).filter(models.Community.id == id).first()
+def check_community_permissions(
+    user: models.User,
+    community: models.Community,
+    required_role: models.CommunityRole,
+) -> bool:
+    """التحقق من صلاحيات المستخدم في المجتمع"""
     if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {id} was not found",
-        )
-    community.name = await get_translated_content(
-        community.name, current_user, community.language
-    )
-    community.description = await get_translated_content(
-        community.description, current_user, community.language
-    )
+        raise HTTPException(status_code=404, detail="المجتمع غير موجود")
 
-    return schemas.CommunityOut.from_orm(community)
-
-
-@router.put("/{id}", response_model=schemas.CommunityOut)
-def update_community(
-    id: int,
-    updated_community: schemas.CommunityUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community_query = db.query(models.Community).filter(models.Community.id == id)
-    community = community_query.first()
-    if community is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {id} does not exist",
-        )
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perform requested action",
-        )
-
-    update_data = updated_community.dict(exclude_unset=True)
-
-    if "category_id" in update_data:
-        category = (
-            db.query(models.Category)
-            .filter(models.Category.id == update_data["category_id"])
-            .first()
-        )
-        if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
-        community.category = category
-        del update_data["category_id"]
-
-    if "tags" in update_data:
-        community.tags.clear()
-        for tag_id in update_data["tags"]:
-            tag = db.query(models.Tag).filter(models.Tag.id == tag_id).first()
-            if tag:
-                community.tags.append(tag)
-        del update_data["tags"]
-
-    community_query.update(update_data, synchronize_session=False)
-    db.commit()
-    db.refresh(community)
-
-    create_notification(
-        db,
-        current_user.id,
-        f"Вы обновили сообщество: {community.name}",
-        f"/community/{community.id}",
-        "update_community",
-        community.id,
-    )
-
-    return schemas.CommunityOut.from_orm(community)
-
-
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_community(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community_query = db.query(models.Community).filter(models.Community.id == id)
-    community = community_query.first()
-    if community is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {id} does not exist",
-        )
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to perform requested action",
-        )
-    community_query.delete(synchronize_session=False)
-    db.commit()
-
-    create_notification(
-        db,
-        current_user.id,
-        f"Вы удалили сообщество: {community.name}",
-        "/communities",
-        "delete_community",
-        None,
-    )
-
-    return {"message": "Community deleted successfully"}
-
-
-@router.post("/{id}/join", status_code=status.HTTP_200_OK)
-def join_community(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = db.query(models.Community).filter(models.Community.id == id).first()
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {id} was not found",
-        )
-    if current_user in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this community",
-        )
-    community.members.append(current_user)
-    db.commit()
-    db.refresh(community)
-
-    create_notification(
-        db,
-        current_user.id,
-        f"Вы присоединились к сообществу: {community.name}",
-        f"/community/{community.id}",
-        "join_community",
-        community.id,
-    )
-
-    return {"message": "Joined the community successfully"}
-
-
-@router.post("/{id}/leave", status_code=status.HTTP_200_OK)
-def leave_community(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = db.query(models.Community).filter(models.Community.id == id).first()
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {id} was not found",
-        )
-    if current_user not in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is not a member of this community",
-        )
-    if community.owner_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Owner cannot leave the community",
-        )
-    community.members.remove(current_user)
-    db.commit()
-    db.refresh(community)
-
-    create_notification(
-        db,
-        current_user.id,
-        f"Вы покинули сообщество: {community.name}",
-        f"/community/{community.id}",
-        "leave_community",
-        community.id,
-    )
-
-    return {"message": "Left the community successfully"}
-
-
-@router.post(
-    "/{community_id}/reels",
-    status_code=status.HTTP_201_CREATED,
-    response_model=schemas.ReelOut,
-)
-@router.post(
-    "/{community_id}/articles",
-    status_code=status.HTTP_201_CREATED,
-    response_model=schemas.ArticleOut,
-)
-async def create_content(
-    community_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    content: Union[schemas.ReelCreate, schemas.ArticleCreate] = Body(...),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Community with id: {community_id} not found",
-        )
-
-    if current_user not in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be a member of the community to create content",
-        )
-
-    content_type = content.__class__.__name__.replace("Create", "")
-    model = getattr(models, content_type)
-
-    if content_type == "Article":
-        new_content = model(
-            author_id=current_user.id,
-            community_id=community_id,
-            **content.dict(exclude={"community_id"}),
-        )
-    else:
-        new_content = model(
-            owner_id=current_user.id,
-            community_id=community_id,
-            **content.dict(exclude={"community_id"}),
-        )
-
-    db.add(new_content)
-    db.commit()
-    db.refresh(new_content)
-
-    create_notification(
-        db,
-        community.owner_id,
-        f"Новый контент в вашем сообществе: {community.name}",
-        f"/community/{community_id}",
-        f"new_{content_type.lower()}",
-        new_content.id,
-    )
-
-    response_schema = getattr(schemas, f"{content_type}Out")
-    return response_schema.from_orm(new_content)
-
-
-@router.get("/{community_id}/reels", response_model=List[schemas.ReelOut])
-@router.get("/{community_id}/articles", response_model=List[schemas.ArticleOut])
-@router.get("/{community_id}/posts", response_model=List[schemas.PostOut])
-async def get_community_content(
-    request: Request,
-    community_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
-        )
-
-    content_type = request.url.path.split("/")[-1]  # reels, articles, or posts
-    model = getattr(models, content_type.capitalize()[:-1])  # Reel, Article, or Post
-    content = (
-        db.query(model)
-        .filter(model.community_id == community_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    for item in content:
-        if hasattr(item, "title"):
-            item.title = await get_translated_content(
-                item.title, current_user, item.language
-            )
-        if hasattr(item, "content"):
-            item.content = await get_translated_content(
-                item.content, current_user, item.language
-            )
-        if hasattr(item, "description"):
-            item.description = await get_translated_content(
-                item.description, current_user, item.language
-            )
-
-    response_schema = getattr(schemas, f"{content_type.capitalize()[:-1]}Out")
-    return [
-        response_schema(
-            **item.__dict__,
-            owner=(
-                schemas.UserOut.from_orm(item.owner)
-                if content_type != "articles"
-                else None
-            ),
-            author=(
-                schemas.UserOut.from_orm(item.author)
-                if content_type == "articles"
-                else None
-            ),
-            community=schemas.CommunityOut.from_orm(community),
-        )
-        for item in content
-    ]
-
-
-def create_community_post(
-    community_id: int,
-    post: schemas.PostCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
-        )
-
-    if current_user not in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be a member of the community to create a post",
-        )
-
-    new_post = models.Post(
-        owner_id=current_user.id,
-        community_id=community_id,
-        **post.dict(exclude={"community_id"}),
-    )
-    db.add(new_post)
-    db.commit()
-    db.refresh(new_post)
-
-    create_notification(
-        db,
-        community.owner_id,
-        f"Новый пост в вашем сообществе: {community.name}",
-        f"/post/{new_post.id}",
-        "new_community_post",
-        new_post.id,
-    )
-    return schemas.PostOut(
-        **new_post.__dict__,
-        owner=schemas.UserOut.from_orm(current_user),
-        community=schemas.CommunityOut.from_orm(community),
-    )
-
-
-@router.post(
-    "/{community_id}/invite",
-    status_code=status.HTTP_201_CREATED,
-    response_model=schemas.CommunityInvitationOut,
-)
-def invite_friend_to_community(
-    community_id: int,
-    invitation: schemas.CommunityInvitationCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
-        )
-
-    if current_user not in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You must be a member of the community to invite friends",
-        )
-
-    invitee = (
-        db.query(models.User).filter(models.User.id == invitation.invitee_id).first()
-    )
-    if not invitee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Invitee not found"
-        )
-
-    if invitee in community.members:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this community",
-        )
-
-    new_invitation = models.CommunityInvitation(
-        community_id=community_id,
-        inviter_id=current_user.id,
-        invitee_id=invitation.invitee_id,
-    )
-    db.add(new_invitation)
-    db.commit()
-    db.refresh(new_invitation)
-
-    create_notification(
-        db,
-        invitation.invitee_id,
-        f"Вас пригласили в сообщество: {community.name}",
-        f"/community/{community_id}",
-        "community_invitation",
-        new_invitation.id,
-    )
-    return schemas.CommunityInvitationOut.from_orm(new_invitation)
-
-
-@router.get("/user-invitations", response_model=List[schemas.CommunityInvitationOut])
-async def get_user_invitations(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    logger.info(f"Fetching invitations for user {current_user.id}")
-    invitations = (
-        db.query(models.CommunityInvitation)
-        .filter(
-            models.CommunityInvitation.invitee_id == current_user.id,
-            models.CommunityInvitation.status == "pending",
-        )
-        .options(
-            joinedload(models.CommunityInvitation.community).joinedload(
-                models.Community.owner
-            ),
-            joinedload(models.CommunityInvitation.inviter),
-            joinedload(models.CommunityInvitation.invitee),
-        )
-        .all()
-    )
-    logger.info(f"Found {len(invitations)} invitations")
-
-    result = []
-    for invitation in invitations:
-        invitation_dict = {
-            "id": invitation.id,
-            "community_id": invitation.community_id,
-            "inviter_id": invitation.inviter_id,
-            "invitee_id": invitation.invitee_id,
-            "status": invitation.status,
-            "created_at": invitation.created_at,
-            "community": schemas.CommunityOut.from_orm(invitation.community),
-            "inviter": schemas.UserOut.from_orm(invitation.inviter),
-            "invitee": schemas.UserOut.from_orm(invitation.invitee),
-        }
-        result.append(schemas.CommunityInvitationOut(**invitation_dict))
-
-    return result
-
-
-@router.post("/invitations/{invitation_id}/accept", status_code=status.HTTP_200_OK)
-def accept_invitation(
-    invitation_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    invitation = (
-        db.query(models.CommunityInvitation)
-        .filter(
-            models.CommunityInvitation.id == invitation_id,
-            models.CommunityInvitation.invitee_id == current_user.id,
-        )
-        .first()
-    )
-    if not invitation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
-        )
-
-    if invitation.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation has already been processed",
-        )
-
-    community = (
-        db.query(models.Community)
-        .filter(models.Community.id == invitation.community_id)
-        .first()
-    )
-    community.members.append(current_user)
-    invitation.status = "accepted"
-    db.commit()
-
-    create_notification(
-        db,
-        invitation.inviter_id,
-        f"{current_user.username} принял(а) ваше приглашение в сообщество {community.name}",
-        f"/community/{community.id}",
-        "invitation_accepted",
-        invitation.id,
-    )
-    return {"message": "Invitation accepted successfully"}
-
-
-@router.post("/invitations/{invitation_id}/reject", status_code=status.HTTP_200_OK)
-def reject_invitation(
-    invitation_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    invitation = (
-        db.query(models.CommunityInvitation)
-        .filter(
-            models.CommunityInvitation.id == invitation_id,
-            models.CommunityInvitation.invitee_id == current_user.id,
-        )
-        .first()
-    )
-    if not invitation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found"
-        )
-
-    if invitation.status != "pending":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invitation has already been processed",
-        )
-
-    invitation.status = "rejected"
-    db.commit()
-    create_notification(
-        db,
-        invitation.inviter_id,
-        f"{current_user.username} отклонил(а) ваше приглашение в сообщество",
-        f"/community/{invitation.community_id}",
-        "invitation_rejected",
-        invitation.id,
-    )
-    return {"message": "Invitation rejected successfully"}
-
-
-@router.put(
-    "/{community_id}/members/{user_id}/role", response_model=schemas.CommunityMemberOut
-)
-def update_member_role(
-    community_id: int,
-    user_id: int,
-    role_update: schemas.CommunityMemberUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Only the community owner can update roles"
-        )
-
-    member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == user_id,
-        )
-        .first()
-    )
-
+    member = next((m for m in community.members if m.user_id == user.id), None)
     if not member:
         raise HTTPException(
-            status_code=404, detail="Member not found in this community"
+            status_code=403, detail="يجب أن تكون عضواً في المجتمع للقيام بهذا الإجراء"
         )
 
-    if role_update.role == models.CommunityRole.OWNER:
-        raise HTTPException(status_code=400, detail="Cannot set a member as owner")
-
-    member.role = role_update.role
-    db.commit()
-    db.refresh(member)
-
-    create_notification(
-        db,
-        user_id,
-        f"Ваша роль в сообществе {community.name} изменена на {role_update.role}",
-        f"/community/{community_id}",
-        "role_updated",
-        community_id,
-    )
-    return schemas.CommunityMemberOut.from_orm(member)
-
-
-@router.get("/{community_id}/members", response_model=List[schemas.CommunityMemberOut])
-def get_community_members(
-    community_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    members = (
-        db.query(models.CommunityMember)
-        .filter(models.CommunityMember.community_id == community_id)
-        .all()
-    )
-
-    return [schemas.CommunityMemberOut.from_orm(member) for member in members]
-
-
-@router.post("/{community_id}/update-activity")
-def update_member_activity(
-    community_id: int,
-    user_id: int,
-    activity_score: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == user_id,
-        )
-        .first()
-    )
-
-    if not member:
+    if member.role not in [
+        required_role,
+        models.CommunityRole.ADMIN,
+        models.CommunityRole.OWNER,
+    ]:
         raise HTTPException(
-            status_code=404, detail="Member not found in this community"
+            status_code=403, detail="ليس لديك الصلاحيات الكافية للقيام بهذا الإجراء"
         )
 
-    member.activity_score += activity_score
-
-    # Check if member should be promoted to VIP
-    if member.activity_score >= 1000 and member.role == models.CommunityRole.MEMBER:
-        member.role = models.CommunityRole.VIP
-
-    create_notification(
-        db,
-        user_id,
-        f"Поздравляем! Вы стали VIP-участником сообщества {community.name}",
-        f"/community/{community_id}",
-        "vip_status",
-        community_id,
-    )
-    db.commit()
-    db.refresh(member)
-
-    return {"message": "Activity score updated successfully"}
-
-
-@router.post("/{community_id}/rules", response_model=schemas.CommunityRuleOut)
-def add_community_rule(
-    community_id: int,
-    rule: schemas.CommunityRuleCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Only the community owner can add rules"
-        )
-
-    new_rule = models.CommunityRule(community_id=community_id, **rule.dict())
-    db.add(new_rule)
-    db.commit()
-    db.refresh(new_rule)
-    for member in community.members:
-        create_notification(
-            db,
-            member.id,
-            f"Новое правило добавлено в сообщество {community.name}",
-            f"/community/{community_id}",
-            "new_rule",
-            new_rule.id,
-        )
-    return new_rule
-
-
-@router.put("/{community_id}/rules/{rule_id}", response_model=schemas.CommunityRuleOut)
-def update_community_rule(
-    community_id: int,
-    rule_id: int,
-    rule: schemas.CommunityRuleUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Only the community owner can update rules"
-        )
-
-    db_rule = (
-        db.query(models.CommunityRule)
-        .filter(
-            models.CommunityRule.id == rule_id,
-            models.CommunityRule.community_id == community_id,
-        )
-        .first()
-    )
-    if not db_rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
-
-    for key, value in rule.dict().items():
-        setattr(db_rule, key, value)
-
-    db.commit()
-    db.refresh(db_rule)
-    for member in community.members:
-        create_notification(
-            db,
-            member.id,
-            f"Правило сообщества {community.name} было обновлено",
-            f"/community/{community_id}",
-            "rule_updated",
-            rule_id,
-        )
-    return db_rule
-
-
-@router.delete("/{community_id}/rules/{rule_id}", status_code=204)
-def delete_community_rule(
-    community_id: int,
-    rule_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-
-    if community.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Only the community owner can delete rules"
-        )
-
-    db_rule = (
-        db.query(models.CommunityRule)
-        .filter(
-            models.CommunityRule.id == rule_id,
-            models.CommunityRule.community_id == community_id,
-        )
-        .first()
-    )
-    if not db_rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
-
-    db.delete(db_rule)
-    db.commit()
-    for member in community.members:
-        create_notification(
-            db,
-            member.id,
-            f"Правило в сообществе {community.name} было удалено",
-            f"/community/{community_id}",
-            "rule_deleted",
-            rule_id,
-        )
-    return Response(status_code=204)
+    return True
 
 
 def update_community_statistics(db: Session, community_id: int):
+    """تحديث إحصائيات المجتمع"""
     today = date.today()
 
     stats = (
@@ -895,12 +93,14 @@ def update_community_statistics(db: Session, community_id: int):
         stats = models.CommunityStatistics(community_id=community_id, date=today)
         db.add(stats)
 
+    # تحديث الإحصائيات الأساسية
     stats.member_count = (
         db.query(models.CommunityMember)
         .filter(models.CommunityMember.community_id == community_id)
         .count()
     )
 
+    # إحصائيات المنشورات والتعليقات
     stats.post_count = (
         db.query(models.Post)
         .filter(
@@ -920,6 +120,7 @@ def update_community_statistics(db: Session, community_id: int):
         .count()
     )
 
+    # المستخدمون النشطون
     stats.active_users = (
         db.query(models.CommunityMember)
         .filter(
@@ -929,7 +130,7 @@ def update_community_statistics(db: Session, community_id: int):
         .count()
     )
 
-    # إضافة إحصائيات جديدة
+    # التفاعلات والتقييمات
     stats.total_reactions = (
         db.query(func.count(models.Vote.id))
         .join(models.Post)
@@ -938,343 +139,1239 @@ def update_community_statistics(db: Session, community_id: int):
             func.date(models.Vote.created_at) == today,
         )
         .scalar()
+        or 0
     )
 
+    # معدلات النشاط
     if stats.active_users > 0:
-        stats.average_posts_per_user = stats.post_count / stats.active_users
+        stats.average_posts_per_user = round(stats.post_count / stats.active_users, 2)
+        stats.engagement_rate = round(
+            (stats.comment_count + stats.total_reactions) / stats.member_count * 100, 2
+        )
     else:
         stats.average_posts_per_user = 0
+        stats.engagement_rate = 0
 
     db.commit()
     return stats
 
 
-def get_community_statistics(
-    db: Session, community_id: int, start_date: date, end_date: date
-):
-    return (
-        db.query(models.CommunityStatistics)
-        .filter(
-            models.CommunityStatistics.community_id == community_id,
-            models.CommunityStatistics.date.between(start_date, end_date),
-        )
-        .all()
-    )
-
-
-# أضف هذه النقاط النهائية
-
-
-@router.get(
-    "/{community_id}/statistics", response_model=List[schemas.CommunityStatistics]
-)
-def get_community_statistics_endpoint(
-    community_id: int,
-    start_date: date,
-    end_date: date,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community_member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == current_user.id,
-        )
-        .first()
-    )
-    if not community_member:
-        raise HTTPException(
-            status_code=403, detail="You are not a member of this community"
-        )
-
-    stats = get_community_statistics(db, community_id, start_date, end_date)
-    return stats
+# ==================== إنشاء وإدارة المجتمع ====================
 
 
 @router.post(
-    "/{community_id}/update-statistics", response_model=schemas.CommunityStatistics
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.CommunityOut,
+    summary="إنشاء مجتمع جديد",
+    description="إنشاء مجتمع جديد مع إمكانية تحديد الفئة والوسوم",
 )
-def update_community_statistics_endpoint(
-    community_id: int,
+async def create_community(
+    community: schemas.CommunityCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    community_member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == current_user.id,
-            models.CommunityMember.role.in_(
-                [models.CommunityRole.ADMIN, models.CommunityRole.MODERATOR]
-            ),
-        )
-        .first()
-    )
-    if not community_member:
+    """إنشاء مجتمع جديد مع التحقق من الصلاحيات وإعداد الإعدادات الأساسية"""
+    # التحقق من حالة المستخدم
+    if not current_user.is_verified:
         raise HTTPException(
-            status_code=403, detail="You don't have permission to update statistics"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="يجب أن يكون حسابك موثقاً لإنشاء مجتمع",
         )
 
-    stats = update_community_statistics(db, community_id)
-    return stats
-
-
-@router.get("/{community_id}/statistics-chart", response_class=HTMLResponse)
-async def get_community_statistics_chart(
-    community_id: int,
-    start_date: date,
-    end_date: date,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community_member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == current_user.id,
-        )
-        .first()
+    # التحقق من عدد المجتمعات التي يمتلكها المستخدم
+    owned_communities = (
+        db.query(models.Community)
+        .filter(models.Community.owner_id == current_user.id)
+        .count()
     )
-    if not community_member:
+    if owned_communities >= settings.MAX_OWNED_COMMUNITIES:
         raise HTTPException(
-            status_code=403, detail="You are not a member of this community"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"لا يمكنك إنشاء أكثر من {settings.MAX_OWNED_COMMUNITIES} مجتمع",
         )
 
-    stats = get_community_statistics(db, community_id, start_date, end_date)
-
-    # Prepare data for Chart.js
-    labels = [stat.date.strftime("%Y-%m-%d") for stat in stats]
-    member_counts = [stat.member_count for stat in stats]
-    post_counts = [stat.post_count for stat in stats]
-    comment_counts = [stat.comment_count for stat in stats]
-    active_users = [stat.active_users for stat in stats]
-    total_reactions = [stat.total_reactions for stat in stats]
-    average_posts = [stat.average_posts_per_user for stat in stats]
-
-    html_content = f"""
-    <html>
-        <head>
-            <title>Community Statistics</title>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        </head>
-        <body>
-            <canvas id="communityStatsChart" width="800" height="400"></canvas>
-            <script>
-                var ctx = document.getElementById('communityStatsChart').getContext('2d');
-                var chart = new Chart(ctx, {{
-                    type: 'line',
-                    data: {{
-                        labels: {labels},
-                        datasets: [
-                            {{
-                                label: 'Member Count',
-                                data: {member_counts},
-                                borderColor: 'rgb(75, 192, 192)',
-                                tension: 0.1
-                            }},
-                            {{
-                                label: 'Post Count',
-                                data: {post_counts},
-                                borderColor: 'rgb(255, 99, 132)',
-                                tension: 0.1
-                            }},
-                            {{
-                                label: 'Comment Count',
-                                data: {comment_counts},
-                                borderColor: 'rgb(54, 162, 235)',
-                                tension: 0.1
-                            }},
-                            {{
-                                label: 'Active Users',
-                                data: {active_users},
-                                borderColor: 'rgb(255, 206, 86)',
-                                tension: 0.1
-                            }},
-                            {{
-                                label: 'Total Reactions',
-                                data: {total_reactions},
-                                borderColor: 'rgb(153, 102, 255)',
-                                tension: 0.1
-                            }},
-                            {{
-                                label: 'Average Posts per User',
-                                data: {average_posts},
-                                borderColor: 'rgb(255, 159, 64)',
-                                tension: 0.1
-                            }}
-                        ]
-                    }},
-                    options: {{
-                        responsive: true,
-                        title: {{
-                            display: true,
-                            text: 'Community Statistics'
-                        }}
-                    }}
-                }});
-            </script>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
-
-
-@router.get("/{community_id}/export-statistics")
-async def export_community_statistics(
-    community_id: int,
-    start_date: date,
-    end_date: date,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    community_member = (
-        db.query(models.CommunityMember)
-        .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == current_user.id,
-            models.CommunityMember.role.in_(
-                [models.CommunityRole.ADMIN, models.CommunityRole.MODERATOR]
-            ),
-        )
-        .first()
-    )
-    if not community_member:
-        raise HTTPException(
-            status_code=403, detail="You don't have permission to export statistics"
-        )
-
-    stats = get_community_statistics(db, community_id, start_date, end_date)
-
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "Date",
-            "Member Count",
-            "Post Count",
-            "Comment Count",
-            "Active Users",
-            "Total Reactions",
-            "Average Posts per User",
-        ]
-    )
-    for stat in stats:
-        writer.writerow(
-            [
-                stat.date,
-                stat.member_count,
-                stat.post_count,
-                stat.comment_count,
-                stat.active_users,
-                stat.total_reactions,
-                stat.average_posts_per_user,
-            ]
-        )
-
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=community_{community_id}_statistics.csv"
-        },
+    # إنشاء المجتمع
+    new_community = models.Community(
+        owner_id=current_user.id, **community.dict(exclude={"tags", "rules"})
     )
 
+    # إضافة المؤسس كعضو
+    member = models.CommunityMember(
+        user_id=current_user.id,
+        role=models.CommunityRole.OWNER,
+        joined_at=datetime.now(timezone.utc),
+    )
+    new_community.members.append(member)
 
-@router.post("/categories/", response_model=schemas.Category)
-def create_category(
-    category: schemas.CategoryCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    if not current_user.role == "ADMIN":
-        raise HTTPException(status_code=403, detail="Only admins can create categories")
-    db_category = models.Category(**category.dict())
-    db.add(db_category)
+    # إضافة الفئة إذا تم تحديدها
+    if community.category_id:
+        category = (
+            db.query(models.Category)
+            .filter(models.Category.id == community.category_id)
+            .first()
+        )
+        if not category:
+            raise HTTPException(status_code=404, detail="الفئة المحددة غير موجودة")
+        new_community.category = category
+
+    # إضافة الوسوم
+    if community.tags:
+        tags = db.query(models.Tag).filter(models.Tag.id.in_(community.tags)).all()
+        new_community.tags.extend(tags)
+
+    # إضافة القواعد الأولية
+    if community.rules:
+        for rule in community.rules:
+            new_rule = models.CommunityRule(
+                content=rule.content,
+                description=rule.description,
+                priority=rule.priority,
+            )
+            new_community.rules.append(new_rule)
+
+    # حفظ البيانات
+    db.add(new_community)
     db.commit()
-    db.refresh(db_category)
-    return db_category
+    db.refresh(new_community)
+
+    # تسجيل الحدث
+    log_user_event(
+        db, current_user.id, "create_community", {"community_id": new_community.id}
+    )
+
+    # إنشاء الإشعار
+    create_notification(
+        db,
+        current_user.id,
+        f"تم إنشاء مجتمع جديد: {new_community.name}",
+        f"/community/{new_community.id}",
+        "new_community",
+        new_community.id,
+    )
+
+    return schemas.CommunityOut.from_orm(new_community)
 
 
-@router.get("/categories/", response_model=List[schemas.Category])
-def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(models.Category).all()
-    return categories
+# ==================== الاستعلام والبحث ====================
 
 
-@router.post("/tags/", response_model=schemas.Tag)
-def create_tag(
-    tag: schemas.TagCreate,
+@router.get(
+    "/",
+    response_model=List[schemas.CommunityOut],
+    summary="الحصول على قائمة المجتمعات",
+    description="البحث في المجتمعات مع إمكانية التصفية والترتيب",
+)
+async def get_communities(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0, description="عدد العناصر المراد تخطيها"),
+    limit: int = Query(100, ge=1, le=100, description="عدد العناصر المراد عرضها"),
+    search: str = Query("", description="نص البحث"),
+    category_id: Optional[int] = Query(None, description="معرف الفئة"),
+    sort_by: str = Query(
+        "created_at",
+        description="معيار الترتيب",
+        enum=["created_at", "members_count", "activity"],
+    ),
+    sort_order: str = Query("desc", description="اتجاه الترتيب", enum=["asc", "desc"]),
+):
+    """الحصول على قائمة المجتمعات مع خيارات البحث والتصفية"""
+    query = db.query(models.Community)
+
+    # تطبيق معايير البحث
+    if search:
+        query = query.filter(
+            or_(
+                models.Community.name.ilike(f"%{search}%"),
+                models.Community.description.ilike(f"%{search}%"),
+            )
+        )
+
+    # تصفية حسب الفئة
+    if category_id:
+        query = query.filter(models.Community.category_id == category_id)
+
+    # تطبيق الترتيب
+    if sort_by == "created_at":
+        query = query.order_by(
+            desc(models.Community.created_at)
+            if sort_order == "desc"
+            else asc(models.Community.created_at)
+        )
+    elif sort_by == "members_count":
+        query = query.order_by(
+            desc(models.Community.members_count)
+            if sort_order == "desc"
+            else asc(models.Community.members_count)
+        )
+    elif sort_by == "activity":
+        query = query.order_by(
+            desc(models.Community.last_activity_at)
+            if sort_order == "desc"
+            else asc(models.Community.last_activity_at)
+        )
+
+    # تنفيذ الاستعلام
+    communities = query.offset(skip).limit(limit).all()
+
+    # ترجمة المحتوى
+    for community in communities:
+        community.name = await get_translated_content(
+            community.name, current_user, community.language
+        )
+        community.description = await get_translated_content(
+            community.description, current_user, community.language
+        )
+
+    return [schemas.CommunityOut.from_orm(community) for community in communities]
+
+
+@router.get(
+    "/{id}",
+    response_model=schemas.CommunityOut,
+    summary="الحصول على معلومات مجتمع محدد",
+)
+async def get_community(
+    id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    if not current_user.role == "ADMIN":
-        raise HTTPException(status_code=403, detail="Only admins can create tags")
-    db_tag = models.Tag(**tag.dict())
-    db.add(db_tag)
+    """الحصول على معلومات مجتمع محدد مع البيانات المرتبطة"""
+    community = (
+        db.query(models.Community)
+        .options(
+            joinedload(models.Community.members),
+            joinedload(models.Community.rules),
+            joinedload(models.Community.tags),
+            joinedload(models.Community.category),
+        )
+        .filter(models.Community.id == id)
+        .first()
+    )
+
+    if not community:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="المجتمع غير موجود"
+        )
+
+    # ترجمة المحتوى
+    community.name = await get_translated_content(
+        community.name, current_user, community.language
+    )
+    community.description = await get_translated_content(
+        community.description, current_user, community.language
+    )
+
+    return schemas.CommunityOut.from_orm(community)
+
+
+# ==================== تحديث وإدارة المجتمع ====================
+
+
+@router.put(
+    "/{id}",
+    response_model=schemas.CommunityOut,
+    summary="تحديث معلومات المجتمع",
+)
+async def update_community(
+    id: int,
+    updated_community: schemas.CommunityUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """تحديث معلومات المجتمع مع التحقق من الصلاحيات"""
+    community = db.query(models.Community).filter(models.Community.id == id).first()
+
+    if not community:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="المجتمع غير موجود"
+        )
+
+    # التحقق من الصلاحيات
+    check_community_permissions(current_user, community, models.CommunityRole.OWNER)
+
+    # تحديث البيانات الأساسية
+    update_data = updated_community.dict(exclude_unset=True)
+
+    # معالجة الفئة
+    if "category_id" in update_data:
+        category = (
+            db.query(models.Category)
+            .filter(models.Category.id == update_data["category_id"])
+            .first()
+        )
+        if not category:
+            raise HTTPException(status_code=404, detail="الفئة المحددة غير موجودة")
+        community.category = category
+        del update_data["category_id"]
+
+    # معالجة الوسوم
+    if "tags" in update_data:
+        community.tags.clear()
+        tags = db.query(models.Tag).filter(models.Tag.id.in_(update_data["tags"])).all()
+        community.tags.extend(tags)
+        del update_data["tags"]
+
+    # معالجة القواعد
+    if "rules" in update_data:
+        community.rules.clear()
+        for rule_data in update_data["rules"]:
+            rule = models.CommunityRule(**rule_data.dict())
+            community.rules.append(rule)
+        del update_data["rules"]
+
+    # تحديث باقي البيانات
+    for key, value in update_data.items():
+        setattr(community, key, value)
+
+    community.updated_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(db_tag)
-    return db_tag
+    db.refresh(community)
+
+    # إنشاء إشعار
+    create_notification(
+        db,
+        current_user.id,
+        f"تم تحديث معلومات مجتمع {community.name}",
+        f"/community/{community.id}",
+        "update_community",
+        community.id,
+    )
+
+    return schemas.CommunityOut.from_orm(community)
 
 
-@router.get("/tags/", response_model=List[schemas.Tag])
-def get_tags(db: Session = Depends(get_db)):
-    tags = db.query(models.Tag).all()
-    return tags
+# ==================== إدارة العضوية ====================
 
 
-@router.post("/{community_id}/join-request")
-def request_to_join(community_id: int, user_id: int, db: Session = Depends(get_db)):
+@router.post(
+    "/{id}/join",
+    status_code=status.HTTP_200_OK,
+    summary="الانضمام إلى مجتمع",
+)
+async def join_community(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """الانضمام إلى مجتمع مع معالجة القيود والصلاحيات"""
+    community = db.query(models.Community).filter(models.Community.id == id).first()
+
+    if not community:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="المجتمع غير موجود"
+        )
+
+    # التحقق من عضوية المستخدم
+    if any(member.user_id == current_user.id for member in community.members):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="أنت عضو بالفعل في هذا المجتمع",
+        )
+
+    # التحقق من القيود
+    if community.is_private:
+        # التحقق من وجود دعوة
+        invitation = (
+            db.query(models.CommunityInvitation)
+            .filter(
+                models.CommunityInvitation.community_id == id,
+                models.CommunityInvitation.invitee_id == current_user.id,
+                models.CommunityInvitation.status == "pending",
+            )
+            .first()
+        )
+
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="هذا المجتمع خاص ويتطلب دعوة للانضمام",
+            )
+
+    # إضافة العضو
+    new_member = models.CommunityMember(
+        community_id=id,
+        user_id=current_user.id,
+        role=models.CommunityRole.MEMBER,
+        joined_at=datetime.now(timezone.utc),
+    )
+
+    db.add(new_member)
+    community.members_count += 1
+
+    # تحديث حالة الدعوة إذا وجدت
+    if community.is_private and invitation:
+        invitation.status = "accepted"
+        invitation.accepted_at = datetime.now(timezone.utc)
+
+    db.commit()
+
+    # إنشاء إشعار
+    create_notification(
+        db,
+        community.owner_id,
+        f"انضم {current_user.username} إلى مجتمع {community.name}",
+        f"/community/{id}",
+        "new_member",
+        current_user.id,
+    )
+
+    return {"message": "تم الانضمام إلى المجتمع بنجاح"}
+
+
+# ==================== إدارة المحتوى ====================
+
+
+@router.post(
+    "/{community_id}/post",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.PostOut,
+    summary="إنشاء منشور جديد في المجتمع",
+)
+async def create_community_post(
+    community_id: int,
+    post: schemas.PostCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """إنشاء منشور جديد في المجتمع مع التحقق من المحتوى والصلاحيات"""
+
     community = (
         db.query(models.Community).filter(models.Community.id == community_id).first()
     )
+
     if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
-    if not community.is_private and not community.requires_approval:
-        # Автоматическое присоединение к открытому сообществу
-        # Реализуйте логику присоединения здесь
-        return {"message": "Joined community successfully"}
-    else:
-        # Создание запроса на присоединение
-        join_request = models.CommunityJoinRequest(
-            community_id=community_id, user_id=user_id
+        raise HTTPException(status_code=404, detail="المجتمع غير موجود")
+
+    # التحقق من العضوية
+    member = next((m for m in community.members if m.user_id == current_user.id), None)
+
+    if not member:
+        raise HTTPException(
+            status_code=403, detail="يجب أن تكون عضواً في المجتمع لإنشاء منشور"
         )
-        db.add(join_request)
-        db.commit()
-        return {"message": "Join request submitted successfully"}
+
+    # التحقق من المحتوى
+    if not post.content.strip():
+        raise HTTPException(status_code=400, detail="لا يمكن إنشاء منشور فارغ")
+
+    # فحص المحتوى
+    if check_for_profanity(post.content):
+        raise HTTPException(status_code=400, detail="المحتوى يحتوي على كلمات غير لائقة")
+
+    # التحقق من القواعد
+    if community.rules:
+        if not check_content_against_rules(
+            post.content, [rule.content for rule in community.rules]
+        ):
+            raise HTTPException(status_code=400, detail="المحتوى يخالف قواعد المجتمع")
+
+    # إنشاء المنشور
+    new_post = models.Post(
+        owner_id=current_user.id,
+        community_id=community_id,
+        content=post.content,
+        language=detect_language(post.content),
+        has_media=bool(post.media_urls),
+        media_urls=post.media_urls,
+    )
+
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
+    # تحديث إحصائيات المجتمع
+    community.posts_count += 1
+    community.last_activity_at = datetime.now(timezone.utc)
+    member.posts_count += 1
+    member.last_active_at = datetime.now(timezone.utc)
+
+    # التحقق من ترقية العضو
+    if (
+        member.posts_count >= ACTIVITY_THRESHOLD_VIP
+        and member.role == models.CommunityRole.MEMBER
+    ):
+        member.role = models.CommunityRole.VIP
+        create_notification(
+            db,
+            current_user.id,
+            f"تمت ترقيتك إلى عضو VIP في مجتمع {community.name}",
+            f"/community/{community_id}",
+            "role_upgrade",
+            None,
+        )
+
+    db.commit()
+
+    # إشعار لمشرفي المجتمع
+    for admin in community.members:
+        if admin.role in [models.CommunityRole.ADMIN, models.CommunityRole.OWNER]:
+            create_notification(
+                db,
+                admin.user_id,
+                f"منشور جديد من {current_user.username} في مجتمع {community.name}",
+                f"/post/{new_post.id}",
+                "new_post",
+                new_post.id,
+            )
+
+    return schemas.PostOut.from_orm(new_post)
+
+
+# ==================== إدارة القواعد ====================
+
+
+@router.post(
+    "/{community_id}/rules",
+    response_model=schemas.CommunityRuleOut,
+    summary="إضافة قاعدة جديدة للمجتمع",
+)
+async def add_community_rule(
+    community_id: int,
+    rule: schemas.CommunityRuleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """إضافة قاعدة جديدة للمجتمع مع التحقق من الصلاحيات"""
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+
+    # التحقق من الصلاحيات
+    check_community_permissions(current_user, community, models.CommunityRole.ADMIN)
+
+    # التحقق من عدد القواعد
+    existing_rules_count = (
+        db.query(models.CommunityRule)
+        .filter(models.CommunityRule.community_id == community_id)
+        .count()
+    )
+
+    if existing_rules_count >= MAX_RULES:
+        raise HTTPException(
+            status_code=400, detail=f"لا يمكن إضافة أكثر من {MAX_RULES} قاعدة للمجتمع"
+        )
+
+    # إنشاء القاعدة
+    new_rule = models.CommunityRule(
+        community_id=community_id,
+        content=rule.content,
+        description=rule.description,
+        priority=rule.priority,
+        created_by=current_user.id,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    db.add(new_rule)
+    db.commit()
+    db.refresh(new_rule)
+
+    # إشعار الأعضاء
+    for member in community.members:
+        create_notification(
+            db,
+            member.user_id,
+            f"تمت إضافة قاعدة جديدة في مجتمع {community.name}",
+            f"/community/{community_id}/rules",
+            "new_rule",
+            new_rule.id,
+        )
+
+    return schemas.CommunityRuleOut.from_orm(new_rule)
+
+
+# ==================== الإحصائيات والتحليلات ====================
+
+
+@router.get(
+    "/{community_id}/analytics",
+    response_model=schemas.CommunityAnalytics,
+    summary="تحليلات شاملة للمجتمع",
+)
+async def get_community_analytics(
+    community_id: int,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """الحصول على تحليلات تفصيلية للمجتمع"""
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+
+    check_community_permissions(current_user, community, models.CommunityRole.MODERATOR)
+
+    # جمع البيانات الأساسية
+    total_members = (
+        db.query(models.CommunityMember)
+        .filter(models.CommunityMember.community_id == community_id)
+        .count()
+    )
+
+    # تحليل النشاط
+    activity_data = (
+        db.query(
+            func.date(models.Post.created_at).label("date"),
+            func.count(models.Post.id).label("posts"),
+            func.count(models.Comment.id).label("comments"),
+            func.count(distinct(models.Post.owner_id)).label("active_users"),
+        )
+        .outerjoin(models.Comment)
+        .filter(
+            models.Post.community_id == community_id,
+            models.Post.created_at.between(start_date, end_date),
+        )
+        .group_by(func.date(models.Post.created_at))
+        .all()
+    )
+
+    # تحليل التفاعل
+    engagement_data = (
+        db.query(
+            func.avg(models.Post.likes_count).label("avg_likes"),
+            func.avg(models.Post.comments_count).label("avg_comments"),
+            func.sum(models.Post.shares_count).label("total_shares"),
+        )
+        .filter(
+            models.Post.community_id == community_id,
+            models.Post.created_at.between(start_date, end_date),
+        )
+        .first()
+    )
+
+    # تحليل المحتوى
+    content_analysis = (
+        db.query(
+            models.Post.content_type,
+            func.count(models.Post.id).label("count"),
+            func.avg(models.Post.likes_count).label("avg_engagement"),
+        )
+        .filter(
+            models.Post.community_id == community_id,
+            models.Post.created_at.between(start_date, end_date),
+        )
+        .group_by(models.Post.content_type)
+        .all()
+    )
+
+    # معدل النمو
+    growth_data = []
+    current_date = start_date
+    while current_date <= end_date:
+        members_count = (
+            db.query(models.CommunityMember)
+            .filter(
+                models.CommunityMember.community_id == community_id,
+                models.CommunityMember.joined_at <= current_date,
+            )
+            .count()
+        )
+        growth_data.append({"date": current_date, "members": members_count})
+        current_date += timedelta(days=1)
+
+    return {
+        "overview": {
+            "total_members": total_members,
+            "active_members": len(set(d.active_users for d in activity_data)),
+            "total_posts": sum(d.posts for d in activity_data),
+            "total_comments": sum(d.comments for d in activity_data),
+        },
+        "activity": [
+            {
+                "date": d.date,
+                "posts": d.posts,
+                "comments": d.comments,
+                "active_users": d.active_users,
+            }
+            for d in activity_data
+        ],
+        "engagement": {
+            "avg_likes_per_post": round(engagement_data.avg_likes or 0, 2),
+            "avg_comments_per_post": round(engagement_data.avg_comments or 0, 2),
+            "total_shares": engagement_data.total_shares or 0,
+        },
+        "content_analysis": [
+            {
+                "type": c.content_type,
+                "count": c.count,
+                "avg_engagement": round(c.avg_engagement or 0, 2),
+            }
+            for c in content_analysis
+        ],
+        "growth": growth_data,
+    }
+
+
+# ==================== إدارة الأدوار والصلاحيات ====================
+
+
+@router.put(
+    "/{community_id}/members/{user_id}/role",
+    response_model=schemas.CommunityMemberOut,
+    summary="تحديث دور عضو في المجتمع",
+)
+async def update_member_role(
+    community_id: int,
+    user_id: int,
+    role_update: schemas.CommunityMemberRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """تحديث دور عضو في المجتمع مع التحقق من الصلاحيات"""
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+
+    check_community_permissions(current_user, community, models.CommunityRole.ADMIN)
+
+    member = (
+        db.query(models.CommunityMember)
+        .filter(
+            models.CommunityMember.community_id == community_id,
+            models.CommunityMember.user_id == user_id,
+        )
+        .first()
+    )
+
+    if not member:
+        raise HTTPException(status_code=404, detail="العضو غير موجود في المجتمع")
+
+    # التحقق من صلاحية تعيين الدور
+    if member.role == models.CommunityRole.OWNER:
+        raise HTTPException(status_code=403, detail="لا يمكن تغيير دور مالك المجتمع")
+
+    if role_update.role == models.CommunityRole.OWNER:
+        raise HTTPException(status_code=400, detail="لا يمكن تعيين عضو كمالك للمجتمع")
+
+    # حفظ الدور القديم للإشعارات
+    old_role = member.role
+
+    # تحديث الدور
+    member.role = role_update.role
+    member.role_updated_at = datetime.now(timezone.utc)
+    member.role_updated_by = current_user.id
+
+    db.commit()
+    db.refresh(member)
+
+    # إنشاء إشعار
+    create_notification(
+        db,
+        user_id,
+        f"تم تغيير دورك في مجتمع {community.name} من {old_role} إلى {role_update.role}",
+        f"/community/{community_id}",
+        "role_update",
+        None,
+    )
+
+    return schemas.CommunityMemberOut.from_orm(member)
+
+
+# ==================== الدعوات وطلبات الانضمام ====================
+
+
+@router.post(
+    "/{community_id}/invitations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.CommunityInvitationOut,
+    summary="دعوة أعضاء جدد للمجتمع",
+)
+async def invite_members(
+    community_id: int,
+    invitations: List[schemas.CommunityInvitationCreate],
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """دعوة أعضاء جدد للمجتمع مع التحقق من الصلاحيات والقيود"""
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+
+    check_community_permissions(current_user, community, models.CommunityRole.MEMBER)
+
+    # التحقق من عدد الدعوات المتاحة
+    active_invitations = (
+        db.query(models.CommunityInvitation)
+        .filter(
+            models.CommunityInvitation.community_id == community_id,
+            models.CommunityInvitation.inviter_id == current_user.id,
+            models.CommunityInvitation.status == "pending",
+        )
+        .count()
+    )
+
+    if active_invitations + len(invitations) > settings.MAX_PENDING_INVITATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"لا يمكنك إرسال أكثر من {settings.MAX_PENDING_INVITATIONS} دعوة معلقة",
+        )
+
+    created_invitations = []
+    for invitation in invitations:
+        # التحقق من وجود المستخدم المدعو
+        invitee = (
+            db.query(models.User)
+            .filter(models.User.id == invitation.invitee_id)
+            .first()
+        )
+
+        if not invitee:
+            continue
+
+        # التحقق من عدم وجود دعوة سابقة
+        existing_invitation = (
+            db.query(models.CommunityInvitation)
+            .filter(
+                models.CommunityInvitation.community_id == community_id,
+                models.CommunityInvitation.invitee_id == invitation.invitee_id,
+                models.CommunityInvitation.status == "pending",
+            )
+            .first()
+        )
+
+        if existing_invitation:
+            continue
+
+        # التحقق من عدم العضوية
+        is_member = (
+            db.query(models.CommunityMember)
+            .filter(
+                models.CommunityMember.community_id == community_id,
+                models.CommunityMember.user_id == invitation.invitee_id,
+            )
+            .first()
+        )
+
+        if is_member:
+            continue
+
+        # إنشاء الدعوة
+        new_invitation = models.CommunityInvitation(
+            community_id=community_id,
+            inviter_id=current_user.id,
+            invitee_id=invitation.invitee_id,
+            message=invitation.message,
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.INVITATION_EXPIRY_DAYS),
+        )
+
+        db.add(new_invitation)
+        created_invitations.append(new_invitation)
+
+        # إنشاء إشعار
+        create_notification(
+            db,
+            invitation.invitee_id,
+            f"لديك دعوة للانضمام إلى مجتمع {community.name} من {current_user.username}",
+            f"/invitations/{new_invitation.id}",
+            "community_invitation",
+            new_invitation.id,
+        )
+
+    db.commit()
+
+    for invitation in created_invitations:
+        db.refresh(invitation)
+
+    return [schemas.CommunityInvitationOut.from_orm(inv) for inv in created_invitations]
+
+
+# ==================== تصدير البيانات ====================
+
+
+@router.get(
+    "/{community_id}/export",
+    response_class=StreamingResponse,
+    summary="تصدير بيانات المجتمع",
+)
+async def export_community_data(
+    community_id: int,
+    data_type: str = Query(..., enum=["members", "posts", "analytics"]),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """تصدير بيانات المجتمع بتنسيقات مختلفة"""
+    community = (
+        db.query(models.Community).filter(models.Community.id == community_id).first()
+    )
+
+    check_community_permissions(current_user, community, models.CommunityRole.ADMIN)
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    if data_type == "members":
+        # تصدير بيانات الأعضاء
+        writer.writerow(
+            [
+                "معرف العضو",
+                "اسم المستخدم",
+                "الدور",
+                "تاريخ الانضمام",
+                "عدد المنشورات",
+                "درجة النشاط",
+                "آخر نشاط",
+            ]
+        )
+
+        members = (
+            db.query(models.CommunityMember)
+            .filter(models.CommunityMember.community_id == community_id)
+            .all()
+        )
+
+        for member in members:
+            writer.writerow(
+                [
+                    member.user_id,
+                    member.user.username,
+                    member.role,
+                    member.joined_at.strftime("%Y-%m-%d"),
+                    member.posts_count,
+                    member.activity_score,
+                    (
+                        member.last_active_at.strftime("%Y-%m-%d %H:%M")
+                        if member.last_active_at
+                        else "غير متوفر"
+                    ),
+                ]
+            )
+
+    elif data_type == "posts":
+        # تصدير بيانات المنشورات
+        writer.writerow(
+            [
+                "معرف المنشور",
+                "الكاتب",
+                "تاريخ النشر",
+                "عدد الإعجابات",
+                "عدد التعليقات",
+                "نوع المحتوى",
+                "الحالة",
+            ]
+        )
+
+        query = db.query(models.Post).filter(models.Post.community_id == community_id)
+        if date_from:
+            query = query.filter(models.Post.created_at >= date_from)
+        if date_to:
+            query = query.filter(models.Post.created_at <= date_to)
+
+        posts = query.all()
+
+        for post in posts:
+            writer.writerow(
+                [
+                    post.id,
+                    post.owner.username,
+                    post.created_at.strftime("%Y-%m-%d %H:%M"),
+                    post.likes_count,
+                    post.comments_count,
+                    post.content_type,
+                    post.status,
+                ]
+            )
+
+    elif data_type == "analytics":
+        # تصدير البيانات التحليلية
+        writer.writerow(
+            [
+                "التاريخ",
+                "عدد الأعضاء",
+                "المنشورات الجديدة",
+                "التعليقات",
+                "الأعضاء النشطون",
+                "التفاعلات",
+                "معدل المشاركة",
+            ]
+        )
+
+        stats = get_community_statistics(
+            db,
+            community_id,
+            date_from or (datetime.now() - timedelta(days=30)).date(),
+            date_to or datetime.now().date(),
+        )
+
+        for stat in stats:
+            writer.writerow(
+                [
+                    stat.date.strftime("%Y-%m-%d"),
+                    stat.member_count,
+                    stat.post_count,
+                    stat.comment_count,
+                    stat.active_users,
+                    stat.total_reactions,
+                    f"{stat.engagement_rate:.2f}%",
+                ]
+            )
+
+    output.seek(0)
+
+    headers = {
+        "Content-Disposition": f"attachment; filename=community_{community_id}_{data_type}_{datetime.now().strftime('%Y%m%d')}.csv"
+    }
+
+    return StreamingResponse(
+        iter([output.getvalue()]), media_type="text/csv", headers=headers
+    )
+
+
+# ==================== معالجة الإشعارات ====================
 
 
 class CommunityNotificationHandler:
+    """معالج إشعارات المجتمع"""
+
     def __init__(self, db: Session, background_tasks: BackgroundTasks):
         self.db = db
         self.background_tasks = background_tasks
         self.notification_service = NotificationService(db, background_tasks)
 
-    async def handle_community_invitation(self, invitation: models.CommunityInvitation):
-        """معالجة إشعارات دعوات المجتمع"""
+    async def handle_new_member(self, community: models.Community, member: models.User):
+        """معالجة إشعارات العضو الجديد"""
+        # إشعار لمشرفي المجتمع
+        admins = [
+            m
+            for m in community.members
+            if m.role in [models.CommunityRole.ADMIN, models.CommunityRole.OWNER]
+        ]
+        for admin in admins:
+            await self.notification_service.create_notification(
+                user_id=admin.user_id,
+                content=f"انضم {member.username} إلى مجتمع {community.name}",
+                notification_type="new_member",
+                priority=models.NotificationPriority.LOW,
+                category=models.NotificationCategory.COMMUNITY,
+                link=f"/community/{community.id}/members",
+                metadata={
+                    "community_id": community.id,
+                    "member_id": member.id,
+                },
+            )
+
+        # إشعار للعضو الجديد
         await self.notification_service.create_notification(
-            user_id=invitation.invitee_id,
-            content=f"{invitation.inviter.username} دعاك للانضمام إلى مجتمع {invitation.community.name}",
-            notification_type="community_invitation",
-            priority=models.NotificationPriority.MEDIUM,
+            user_id=member.id,
+            content=f"مرحباً بك في مجتمع {community.name}!",
+            notification_type="welcome",
+            priority=models.NotificationPriority.HIGH,
             category=models.NotificationCategory.COMMUNITY,
-            link=f"/community/{invitation.community_id}",
+            link=f"/community/{community.id}",
             metadata={
-                "invitation_id": invitation.id,
-                "community_id": invitation.community_id,
-                "community_name": invitation.community.name,
-                "inviter_id": invitation.inviter_id,
+                "community_id": community.id,
+                "rules_count": len(community.rules),
             },
         )
 
-    async def handle_role_change(self, member: models.CommunityMember, old_role: str):
-        """معالجة إشعارات تغيير الأدوار في المجتمع"""
+    async def handle_content_violation(
+        self,
+        community: models.Community,
+        content: Union[models.Post, models.Comment],
+        violation_type: str,
+        reporter: models.User,
+    ):
+        """معالجة إشعارات انتهاك المحتوى"""
+        # إشعار للمشرفين
+        admins = [
+            m
+            for m in community.members
+            if m.role in [models.CommunityRole.ADMIN, models.CommunityRole.MODERATOR]
+        ]
+
+        content_type = "منشور" if isinstance(content, models.Post) else "تعليق"
+
+        for admin in admins:
+            await self.notification_service.create_notification(
+                user_id=admin.user_id,
+                content=f"تم الإبلاغ عن {content_type} في مجتمع {community.name} - نوع الانتهاك: {violation_type}",
+                notification_type="content_violation",
+                priority=models.NotificationPriority.HIGH,
+                category=models.NotificationCategory.MODERATION,
+                link=f"/moderation/content/{content.id}",
+                metadata={
+                    "community_id": community.id,
+                    "content_id": content.id,
+                    "content_type": content_type,
+                    "violation_type": violation_type,
+                    "reporter_id": reporter.id,
+                },
+            )
+
+    async def handle_role_change(
+        self,
+        community: models.Community,
+        member: models.CommunityMember,
+        old_role: str,
+        changed_by: models.User,
+    ):
+        """معالجة إشعارات تغيير الأدوار"""
+        # إشعار للعضو
         await self.notification_service.create_notification(
             user_id=member.user_id,
-            content=f"تم تغيير دورك في مجتمع {member.community.name} من {old_role} إلى {member.role}",
+            content=f"تم تغيير دورك في مجتمع {community.name} من {old_role} إلى {member.role}",
             notification_type="role_change",
             priority=models.NotificationPriority.HIGH,
             category=models.NotificationCategory.COMMUNITY,
-            link=f"/community/{member.community_id}",
+            link=f"/community/{community.id}",
+            metadata={
+                "community_id": community.id,
+                "old_role": old_role,
+                "new_role": member.role,
+                "changed_by": changed_by.id,
+            },
         )
+
+    async def handle_community_achievement(
+        self, community: models.Community, achievement_type: str, achievement_data: dict
+    ):
+        """معالجة إشعارات إنجازات المجتمع"""
+        # إشعار لجميع الأعضاء
+        for member in community.members:
+            await self.notification_service.create_notification(
+                user_id=member.user_id,
+                content=self._get_achievement_message(
+                    achievement_type, achievement_data, community.name
+                ),
+                notification_type="community_achievement",
+                priority=models.NotificationPriority.MEDIUM,
+                category=models.NotificationCategory.ACHIEVEMENT,
+                link=f"/community/{community.id}/achievements",
+                metadata={
+                    "community_id": community.id,
+                    "achievement_type": achievement_type,
+                    **achievement_data,
+                },
+            )
+
+    def _get_achievement_message(
+        self, achievement_type: str, data: dict, community_name: str
+    ) -> str:
+        """الحصول على رسالة الإنجاز المناسبة"""
+        messages = {
+            "members_milestone": f"وصل مجتمع {community_name} إلى {data['count']} عضو! 🎉",
+            "posts_milestone": f"تم نشر {data['count']} منشور في مجتمع {community_name}! 🎉",
+            "engagement_milestone": f"وصل معدل التفاعل في مجتمع {community_name} إلى {data['rate']}%! 🎉",
+            "active_streak": f"مجتمع {community_name} نشط لمدة {data['days']} يوم متواصل! 🔥",
+        }
+        return messages.get(achievement_type, f"إنجاز جديد في مجتمع {community_name}!")
+
+
+# ==================== المهام الدورية ====================
+
+
+async def cleanup_expired_invitations(db: Session):
+    """تنظيف الدعوات منتهية الصلاحية"""
+    expired_invitations = (
+        db.query(models.CommunityInvitation)
+        .filter(
+            models.CommunityInvitation.status == "pending",
+            models.CommunityInvitation.expires_at <= datetime.now(timezone.utc),
+        )
+        .all()
+    )
+
+    for invitation in expired_invitations:
+        invitation.status = "expired"
+
+        # إشعار المدعو
+        create_notification(
+            db,
+            invitation.invitee_id,
+            f"انتهت صلاحية دعوتك للانضمام إلى مجتمع {invitation.community.name}",
+            f"/community/{invitation.community_id}",
+            "invitation_expired",
+            invitation.id,
+        )
+
+    db.commit()
+
+
+async def update_community_rankings(db: Session):
+    """تحديث تصنيفات المجتمعات"""
+    communities = db.query(models.Community).all()
+
+    for community in communities:
+        # حساب درجة النشاط
+        activity_score = (
+            community.posts_count * 2
+            + community.comment_count * 1
+            + community.members_count * 3
+            + community.total_reactions
+        )
+
+        # حساب معدل النمو
+        growth_rate = await calculate_community_growth_rate(db, community.id)
+
+        # تحديث التصنيف
+        community.activity_score = activity_score
+        community.growth_rate = growth_rate
+        community.ranking = await calculate_community_ranking(
+            activity_score, growth_rate, community.age_in_days
+        )
+
+    db.commit()
+
+
+async def calculate_community_ranking(
+    activity_score: float, growth_rate: float, age_in_days: int
+) -> float:
+    """حساب تصنيف المجتمع بناءً على معايير متعددة"""
+    age_factor = min(1.0, age_in_days / 365)  # تطبيع عمر المجتمع
+
+    # معادلة التصنيف المركبة
+    ranking = (activity_score * 0.4) + (growth_rate * 0.4) + (age_factor * 0.2)
+
+    return round(ranking, 2)
+
+
+async def calculate_community_growth_rate(db: Session, community_id: int) -> float:
+    """حساب معدل نمو المجتمع"""
+    # فترة المقارنة - الشهر الحالي مقابل الشهر السابق
+    now = datetime.now(timezone.utc)
+    current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+
+    # إحصائيات الشهر الحالي
+    current_stats = await get_community_monthly_stats(
+        db, community_id, current_month_start
+    )
+
+    # إحصائيات الشهر السابق
+    previous_stats = await get_community_monthly_stats(
+        db, community_id, previous_month_start
+    )
+
+    # حساب معدل النمو
+    if previous_stats["members"] == 0:
+        return 100 if current_stats["members"] > 0 else 0
+
+    growth_rates = {
+        "members": (
+            (current_stats["members"] - previous_stats["members"])
+            / previous_stats["members"]
+        )
+        * 100,
+        "posts": (
+            (current_stats["posts"] - previous_stats["posts"]) / previous_stats["posts"]
+        )
+        * 100,
+        "engagement": (
+            (current_stats["engagement"] - previous_stats["engagement"])
+            / previous_stats["engagement"]
+        )
+        * 100,
+    }
+
+    # معدل النمو المركب
+    weighted_growth = (
+        (growth_rates["members"] * 0.4)
+        + (growth_rates["posts"] * 0.3)
+        + (growth_rates["engagement"] * 0.3)
+    )
+
+    return round(weighted_growth, 2)

@@ -8,39 +8,174 @@ from fastapi import (
     BackgroundTasks,
     Form,
     Query,
+    Response,
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from typing import List, Optional
-from .. import models, schemas, oauth2, notifications, crypto
-from ..database import get_db
-from fastapi.responses import FileResponse
-import clamd
+from datetime import datetime, timezone, timedelta
 import os
+import emoji
 import re
 from uuid import uuid4
-from datetime import datetime, timedelta, timezone
-import emoji
-from ..link_preview import extract_link_preview
+from fastapi.responses import FileResponse
+
+from .. import models, schemas, oauth2, notifications
+from ..database import get_db
 from ..utils import (
+    update_link_preview,
+    scan_file_for_viruses,
     log_user_event,
     create_notification,
     detect_language,
     get_translated_content,
 )
-from ..ai_chat.amenhotep import AmenhotepAI
+from ..analytics import update_conversation_statistics
+
+# Constants
+AUDIO_DIR = "static/audio_messages"
+os.makedirs(AUDIO_DIR, exist_ok=True)
+EDIT_DELETE_WINDOW = 60  # minutes
+UPLOAD_DIR = "static/messages"
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
-AUDIO_DIR = "static/audio_messages"
-os.makedirs(AUDIO_DIR, exist_ok=True)
-EDIT_DELETE_WINDOW = 60
-UPLOAD_DIR = "static/messages"
 
-
+# Utility Functions
 def generate_conversation_id(user1_id: int, user2_id: int) -> str:
+    """Generate a unique conversation ID for two users"""
     sorted_ids = sorted([user1_id, user2_id])
     return f"{sorted_ids[0]}_{sorted_ids[1]}"
+
+
+async def is_user_blocked(db: Session, blocker_id: int, blocked_id: int) -> bool:
+    """Check if a user is blocked from sending messages"""
+    block = (
+        db.query(models.Block)
+        .filter(
+            models.Block.blocker_id == blocker_id,
+            models.Block.blocked_id == blocked_id,
+            models.Block.ends_at > datetime.now(),
+        )
+        .first()
+    )
+    return bool(
+        block
+        and block.block_type
+        in [models.BlockType.FULL, models.BlockType.PARTIAL_MESSAGE]
+    )
+
+
+async def save_message_attachments(
+    files: List[UploadFile], new_message: models.Message
+):
+    """Save file attachments for a message"""
+    for file in files:
+        # Validate file size
+        file_size = len(await file.read())
+        await file.seek(0)
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="File is too large")
+
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+
+        attachment = models.MessageAttachment(
+            file_url=file_path, file_type=file.content_type
+        )
+        new_message.attachments.append(attachment)
+
+
+# Message Creation Handlers
+async def create_message_object(
+    message: schemas.MessageCreate,
+    current_user: models.User,
+    files: List[UploadFile],
+    db: Session,
+) -> models.Message:
+    """Create a new message object with all required attributes"""
+    conversation_id = generate_conversation_id(current_user.id, message.receiver_id)
+
+    new_message = models.Message(
+        sender_id=current_user.id,
+        receiver_id=message.receiver_id,
+        conversation_id=conversation_id,
+        content=message.content,
+        message_type=schemas.MessageType.TEXT,
+    )
+
+    # Set language and emoji status
+    new_message.language = detect_language(new_message.content)
+    if message.content and emoji.emoji_count(message.content) > 0:
+        new_message.has_emoji = True
+
+    # Handle attachments
+    if files:
+        new_message.message_type = (
+            schemas.MessageType.IMAGE
+            if all(file.content_type.startswith("image") for file in files)
+            else schemas.MessageType.FILE
+        )
+
+    # Handle stickers
+    if message.sticker_id:
+        sticker = await get_valid_sticker(message.sticker_id, db)
+        if sticker:
+            new_message.sticker_id = sticker.id
+            new_message.message_type = schemas.MessageType.STICKER
+
+    return new_message
+
+
+async def get_valid_sticker(sticker_id: int, db: Session) -> Optional[models.Sticker]:
+    """Get a valid and approved sticker"""
+    return (
+        db.query(models.Sticker)
+        .filter(models.Sticker.id == sticker_id, models.Sticker.approved == True)
+        .first()
+    )
+
+
+async def handle_post_creation_tasks(
+    message: models.Message,
+    sender: models.User,
+    recipient: models.User,
+    db: Session,
+    background_tasks: BackgroundTasks,
+):
+    """Handle all post-message-creation tasks"""
+    # Log event
+    log_user_event(db, sender.id, "send_message", {"receiver_id": recipient.id})
+
+    # Update statistics
+    update_conversation_statistics(db, message.conversation_id, message)
+
+    # Create notification
+    create_notification(
+        db,
+        recipient.id,
+        f"New message from {sender.username}",
+        f"/messages/{sender.id}",
+        "new_message",
+        message.id,
+    )
+
+    # Send real-time notification
+    background_tasks.add_task(
+        notifications.send_real_time_notification,
+        recipient.id,
+        f"New message from {sender.username}",
+    )
+
+
+# API Routes
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Message)
@@ -51,120 +186,54 @@ async def create_message(
     current_user: models.User = Depends(oauth2.get_current_user),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """Create a new message"""
+    # Validation
     if not message.content and not files and not message.sticker_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Message must have content, files, or sticker",
         )
 
+    # Check recipient
     recipient = (
         db.query(models.User).filter(models.User.id == message.receiver_id).first()
     )
     if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+
+    # Check block status
+    if await is_user_blocked(db, message.receiver_id, current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Recipient not found"
+            status_code=403, detail="You are blocked from sending messages"
         )
 
-    block = (
-        db.query(models.Block)
-        .filter(
-            models.Block.blocker_id == message.receiver_id,
-            models.Block.blocked_id == current_user.id,
-            models.Block.ends_at > datetime.now(),
+    # Create message
+    new_message = await create_message_object(message, current_user, files, db)
+
+    # Process URLs for link preview
+    if message.content:
+        urls = re.findall(
+            r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
+            message.content,
         )
-        .first()
-    )
-    if block and (
-        block.block_type == models.BlockType.FULL
-        or block.block_type == models.BlockType.PARTIAL_MESSAGE
-    ):
-        raise HTTPException(
-            status_code=403, detail="You are blocked from sending messages to this user"
-        )
+        if urls:
+            background_tasks.add_task(update_link_preview, db, new_message.id, urls[0])
 
-    conversation_id = generate_conversation_id(current_user.id, message.receiver_id)
-    new_message = models.Message(
-        sender_id=current_user.id,
-        receiver_id=message.receiver_id,
-        conversation_id=conversation_id,
-        content=message.content,
-        message_type=schemas.MessageType.TEXT,
-    )
-    new_message.language = detect_language(new_message.content)
-
-    if message.content and emoji.emoji_count(message.content) > 0:
-        new_message.has_emoji = True
-
+    # Save attachments
     if files:
-        new_message.message_type = schemas.MessageType.FILE
-        for file in files:
-            file_extension = os.path.splitext(file.filename)[1]
-            unique_filename = f"{uuid4()}{file_extension}"
-            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        await save_message_attachments(files, new_message)
 
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-
-            attachment = models.MessageAttachment(
-                file_url=file_path, file_type=file.content_type
-            )
-            new_message.attachments.append(attachment)
-
-        if all(file.content_type.startswith("image") for file in files):
-            new_message.message_type = schemas.MessageType.IMAGE
-
-    if message.sticker_id:
-        sticker = (
-            db.query(models.Sticker)
-            .filter(
-                models.Sticker.id == message.sticker_id, models.Sticker.approved == True
-            )
-            .first()
-        )
-        if not sticker:
-            raise HTTPException(
-                status_code=404, detail="Sticker not found or not approved"
-            )
-        new_message.sticker_id = sticker.id
-        new_message.message_type = schemas.MessageType.STICKER
-
-    urls = re.findall(
-        r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
-        message.content,
-    )
-
-    if urls:
-        background_tasks.add_task(update_link_preview, db, new_message.id, urls[0])
-
+    # Save message
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
-    log_user_event(
-        db, current_user.id, "send_message", {"receiver_id": message.receiver_id}
+
+    # Handle post-creation tasks
+    await handle_post_creation_tasks(
+        new_message, current_user, recipient, db, background_tasks
     )
 
-    # Обновление статистики разговора
-    update_conversation_statistics(db, conversation_id, new_message)
-
-    # Создание уведомления для получателя
-    create_notification(
-        db,
-        message.receiver_id,
-        f"لديك رسالة جديدة من {current_user.username}",
-        f"/messages/{current_user.id}",
-        "new_message",
-        new_message.id,
-    )
-
-    # Отправка уведомления в реальном времени
-    background_tasks.add_task(
-        notifications.send_real_time_notification,
-        message.receiver_id,
-        f"Новое сообщение от {current_user.username}",
-    )
-
+    # Translate if needed
     new_message.content = await get_translated_content(
         new_message.content, current_user, new_message.language
     )
@@ -172,55 +241,135 @@ async def create_message(
     return new_message
 
 
-@router.get("/search", response_model=schemas.MessageSearchResponse)
-async def search_messages(
-    query: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    message_type: Optional[schemas.MessageType] = None,
-    conversation_id: Optional[str] = None,
-    sort_order: schemas.SortOrder = schemas.SortOrder.DESC,
+@router.get("/", response_model=List[schemas.Message])
+async def get_messages(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
+    skip: int = 0,
+    limit: int = 500,
 ):
-    message_query = db.query(models.Message).filter(
-        or_(
-            models.Message.sender_id == current_user.id,
-            models.Message.receiver_id == current_user.id,
+    """Get user messages"""
+    messages = (
+        db.query(models.Message)
+        .filter(
+            (models.Message.sender_id == current_user.id)
+            | (models.Message.receiver_id == current_user.id)
         )
+        .order_by(models.Message.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
     )
 
-    if query:
-        message_query = message_query.filter(models.Message.content.ilike(f"%{query}%"))
+    # Mark messages as read
+    for message in messages:
+        if message.receiver_id == current_user.id and not message.is_read:
+            message.is_read = True
+            message.read_at = datetime.now()
 
-    if start_date:
-        message_query = message_query.filter(models.Message.timestamp >= start_date)
-
-    if end_date:
-        message_query = message_query.filter(models.Message.timestamp <= end_date)
-
-    if message_type:
-        message_query = message_query.filter(
-            models.Message.message_type == message_type
+        message.content = await get_translated_content(
+            message.content, current_user, message.language
         )
 
-    if conversation_id:
-        message_query = message_query.filter(
-            models.Message.conversation_id == conversation_id
+    db.commit()
+    return messages
+
+
+@router.put("/{message_id}", response_model=schemas.Message)
+async def update_message(
+    message_id: int,
+    message_update: schemas.MessageUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Update a message"""
+    message = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if message.sender_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to edit this message"
         )
 
-    total = message_query.count()
+    # Check edit window
+    time_difference = datetime.now(timezone.utc) - message.timestamp
+    if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
+        raise HTTPException(status_code=400, detail="Edit window has expired")
 
-    if sort_order == schemas.SortOrder.ASC:
-        message_query = message_query.order_by(models.Message.timestamp.asc())
-    else:
-        message_query = message_query.order_by(models.Message.timestamp.desc())
+    message.content = message_update.content
+    message.is_edited = True
+    db.commit()
+    db.refresh(message)
 
-    messages = message_query.offset(skip).limit(limit).all()
+    # Send notifications
+    recipient = (
+        db.query(models.User).filter(models.User.id == message.receiver_id).first()
+    )
+    background_tasks.add_task(
+        notifications.send_real_time_notification,
+        recipient.id,
+        f"Message {message_id} has been edited",
+    )
 
-    return schemas.MessageSearchResponse(total=total, messages=messages)
+    create_notification(
+        db,
+        message.receiver_id,
+        f"{current_user.username} edited a message",
+        f"/messages/{current_user.id}",
+        "message_edited",
+        message.id,
+    )
+
+    return message
+
+
+@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Delete a message"""
+    message = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if message.sender_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this message"
+        )
+
+    # Check delete window
+    time_difference = datetime.now(timezone.utc) - message.timestamp
+    if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
+        raise HTTPException(status_code=400, detail="Delete window has expired")
+
+    db.delete(message)
+    db.commit()
+
+    # Send notifications
+    recipient = (
+        db.query(models.User).filter(models.User.id == message.receiver_id).first()
+    )
+    background_tasks.add_task(
+        notifications.send_real_time_notification,
+        recipient.id,
+        f"Message {message_id} has been deleted",
+    )
+
+    create_notification(
+        db,
+        message.receiver_id,
+        f"{current_user.username} deleted a message",
+        f"/messages/{current_user.id}",
+        "message_deleted",
+        None,
+    )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/conversations", response_model=List[schemas.Message])
@@ -228,6 +377,7 @@ async def get_conversations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Get user conversations"""
     subquery = (
         db.query(
             models.Message.conversation_id,
@@ -259,174 +409,13 @@ async def get_conversations(
     return conversations
 
 
-@router.get("/", response_model=List[schemas.Message])
-def get_messages(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = 0,
-    limit: int = 500,
-):
-    messages = (
-        db.query(models.Message)
-        .filter(
-            (models.Message.sender_id == current_user.id)
-            | (models.Message.receiver_id == current_user.id)
-        )
-        .order_by(models.Message.timestamp.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    for message in messages:
-        if message.receiver_id == current_user.id and not message.is_read:
-            message.is_read = True
-            message.read_at = datetime.now()
-
-        message.content = await get_translated_content(
-            message.content, current_user, message.language
-        )
-
-    db.commit()
-    return messages
-
-
-@router.get("/inbox", response_model=List[schemas.MessageOut])
-def get_inbox(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = 0,
-    limit: int = 100,
-):
-    messages = (
-        db.query(models.Message)
-        .filter(models.Message.receiver_id == current_user.id)
-        .order_by(models.Message.timestamp.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [schemas.MessageOut(message=message, count=1) for message in messages]
-
-
-@router.post("/send_file", status_code=status.HTTP_201_CREATED)
-async def send_file(
-    file: UploadFile = File(...),
-    recipient_id: int = Form(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-):
-    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
-    if not recipient:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    await file.seek(0)
-    file_content = await file.read()
-    await file.seek(0)
-
-    if len(file_content) == 0 or file.filename == "":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty"
-        )
-
-    file_size = len(file_content)
-
-    if file_size > 10 * 1024 * 1024:  # 10MB
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File is too large",
-        )
-
-    file_location = f"static/messages/{file.filename}"
-
-    os.makedirs(os.path.dirname(file_location), exist_ok=True)
-
-    with open(file_location, "wb") as file_object:
-        file_object.write(file_content)
-
-    if not scan_file_for_viruses(file_location):
-        os.remove(file_location)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File is infected with a virus.",
-        )
-
-    new_message = models.Message(
-        sender_id=current_user.id,
-        receiver_id=recipient_id,
-        content=file_location,
-        message_type=schemas.MessageType.FILE,
-        file_url=file_location,
-    )
-    db.add(new_message)
-    db.commit()
-    db.refresh(new_message)
-
-    background_tasks.add_task(
-        notifications.schedule_email_notification,
-        to=recipient.email,
-        subject="New File Received",
-        body=f"You have received a file from {current_user.email}.",
-    )
-
-    # Создание уведомления для получателя
-    create_notification(
-        db,
-        recipient_id,
-        f"Новый файл от {current_user.username}",
-        f"/messages/{current_user.id}",
-        "new_file",
-        new_message.id,
-    )
-
-    return {"message": "File sent successfully"}
-
-
-def scan_file_for_viruses(file_path: str) -> bool:
-    cd = clamd.ClamdNetworkSocket()
-    result = cd.scan(file_path)
-    if result and result[file_path][0] == "FOUND":
-        return False
-    return True
-
-
-@router.get("/download/{file_name}")
-def download_file(
-    file_name: str,
-    current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
-):
-    message = (
-        db.query(models.Message)
-        .filter(models.Message.file_url == f"static/messages/{file_name}")
-        .first()
-    )
-    if not message or (
-        message.sender_id != current_user.id and message.receiver_id != current_user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-        )
-
-    file_path = f"static/messages/{file_name}"
-    if not os.path.exists(file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
-        )
-    return FileResponse(path=file_path, filename=file_name)
-
-
-@router.post(
-    "/location", status_code=status.HTTP_201_CREATED, response_model=schemas.Message
-)
-def send_location(
+@router.post("/location", response_model=schemas.Message)
+async def send_location(
     location: schemas.MessageCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Send a location message"""
     if location.latitude is None or location.longitude is None:
         raise HTTPException(
             status_code=400, detail="Latitude and longitude are required"
@@ -442,16 +431,15 @@ def send_location(
         content="Shared location",
         message_type=schemas.MessageType.TEXT,
     )
+
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
 
-    # Создание уведомления для получателя
-    # Создание уведомления для получателя
     create_notification(
         db,
         location.receiver_id,
-        f"{current_user.username} поделился местоположением",
+        f"{current_user.username} shared location",
         f"/messages/{current_user.id}",
         "shared_location",
         new_message.id,
@@ -460,9 +448,7 @@ def send_location(
     return new_message
 
 
-@router.post(
-    "/audio", status_code=status.HTTP_201_CREATED, response_model=schemas.Message
-)
+@router.post("/audio", response_model=schemas.Message)
 async def create_audio_message(
     receiver_id: int,
     audio_file: UploadFile = File(...),
@@ -470,14 +456,21 @@ async def create_audio_message(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Create an audio message"""
+    # Validate audio file
     file_extension = os.path.splitext(audio_file.filename)[1]
+    if file_extension.lower() not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
+
     file_name = f"{uuid4()}{file_extension}"
     file_path = os.path.join(AUDIO_DIR, file_name)
 
+    # Save audio file
     with open(file_path, "wb") as buffer:
         content = await audio_file.read()
         buffer.write(content)
 
+    # Create message
     new_message = models.Message(
         sender_id=current_user.id,
         receiver_id=receiver_id,
@@ -489,11 +482,11 @@ async def create_audio_message(
     db.commit()
     db.refresh(new_message)
 
-    # Создание уведомления для получателя
+    # Send notification
     create_notification(
         db,
         receiver_id,
-        f"{current_user.username} отправил аудиосообщение",
+        f"{current_user.username} sent an audio message",
         f"/messages/{current_user.id}",
         "new_audio_message",
         new_message.id,
@@ -502,115 +495,48 @@ async def create_audio_message(
     return new_message
 
 
-@router.get("/{message_id}", response_model=schemas.Message)
-def get_message(
-    message_id: int,
+@router.get("/unread", response_model=int)
+async def get_unread_messages_count(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    message = db.query(models.Message).filter(models.Message.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    if message.sender_id != current_user.id and message.receiver_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to view this message"
+    """Get count of unread messages"""
+    unread_count = (
+        db.query(models.Message)
+        .filter(
+            models.Message.receiver_id == current_user.id,
+            models.Message.is_read == False,
         )
+        .count()
+    )
+    return unread_count
 
-    return message
 
-
-@router.put("/{message_id}", response_model=schemas.Message)
-async def update_message(
-    message_id: int,
-    message_update: schemas.MessageUpdate,
+@router.get(
+    "/statistics/{conversation_id}", response_model=schemas.ConversationStatistics
+)
+async def get_conversation_statistics(
+    conversation_id: str,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    message = db.query(models.Message).filter(models.Message.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    if message.sender_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to edit this message"
+    """Get statistics for a conversation"""
+    stats = (
+        db.query(models.ConversationStatistics)
+        .filter(
+            models.ConversationStatistics.conversation_id == conversation_id,
+            or_(
+                models.ConversationStatistics.user1_id == current_user.id,
+                models.ConversationStatistics.user2_id == current_user.id,
+            ),
         )
-
-    time_difference = datetime.now(timezone.utc) - message.timestamp
-    if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
-        raise HTTPException(status_code=400, detail="Edit window has expired")
-
-    message.content = message_update.content
-    message.is_edited = True
-    db.commit()
-    db.refresh(message)
-
-    recipient = (
-        db.query(models.User).filter(models.User.id == message.receiver_id).first()
-    )
-    background_tasks.add_task(
-        notifications.send_real_time_notification,
-        recipient.id,
-        f"Message {message_id} has been edited",
+        .first()
     )
 
-    # Создание уведомления для получателя
-    create_notification(
-        db,
-        message.receiver_id,
-        f"{current_user.username} отредактировал сообщение",
-        f"/messages/{current_user.id}",
-        "message_edited",
-        message.id,
-    )
+    if not stats:
+        raise HTTPException(status_code=404, detail="Conversation statistics not found")
 
-    return message
-
-
-@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_message(
-    message_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-):
-    message = db.query(models.Message).filter(models.Message.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    if message.sender_id != current_user.id:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this message"
-        )
-
-    time_difference = datetime.now(timezone.utc) - message.timestamp
-    if time_difference > timedelta(minutes=EDIT_DELETE_WINDOW):
-        raise HTTPException(status_code=400, detail="Delete window has expired")
-
-    db.delete(message)
-    db.commit()
-
-    recipient = (
-        db.query(models.User).filter(models.User.id == message.receiver_id).first()
-    )
-    background_tasks.add_task(
-        notifications.send_real_time_notification,
-        recipient.id,
-        f"Message {message_id} has been deleted",
-    )
-
-    # Создание уведомления для получателя
-    create_notification(
-        db,
-        message.receiver_id,
-        f"{current_user.username} удалил сообщение",
-        f"/messages/{current_user.id}",
-        "message_deleted",
-        None,
-    )
-
-    return {"detail": "Message deleted successfully"}
+    return stats
 
 
 @router.put("/{message_id}/read", response_model=schemas.Message)
@@ -620,6 +546,7 @@ async def mark_message_as_read(
     current_user: models.User = Depends(oauth2.get_current_user),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
+    """Mark a message as read"""
     message = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -648,170 +575,174 @@ async def mark_message_as_read(
     return message
 
 
-@router.put("/user/read-status", response_model=schemas.User)
-async def update_read_status_visibility(
-    user_update: schemas.UserUpdate,
+@router.post("/send_file", status_code=status.HTTP_201_CREATED)
+async def send_file(
+    file: UploadFile = File(...),
+    recipient_id: int = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    if user_update.hide_read_status is not None:
-        current_user.hide_read_status = user_update.hide_read_status
-        db.commit()
-        db.refresh(current_user)
+    """Send a file message"""
+    # Validate recipient
+    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    return current_user
+    # Validate file
+    await file.seek(0)
+    file_content = await file.read()
+    await file.seek(0)
 
+    if len(file_content) == 0 or file.filename == "":
+        raise HTTPException(status_code=400, detail="File is empty")
 
-@router.get("/unread", response_model=int)
-async def get_unread_messages_count(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    unread_count = (
-        db.query(models.Message)
-        .filter(
-            models.Message.receiver_id == current_user.id,
-            models.Message.is_read == False,
-        )
-        .count()
+    file_size = len(file_content)
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File is too large")
+
+    # Save file
+    file_location = f"static/messages/{file.filename}"
+    os.makedirs(os.path.dirname(file_location), exist_ok=True)
+
+    with open(file_location, "wb") as file_object:
+        file_object.write(file_content)
+
+    # Scan for viruses
+    if not scan_file_for_viruses(file_location):
+        os.remove(file_location)
+        raise HTTPException(status_code=400, detail="File is infected with a virus")
+
+    # Create message
+    new_message = models.Message(
+        sender_id=current_user.id,
+        receiver_id=recipient_id,
+        content=file_location,
+        message_type=schemas.MessageType.FILE,
+        file_url=file_location,
     )
-    return unread_count
-
-
-@router.get(
-    "/statistics/{conversation_id}", response_model=schemas.ConversationStatistics
-)
-async def get_conversation_statistics(
-    conversation_id: str,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    stats = (
-        db.query(models.ConversationStatistics)
-        .filter(
-            models.ConversationStatistics.conversation_id == conversation_id,
-            or_(
-                models.ConversationStatistics.user1_id == current_user.id,
-                models.ConversationStatistics.user2_id == current_user.id,
-            ),
-        )
-        .first()
-    )
-
-    if not stats:
-        raise HTTPException(status_code=404, detail="Conversation statistics not found")
-
-    return stats
-
-
-def update_link_preview(db: Session, message_id: int, url: str):
-    link_preview = extract_link_preview(url)
-    if link_preview:
-        db.query(models.Message).filter(models.Message.id == message_id).update(
-            {"link_preview": link_preview}
-        )
-        db.commit()
-
-
-def update_conversation_statistics(
-    db: Session, conversation_id: str, new_message: models.Message
-):
-    stats = (
-        db.query(models.ConversationStatistics)
-        .filter(models.ConversationStatistics.conversation_id == conversation_id)
-        .first()
-    )
-
-    if not stats:
-        stats = models.ConversationStatistics(
-            conversation_id=conversation_id,
-            user1_id=min(new_message.sender_id, new_message.receiver_id),
-            user2_id=max(new_message.sender_id, new_message.receiver_id),
-        )
-        db.add(stats)
-
-    stats.total_messages += 1
-    stats.last_message_at = func.now()
-
-    if new_message.attachments:
-        stats.total_files += len(new_message.attachments)
-    if new_message.has_emoji:
-        stats.total_emojis += 1
-    if new_message.message_type == schemas.MessageType.STICKER:
-        stats.total_stickers += 1
-
-    last_message = (
-        db.query(models.Message)
-        .filter(
-            models.Message.conversation_id == conversation_id,
-            models.Message.id != new_message.id,
-        )
-        .order_by(models.Message.created_at.desc())
-        .first()
-    )
-
-    if last_message:
-        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
-        stats.total_response_time += time_diff
-        stats.total_responses += 1
-        stats.average_response_time = stats.total_response_time / stats.total_responses
-
+    db.add(new_message)
     db.commit()
+    db.refresh(new_message)
+
+    # Send notification
+    create_notification(
+        db,
+        recipient_id,
+        f"New file from {current_user.username}",
+        f"/messages/{current_user.id}",
+        "new_file",
+        new_message.id,
+    )
+
+    return {"message": "File sent successfully"}
 
 
-class MessageNotificationHandler:
-    def __init__(self, db: Session, background_tasks: BackgroundTasks):
-        self.db = db
-        self.background_tasks = background_tasks
-        self.notification_service = NotificationService(db, background_tasks)
+@router.get("/download/{file_name}")
+async def download_file(
+    file_name: str,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download a file message"""
+    message = (
+        db.query(models.Message)
+        .filter(models.Message.file_url == f"static/messages/{file_name}")
+        .first()
+    )
+    if not message or (
+        message.sender_id != current_user.id and message.receiver_id != current_user.id
+    ):
+        raise HTTPException(status_code=404, detail="File not found")
 
-    async def handle_new_message(self, message: models.Message):
-        """معالجة إشعارات الرسائل الجديدة"""
-        # التحقق من تفضيلات المستخدم للإشعارات
-        user_prefs = (
-            self.db.query(models.NotificationPreferences)
-            .filter(models.NotificationPreferences.user_id == message.receiver_id)
-            .first()
+    file_path = f"static/messages/{file_name}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path=file_path, filename=file_name)
+
+
+@router.get("/inbox", response_model=List[schemas.MessageOut])
+async def get_inbox(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = 0,
+    limit: int = 100,
+):
+    """Get user inbox messages"""
+    messages = (
+        db.query(models.Message)
+        .filter(models.Message.receiver_id == current_user.id)
+        .order_by(models.Message.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [schemas.MessageOut(message=message, count=1) for message in messages]
+
+
+@router.get("/search", response_model=schemas.MessageSearchResponse)
+async def search_messages(
+    query: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    message_type: Optional[schemas.MessageType] = None,
+    conversation_id: Optional[str] = None,
+    sort_order: schemas.SortOrder = schemas.SortOrder.DESC,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+):
+    """Search messages with multiple criteria"""
+    message_query = db.query(models.Message).filter(
+        or_(
+            models.Message.sender_id == current_user.id,
+            models.Message.receiver_id == current_user.id,
+        )
+    )
+
+    # Apply filters
+    if query:
+        message_query = message_query.filter(models.Message.content.ilike(f"%{query}%"))
+    if start_date:
+        message_query = message_query.filter(models.Message.timestamp >= start_date)
+    if end_date:
+        message_query = message_query.filter(models.Message.timestamp <= end_date)
+    if message_type:
+        message_query = message_query.filter(
+            models.Message.message_type == message_type
+        )
+    if conversation_id:
+        message_query = message_query.filter(
+            models.Message.conversation_id == conversation_id
         )
 
-        if not user_prefs or user_prefs.message_notifications:
-            await self.notification_service.create_notification(
-                user_id=message.receiver_id,
-                content=f"رسالة جديدة من {message.sender.username}",
-                notification_type="new_message",
-                priority=models.NotificationPriority.HIGH,
-                category=models.NotificationCategory.SOCIAL,
-                link=f"/messages/{message.sender_id}",
-                metadata={
-                    "sender_id": message.sender_id,
-                    "sender_name": message.sender.username,
-                    "message_type": message.message_type.value,
-                    "conversation_id": message.conversation_id,
-                },
-            )
+    total = message_query.count()
+
+    # Apply sorting
+    if sort_order == schemas.SortOrder.ASC:
+        message_query = message_query.order_by(models.Message.timestamp.asc())
+    else:
+        message_query = message_query.order_by(models.Message.timestamp.desc())
+
+    messages = message_query.offset(skip).limit(limit).all()
+    return schemas.MessageSearchResponse(total=total, messages=messages)
 
 
-class MessageRouter:
-    def __init__(self):
-        self.amenhotep = AmenhotepAI()
+@router.get("/{message_id}", response_model=schemas.Message)
+async def get_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Get a specific message"""
+    message = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
 
-    @router.websocket("/ws/amenhotep/{user_id}")
-    async def amenhotep_chat(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
+    if message.sender_id != current_user.id and message.receiver_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view this message"
+        )
 
-        # إرسال رسالة الترحيب
-        await websocket.send_text(self.amenhotep.get_welcome_message())
-
-        try:
-            while True:
-                # استقبال رسالة من المستخدم
-                message = await websocket.receive_text()
-
-                # الحصول على رد من النموذج
-                response = await self.amenhotep.get_response(message)
-
-                # إرسال الرد للمستخدم
-                await websocket.send_text(response)
-
-        except WebSocketDisconnect:
-            print(f"User {user_id} disconnected from Amenhotep chat")
+    return message

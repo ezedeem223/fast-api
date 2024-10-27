@@ -14,6 +14,9 @@ async def register_business(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    تسجيل حساب تجاري جديد
+    """
     if current_user.user_type == models.UserType.BUSINESS:
         raise HTTPException(
             status_code=400, detail="User is already registered as a business"
@@ -37,12 +40,15 @@ async def verify_business(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    التحقق من الحساب التجاري عن طريق رفع المستندات المطلوبة
+    """
     if current_user.user_type != models.UserType.BUSINESS:
         raise HTTPException(
             status_code=400, detail="User is not registered as a business"
         )
 
-    # Save uploaded files
+    # حفظ الملفات المرفوعة
     current_user.id_document_url = await utils.save_upload_file(files.id_document)
     current_user.passport_url = await utils.save_upload_file(files.passport)
     current_user.business_document_url = await utils.save_upload_file(
@@ -63,6 +69,9 @@ async def create_business_transaction(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    إنشاء معاملة تجارية جديدة
+    """
     if not current_user.is_verified_business:
         raise HTTPException(status_code=400, detail="Business is not verified")
 
@@ -74,7 +83,7 @@ async def create_business_transaction(
     if not client_user:
         raise HTTPException(status_code=404, detail="Client user not found")
 
-    commission = transaction.amount * 0.05  # 5% commission
+    commission = transaction.amount * 0.05  # عمولة 5%
     new_transaction = models.BusinessTransaction(
         business_user_id=current_user.id,
         client_user_id=client_user.id,
@@ -94,6 +103,9 @@ async def get_business_transactions(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    الحصول على قائمة المعاملات التجارية للمستخدم
+    """
     if not current_user.is_verified_business:
         raise HTTPException(status_code=400, detail="Business is not verified")
 
