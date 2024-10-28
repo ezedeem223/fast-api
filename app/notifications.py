@@ -1,5 +1,3 @@
-# في app/notifications.py
-
 from fastapi import BackgroundTasks, WebSocket, HTTPException
 from fastapi_mail import MessageSchema
 from pydantic import EmailStr
@@ -346,12 +344,21 @@ class NotificationService:
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
         self.background_tasks = background_tasks
+
+        # إعدادات المحاولات
         self.max_retries = 3
         self.retry_delay = 300
+
+        # خدمات الإشعارات
         self.email_service = EmailNotificationService()
         self.push_service = PushNotificationService()
         self.websocket_manager = WebSocketManager()
+
+        # خدمات التحليل والإدارة وإعادة المحاولة
         self.analytics_service = NotificationAnalyticsService()
+        self.analytics = NotificationAnalytics(db)
+        self.notification_manager = NotificationManager(db, background_tasks)
+        self.retry_handler = NotificationRetryHandler(db)
 
     async def create_notification(
         self,
@@ -367,13 +374,17 @@ class NotificationService:
     ) -> Optional[models.Notification]:
         """إنشاء إشعار جديد مع المعالجة الذكية"""
         try:
+            # الحصول على تفضيلات المستخدم
             user_prefs = self._get_user_preferences(user_id)
+
+            # التحقق مما إذا كان ينبغي إرسال الإشعار بناءً على تفضيلات المستخدم
             if not self._should_send_notification(user_prefs, category):
                 logger.info(
                     f"Notification skipped for user {user_id} based on preferences"
                 )
                 return None
 
+            # الكشف عن اللغة وترجمتها إذا لزم الأمر
             detected_lang = detect_language(content)
             if (
                 user_prefs
@@ -384,8 +395,10 @@ class NotificationService:
                     content, user_prefs.preferred_language, detected_lang
                 )
 
+            # العثور على مجموعة إشعارات أو إنشاؤها
             group = self._find_or_create_group(notification_type, user_id, related_id)
 
+            # إنشاء الإشعار الجديد
             new_notification = models.Notification(
                 user_id=user_id,
                 content=content,
@@ -400,10 +413,12 @@ class NotificationService:
                 language=detected_lang,
             )
 
+            # إضافة الإشعار إلى قاعدة البيانات
             self.db.add(new_notification)
             self.db.commit()
             self.db.refresh(new_notification)
 
+            # جدولة التسليم إذا كان هناك وقت محدد، أو تسليمه فورًا
             if scheduled_for and scheduled_for > datetime.now(timezone.utc):
                 self._schedule_delivery(new_notification)
             else:
@@ -966,7 +981,27 @@ class NotificationManager:
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
         self.background_tasks = background_tasks
+        self.email_service = EmailNotificationService()
+        self.push_service = PushNotificationService()
+        self.websocket_manager = WebSocketManager()
         self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_delivery(self, notification: models.Notification):
+        """معالجة تسليم الإشعار عبر جميع القنوات المكونة"""
+        user_prefs = self._get_user_preferences(notification.user_id)
+
+        delivery_tasks = []
+        if user_prefs.email_notifications:
+            delivery_tasks.append(self._send_email(notification))
+        if user_prefs.push_notifications:
+            delivery_tasks.append(self._send_push(notification))
+        if user_prefs.in_app_notifications:
+            delivery_tasks.append(self._send_in_app(notification))
+
+        results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
+        success = all(not isinstance(r, Exception) for r in results)
+
+        await self._update_delivery_status(notification, success, results)
 
     async def handle_post_action(self, post_id: int, action_type: str, actor_id: int):
         """معالجة الإشعارات المتعلقة بالمنشورات"""
@@ -1060,10 +1095,65 @@ class NotificationManager:
                         link=f"/community/{community_id}",
                     )
 
+    async def _send_email(self, notification: models.Notification):
+        """إرسال إشعار عبر البريد الإلكتروني"""
+        # استخدم الخدمة لإرسال الإيميل
+        await self.email_service.send_email(notification)
+
+    async def _send_push(self, notification: models.Notification):
+        """إرسال إشعار عبر التنبيهات الفورية"""
+        # استخدم الخدمة لإرسال التنبيه الفوري
+        await self.push_service.send_push(notification)
+
+    async def _send_in_app(self, notification: models.Notification):
+        """إرسال إشعار عبر الإشعارات داخل التطبيق"""
+        # استخدم WebSocketManager لإرسال التنبيه داخل التطبيق
+        await self.websocket_manager.send_in_app_notification(notification)
+
+    async def _update_delivery_status(self, notification, success, results):
+        """تحديث حالة تسليم الإشعار في قاعدة البيانات"""
+        # منطق تحديث الحالة بناءً على نتائج تسليم الإشعار
+        pass
+
+    def _get_user_preferences(self, user_id: int):
+        """الحصول على تفضيلات المستخدم للإشعارات"""
+        # منطق لجلب التفضيلات من قاعدة البيانات
+        pass
+
 
 # 2. تحسين آلية التتبع والتحليل
 class NotificationAnalytics:
     """تحليلات وإحصائيات الإشعارات"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    async def get_user_statistics(
+        self, user_id: int, days: int = 30
+    ) -> schemas.NotificationStatistics:
+        """تحليل وإحصائيات إشعارات المستخدم"""
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        notifications = (
+            self.db.query(models.Notification)
+            .filter(
+                models.Notification.user_id == user_id,
+                models.Notification.created_at >= cutoff_date,
+            )
+            .all()
+        )
+
+        return {
+            "total_count": len(notifications),
+            "unread_count": sum(1 for n in notifications if not n.is_read),
+            "categories_distribution": self._calculate_category_distribution(
+                notifications
+            ),
+            "priorities_distribution": self._calculate_priority_distribution(
+                notifications
+            ),
+            "daily_notifications": self._calculate_daily_distribution(notifications),
+        }
 
     def __init__(self, db: Session):
         self.db = db
@@ -1182,3 +1272,77 @@ class NotificationRetryHandler:
         "message_edited",
         message.id,
     )
+
+
+class CommentNotificationHandler:
+    """معالج إشعارات التعليقات"""
+
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_new_comment(self, comment: models.Comment, post: models.Post):
+        """معالجة إشعارات التعليقات الجديدة"""
+        # إشعار صاحب المنشور
+        if comment.owner_id != post.owner_id:
+            await self.notification_service.create_notification(
+                user_id=post.owner_id,
+                content=f"{comment.owner.username} علق على منشورك",
+                notification_type="new_comment",
+                priority=models.NotificationPriority.MEDIUM,
+                category=models.NotificationCategory.SOCIAL,
+                link=f"/post/{post.id}#comment-{comment.id}",
+            )
+
+        # إشعار في حالة الرد على تعليق
+        if comment.parent_id:
+            parent_comment = (
+                self.db.query(models.Comment)
+                .filter(models.Comment.id == comment.parent_id)
+                .first()
+            )
+
+            if parent_comment and parent_comment.owner_id != comment.owner_id:
+                await self.notification_service.create_notification(
+                    user_id=parent_comment.owner_id,
+                    content=f"{comment.owner.username} رد على تعليقك",
+                    notification_type="comment_reply",
+                    priority=models.NotificationPriority.MEDIUM,
+                    category=models.NotificationCategory.SOCIAL,
+                    link=f"/post/{post.id}#comment-{comment.id}",
+                )
+
+
+class MessageNotificationHandler:
+    """معالج إشعارات الرسائل"""
+
+    def __init__(self, db: Session, background_tasks: BackgroundTasks):
+        self.db = db
+        self.background_tasks = background_tasks
+        self.notification_service = NotificationService(db, background_tasks)
+
+    async def handle_new_message(self, message: models.Message):
+        """معالجة إشعارات الرسائل الجديدة"""
+        # التحقق من تفضيلات المستخدم
+        user_prefs = (
+            self.db.query(models.NotificationPreferences)
+            .filter(models.NotificationPreferences.user_id == message.receiver_id)
+            .first()
+        )
+
+        if not user_prefs or user_prefs.message_notifications:
+            await self.notification_service.create_notification(
+                user_id=message.receiver_id,
+                content=f"رسالة جديدة من {message.sender.username}",
+                notification_type="new_message",
+                priority=models.NotificationPriority.HIGH,
+                category=models.NotificationCategory.SOCIAL,
+                link=f"/messages/{message.sender_id}",
+                metadata={
+                    "sender_id": message.sender_id,
+                    "sender_name": message.sender.username,
+                    "message_type": message.message_type.value,
+                    "conversation_id": message.conversation_id,
+                },
+            )
