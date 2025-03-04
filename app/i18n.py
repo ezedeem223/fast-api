@@ -1,37 +1,33 @@
 from fastapi import Request
 from fastapi_babel import Babel
-from googletrans import Translator, LANGUAGES
-from langdetect import detect
+from deep_translator import GoogleTranslator
 from fastapi_cache.decorator import cache
 
 babel = Babel()
-translator = Translator()
 
-# Supported languages dictionary
-ALL_LANGUAGES = {code: name for code, name in LANGUAGES.items()}
+# Dictionary of supported languages by Google Translator
+ALL_LANGUAGES = GoogleTranslator.get_supported_languages(as_dict=True)
 
 
 @babel.localeselector
 def get_locale(request: Request):
     """
     Determine the locale from the 'Accept-Language' header.
-    Returns the language code if supported, otherwise the app's default language.
+    If the language is supported, return it; otherwise, use the app's default language.
     """
-    lang = request.headers.get("Accept-Language")
-    if lang in ALL_LANGUAGES:
-        return lang
-    return request.app.state.default_language
+    lang = request.headers.get("Accept-Language", "").split(",")[0].strip()
+    return lang if lang in ALL_LANGUAGES else request.app.state.default_language
 
 
 def translate_text(text: str, source_lang: str, target_lang: str) -> str:
     """
-    Translate text from source_lang to target_lang.
-    Returns the original text if source and target are the same or translation fails.
+    Translate text from the source language to the target language.
+    Returns the original text if the source and target languages are the same or if translation fails.
     """
     if source_lang == target_lang:
         return text
     try:
-        return translator.translate(text, src=source_lang, dest=target_lang).text
+        return GoogleTranslator(source=source_lang, target=target_lang).translate(text)
     except Exception as e:
         print(f"Translation error: {e}")
         return text
@@ -39,11 +35,11 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
 
 def detect_language(text: str) -> str:
     """
-    Detect the language of the given text.
-    Returns 'ar' as default if detection fails.
+    Detect the language of the given text using `deep-translator`.
+    Returns 'ar' as the default if detection fails.
     """
     try:
-        return detect(text)
+        return GoogleTranslator().detect(text)
     except Exception:
         return "ar"
 
