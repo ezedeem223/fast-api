@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .. import models, schemas, oauth2
-from ..database import get_db
 from typing import List
 
+# Import project modules
+from .. import models, schemas, oauth2
+from ..database import get_db
+
 router = APIRouter(prefix="/support", tags=["Support"])
+
+# ------------------------------------------------------------------
+#                         Endpoints
+# ------------------------------------------------------------------
 
 
 @router.post("/tickets", response_model=schemas.Ticket)
@@ -13,6 +19,14 @@ async def create_ticket(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Create a new support ticket.
+
+    - **ticket**: Data required to create a ticket.
+    - **current_user**: The authenticated user creating the ticket.
+
+    Returns the created ticket.
+    """
     new_ticket = models.SupportTicket(**ticket.dict(), user_id=current_user.id)
     db.add(new_ticket)
     db.commit()
@@ -25,6 +39,13 @@ async def get_user_tickets(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Retrieve all support tickets created by the current user.
+
+    - **current_user**: The authenticated user.
+
+    Returns a list of tickets belonging to the user.
+    """
     tickets = (
         db.query(models.SupportTicket)
         .filter(models.SupportTicket.user_id == current_user.id)
@@ -40,6 +61,15 @@ async def add_ticket_response(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Add a response to an existing support ticket.
+
+    - **ticket_id**: The ID of the ticket to respond to.
+    - **response**: The response content.
+    - **current_user**: The authenticated user adding the response.
+
+    Returns the created ticket response.
+    """
     ticket = (
         db.query(models.SupportTicket)
         .filter(models.SupportTicket.id == ticket_id)

@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
+from typing import List
+from datetime import datetime, timedelta
 from .. import models, schemas, oauth2
 from ..database import get_db
-from typing import List
 from ..notifications import send_email_notification
 from ..cache import cache
-from datetime import datetime, timedelta
 from ..utils import log_user_event, create_notification
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
 
 
-# Follow Management
 @router.post("/{user_id}", status_code=status.HTTP_201_CREATED)
 async def follow_user(
     user_id: int,
@@ -20,21 +19,38 @@ async def follow_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """متابعة مستخدم"""
-    # التحقق من عدم متابعة النفس
+    """
+    Follow a user.
+
+    Parameters:
+      - user_id: ID of the user to follow.
+      - background_tasks: Background tasks manager.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Process:
+      - Prevent following oneself.
+      - Check if the user to follow exists.
+      - Verify that the user is not already followed.
+      - Create a new follow record.
+      - Check for mutual follow and update accordingly.
+      - Update followers and following counts.
+      - Log the follow event and send email & notification.
+
+    Returns:
+      A success message.
+    """
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot follow yourself"
         )
 
-    # التحقق من وجود المستخدم المراد متابعته
     user_to_follow = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_to_follow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User to follow not found"
         )
 
-    # التحقق من عدم وجود متابعة مسبقة
     existing_follow = (
         db.query(models.Follow)
         .filter(
@@ -43,18 +59,16 @@ async def follow_user(
         )
         .first()
     )
-
     if existing_follow:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You already follow this user",
         )
 
-    # إنشاء علاقة المتابعة
     new_follow = models.Follow(follower_id=current_user.id, followed_id=user_id)
     db.add(new_follow)
 
-    # التحقق من المتابعة المتبادلة
+    # Check for mutual follow
     mutual_follow = (
         db.query(models.Follow)
         .filter(
@@ -63,32 +77,26 @@ async def follow_user(
         )
         .first()
     )
-
     if mutual_follow:
         new_follow.is_mutual = True
         mutual_follow.is_mutual = True
 
-    # تحديث عداد المتابعين
     user_to_follow.followers_count += 1
     current_user.following_count += 1
 
     db.commit()
-
-    # تسجيل الحدث
     log_user_event(db, current_user.id, "follow_user", {"followed_id": user_id})
 
-    # إرسال الإشعارات
     background_tasks.add_task(
         send_email_notification,
         to=user_to_follow.email,
         subject="New Follower",
         body=f"You have a new follower: {current_user.email}",
     )
-
     create_notification(
         db,
         user_id,
-        f"{current_user.username} بدأ بمتابعتك",
+        f"{current_user.username} started following you",
         f"/profile/{current_user.id}",
         "new_follower",
         current_user.id,
@@ -104,7 +112,25 @@ async def unfollow_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """إلغاء متابعة مستخدم"""
+    """
+    Unfollow a user.
+
+    Parameters:
+      - user_id: ID of the user to unfollow.
+      - background_tasks: Background tasks manager.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Process:
+      - Verify that the follow record exists.
+      - If it is a mutual follow, update the mutual flag on the other record.
+      - Delete the follow record.
+      - Update followers and following counts.
+      - Send email notification.
+
+    Returns:
+      None.
+    """
     follow = (
         db.query(models.Follow)
         .filter(
@@ -113,7 +139,6 @@ async def unfollow_user(
         )
         .first()
     )
-
     if not follow:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="You do not follow this user"
@@ -122,10 +147,10 @@ async def unfollow_user(
     user_unfollowed = db.query(models.User).filter(models.User.id == user_id).first()
     if not user_unfollowed:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User to unfollow not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User to unfollow not found",
         )
 
-    # إلغاء علامة المتابعة المتبادلة إذا وجدت
     if follow.is_mutual:
         mutual_follow = (
             db.query(models.Follow)
@@ -139,14 +164,10 @@ async def unfollow_user(
             mutual_follow.is_mutual = False
 
     db.delete(follow)
-
-    # تحديث عداد المتابعين
     user_unfollowed.followers_count -= 1
     current_user.following_count -= 1
-
     db.commit()
 
-    # إرسال إشعار بالبريد
     background_tasks.add_task(
         send_email_notification,
         to=user_unfollowed.email,
@@ -157,7 +178,6 @@ async def unfollow_user(
     return None
 
 
-# Followers and Following Lists
 @router.get("/followers", response_model=schemas.FollowersListOut)
 @cache(expire=300)
 async def get_followers(
@@ -168,19 +188,29 @@ async def get_followers(
     skip: int = 0,
     limit: int = 100,
 ):
-    """الحصول على قائمة المتابعين"""
-    query = db.query(models.Follow).filter(models.Follow.followed_id == current_user.id)
+    """
+    Retrieve a list of followers for the current user.
 
-    # تطبيق الترتيب
+    Parameters:
+      - sort_by: Field to sort by ("date" or "username").
+      - order: Sort order ("asc" or "desc").
+      - skip: Number of records to skip.
+      - limit: Maximum number of records to return.
+
+    Returns:
+      A dictionary containing the list of followers and total count.
+    """
+    query = db.query(models.Follow).filter(models.Follow.followed_id == current_user.id)
     if sort_by == "date":
         order_column = models.Follow.created_at
     elif sort_by == "username":
         order_column = models.User.username
 
-    if order == "desc":
-        query = query.order_by(desc(order_column))
-    else:
-        query = query.order_by(asc(order_column))
+    query = (
+        query.order_by(desc(order_column))
+        if order == "desc"
+        else query.order_by(asc(order_column))
+    )
 
     total_count = query.count()
     followers = (
@@ -216,19 +246,29 @@ async def get_following(
     skip: int = 0,
     limit: int = 100,
 ):
-    """الحصول على قائمة المتابَعين"""
-    query = db.query(models.Follow).filter(models.Follow.follower_id == current_user.id)
+    """
+    Retrieve a list of users that the current user is following.
 
-    # تطبيق الترتيب
+    Parameters:
+      - sort_by: Field to sort by ("date" or "username").
+      - order: Sort order ("asc" or "desc").
+      - skip: Number of records to skip.
+      - limit: Maximum number of records to return.
+
+    Returns:
+      A dictionary containing the list of following users and total count.
+    """
+    query = db.query(models.Follow).filter(models.Follow.follower_id == current_user.id)
     if sort_by == "date":
         order_column = models.Follow.created_at
     elif sort_by == "username":
         order_column = models.User.username
 
-    if order == "desc":
-        query = query.order_by(desc(order_column))
-    else:
-        query = query.order_by(asc(order_column))
+    query = (
+        query.order_by(desc(order_column))
+        if order == "desc"
+        else query.order_by(asc(order_column))
+    )
 
     total_count = query.count()
     following = (
@@ -253,26 +293,30 @@ async def get_following(
     }
 
 
-# Statistics and Analytics
 @router.get("/statistics", response_model=schemas.FollowStatistics)
 def get_follow_statistics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """الحصول على إحصائيات المتابعة"""
-    # حساب نمو المتابعين في الأيام الـ 30 الماضية
+    """
+    Retrieve follow statistics for the current user.
+
+    Process:
+      - Calculate follower growth over the past 30 days.
+      - Calculate the interaction rate based on posts and comments.
+
+    Returns:
+      A dictionary containing followers count, following count, daily growth, and interaction rate.
+    """
     thirty_days_ago = datetime.now() - timedelta(days=30)
     daily_growth = (
         db.query(func.date(models.Follow.created_at), func.count())
-        .filter(
-            models.Follow.followed_id == current_user.id,
-            models.Follow.created_at >= thirty_days_ago,
-        )
+        .filter(models.Follow.followed_id == current_user.id)
+        .filter(models.Follow.created_at >= thirty_days_ago)
         .group_by(func.date(models.Follow.created_at))
         .all()
     )
 
-    # حساب معدل التفاعل
     interaction_rate = (
         db.query(func.count(models.Post.id) + func.count(models.Comment.id))
         .filter(
@@ -298,14 +342,17 @@ def get_mutual_followers(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """الحصول على قائمة المتابعين المتبادلين"""
+    """
+    Retrieve a list of mutual followers for the current user.
+
+    Returns:
+      A list of user objects representing mutual followers.
+    """
     mutual_followers = (
         db.query(models.User)
         .join(models.Follow, models.User.id == models.Follow.follower_id)
-        .filter(
-            models.Follow.followed_id == current_user.id,
-            models.Follow.is_mutual == True,
-        )
+        .filter(models.Follow.followed_id == current_user.id)
+        .filter(models.Follow.is_mutual == True)
         .all()
     )
     return mutual_followers

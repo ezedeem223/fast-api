@@ -1,12 +1,31 @@
+"""
+Block Router Module
+This module provides endpoints for managing user blocks in the system.
+It includes endpoints to block users, manually unblock them, retrieve block information,
+fetch block logs and statistics, as well as handling block appeals.
+"""
+
+# =====================================================
+# ==================== Imports ========================
+# =====================================================
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from .. import models, database, oauth2, schemas, utils
 from datetime import datetime, timedelta
+
+# Local imports
+from .. import models, database, oauth2, schemas, utils
 from ..celery_worker import celery_app, unblock_user
 
+# =====================================================
+# =============== Global Variables ====================
+# =====================================================
 router = APIRouter(prefix="/block", tags=["Block"])
+
+# =====================================================
+# ==================== Endpoints ======================
+# =====================================================
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.BlockOut)
@@ -16,12 +35,25 @@ def block_user(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Block a user."""
+    """
+    Block a user.
+
+    Parameters:
+        - block: BlockCreate schema containing the user to block, block type, duration, etc.
+        - background_tasks: Used for scheduling unblock task.
+        - db: Database session.
+        - current_user: The current authenticated user.
+
+    Returns:
+        The newly created block record.
+    """
+    # Prevent blocking self
     if block.blocked_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot block yourself"
         )
 
+    # Check if the user is already blocked
     existing_block = (
         db.query(models.Block)
         .filter(
@@ -30,18 +62,19 @@ def block_user(
         )
         .first()
     )
-
     if existing_block:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="User is already blocked"
         )
 
+    # Create new block record
     new_block = models.Block(
         blocker_id=current_user.id,
         blocked_id=block.blocked_id,
         block_type=block.block_type,
     )
 
+    # Set block duration if provided
     if block.duration and block.duration_unit:
         new_block.ends_at = datetime.now() + timedelta(
             **{block.duration_unit.value: block.duration}
@@ -51,6 +84,7 @@ def block_user(
 
     db.add(new_block)
 
+    # Log the block event in BlockLog
     block_log = models.BlockLog(
         blocker_id=current_user.id,
         blocked_id=block.blocked_id,
@@ -62,6 +96,7 @@ def block_user(
     db.commit()
     db.refresh(new_block)
 
+    # Schedule automatic unblock if an expiration is set
     if new_block.ends_at:
         background_tasks.add_task(
             unblock_user.apply_async,
@@ -69,11 +104,13 @@ def block_user(
             eta=new_block.ends_at,
         )
 
+    # Log the event using utils
     utils.log_event(
         db,
         "block_user",
         {"blocker_id": current_user.id, "blocked_id": block.blocked_id},
     )
+
     return new_block
 
 
@@ -83,7 +120,17 @@ def manual_unblock_user(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Manually unblock a user."""
+    """
+    Manually unblock a user.
+
+    Parameters:
+        - user_id: The ID of the blocked user.
+        - db: Database session.
+        - current_user: The current authenticated user.
+
+    Returns:
+        A message confirming the user has been unblocked.
+    """
     block = (
         db.query(models.Block)
         .filter(
@@ -92,12 +139,12 @@ def manual_unblock_user(
         )
         .first()
     )
-
     if not block:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User is not blocked"
         )
 
+    # Update block log if exists
     block_log = (
         db.query(models.BlockLog)
         .filter(
@@ -107,7 +154,6 @@ def manual_unblock_user(
         )
         .first()
     )
-
     if block_log:
         block_log.ended_at = datetime.now()
 
@@ -128,7 +174,17 @@ def get_block_info(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Get information about a specific block."""
+    """
+    Get information about a specific block.
+
+    Parameters:
+        - user_id: The ID of the blocked user.
+        - db: Database session.
+        - current_user: The current authenticated user.
+
+    Returns:
+        The block record if found.
+    """
     block = (
         db.query(models.Block)
         .filter(
@@ -137,12 +193,10 @@ def get_block_info(
         )
         .first()
     )
-
     if not block:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Block not found"
         )
-
     return block
 
 
@@ -153,7 +207,16 @@ def get_block_logs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    """Get block logs for the current user."""
+    """
+    Get block logs for the current user.
+
+    Parameters:
+        - skip: Number of records to skip.
+        - limit: Maximum number of records to return.
+
+    Returns:
+        A list of block logs.
+    """
     logs = (
         db.query(models.BlockLog)
         .filter(
@@ -173,7 +236,12 @@ def get_currently_blocked_users(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Get a list of currently blocked users."""
+    """
+    Get a list of currently blocked users.
+
+    Returns:
+        A list of blocked users with details such as block type, reason, and when the block started.
+    """
     blocked_users = (
         db.query(models.User, models.Block)
         .join(models.Block, models.User.id == models.Block.blocked_id)
@@ -183,7 +251,6 @@ def get_currently_blocked_users(
         )
         .all()
     )
-
     return [
         schemas.BlockedUserOut(
             id=user.id,
@@ -202,7 +269,12 @@ def get_block_statistics(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Get block statistics for the current user."""
+    """
+    Get block statistics for the current user.
+
+    Returns:
+        A summary including total blocks, active blocks, and a distribution of block types.
+    """
     total_blocks = (
         db.query(models.Block)
         .filter(models.Block.blocker_id == current_user.id)
@@ -222,7 +294,6 @@ def get_block_statistics(
         .group_by(models.Block.block_type)
         .all()
     )
-
     return schemas.BlockStatistics(
         total_blocks=total_blocks,
         active_blocks=active_blocks,
@@ -240,19 +311,27 @@ def create_block_appeal(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Create a new block appeal."""
+    """
+    Create a new block appeal.
+
+    Parameters:
+        - appeal: BlockAppealCreate schema containing block ID and reason.
+        - db: Database session.
+        - current_user: The current authenticated user.
+
+    Returns:
+        The created block appeal record.
+    """
     block = db.query(models.Block).filter(models.Block.id == appeal.block_id).first()
     if not block:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Block not found"
         )
-
     if block.blocked_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only appeal your own blocks",
         )
-
     existing_appeal = (
         db.query(models.BlockAppeal)
         .filter(
@@ -261,20 +340,17 @@ def create_block_appeal(
         )
         .first()
     )
-
     if existing_appeal:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An appeal for this block is already pending",
         )
-
     new_appeal = models.BlockAppeal(
         block_id=appeal.block_id, user_id=current_user.id, reason=appeal.reason
     )
     db.add(new_appeal)
     db.commit()
     db.refresh(new_appeal)
-
     utils.log_event(
         db,
         "create_block_appeal",
@@ -290,13 +366,15 @@ def get_block_appeals(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    """Get a list of pending block appeals."""
+    """
+    Get a list of pending block appeals.
+    Only moderators are allowed to view appeals.
+    """
     if not current_user.is_moderator:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only moderators can view appeals",
         )
-
     appeals = (
         db.query(models.BlockAppeal)
         .filter(models.BlockAppeal.status == models.AppealStatus.PENDING)
@@ -314,13 +392,16 @@ def review_block_appeal(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """Review a block appeal."""
+    """
+    Review a block appeal.
+
+    Only moderators can review appeals. If the appeal is approved, the corresponding block is removed.
+    """
     if not current_user.is_moderator:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only moderators can review appeals",
         )
-
     appeal = (
         db.query(models.BlockAppeal).filter(models.BlockAppeal.id == appeal_id).first()
     )
@@ -328,21 +409,17 @@ def review_block_appeal(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Appeal not found"
         )
-
     appeal.status = review.status
     appeal.reviewed_at = datetime.now()
     appeal.reviewer_id = current_user.id
-
     if review.status == models.AppealStatus.APPROVED:
         block = (
             db.query(models.Block).filter(models.Block.id == appeal.block_id).first()
         )
         if block:
             db.delete(block)
-
     db.commit()
     db.refresh(appeal)
-
     utils.log_event(
         db,
         "review_block_appeal",

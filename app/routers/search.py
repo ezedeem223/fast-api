@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy import or_, and_, func
+import json
+
 from .. import models, database, schemas, oauth2
 from ..database import get_db
-from sqlalchemy import or_, and_
 from ..config import redis_client
-import json
 from ..utils import (
     search_posts,
     get_spell_suggestions,
@@ -22,8 +23,6 @@ from ..analytics import (
     get_user_searches,
     generate_search_trends_chart,
 )
-from ..utils import analyze_user_behavior
-
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -34,13 +33,24 @@ async def search(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Main search endpoint.
+
+    - Receives search parameters from the user.
+    - Records the search query.
+    - Gets spell-check suggestions.
+    - Searches posts and sorts results.
+    - Retrieves popular and user search suggestions.
+    - Caches results for one hour using Redis.
+
+    Returns a SearchResponse with results, spell suggestion, and search suggestions.
+    """
     cache_key = f"search:{search_params.query}:{search_params.sort_by}"
     cached_result = redis_client.get(cache_key)
-
     if cached_result:
         return json.loads(cached_result)
 
-    # Record search query
+    # Record the search query
     record_search_query(db, search_params.query, current_user.id)
 
     suggestions = get_spell_suggestions(search_params.query)
@@ -49,7 +59,7 @@ async def search(
     results = search_posts(search_params.query, db)
     sorted_results = sort_search_results(results, search_params.sort_by, db)
 
-    # Get search suggestions
+    # Get search suggestions from popular and user history
     popular_searches = get_popular_searches(db, limit=3)
     user_searches = get_user_searches(db, current_user.id, limit=2)
     search_suggestions = list(
@@ -83,14 +93,22 @@ async def advanced_search(
     skip: int = 0,
     limit: int = 20,
 ):
+    """
+    Advanced search endpoint for posts.
+
+    - Allows filtering by query text, date range, category, and author.
+    - Supports search scope: title, content, comments, or all.
+
+    Returns total count and a list of posts formatted as PostOut.
+    """
     search_query = db.query(models.Post)
 
     if query:
-        if search_scope == "title" or search_scope == "all":
+        if search_scope in ["title", "all"]:
             search_query = search_query.filter(models.Post.title.ilike(f"%{query}%"))
-        elif search_scope == "content" or search_scope == "all":
+        if search_scope in ["content", "all"]:
             search_query = search_query.filter(models.Post.content.ilike(f"%{query}%"))
-        elif search_scope == "comments":
+        if search_scope == "comments":
             search_query = search_query.join(models.Comment).filter(
                 models.Comment.content.ilike(f"%{query}%")
             )
@@ -117,12 +135,18 @@ async def advanced_search(
 
 @router.get("/categories", response_model=List[schemas.Category])
 async def get_categories(db: Session = Depends(get_db)):
+    """
+    Get a list of all categories.
+    """
     categories = db.query(models.Category).all()
     return categories
 
 
 @router.get("/authors", response_model=List[schemas.UserOut])
 async def get_authors(db: Session = Depends(get_db)):
+    """
+    Get a list of authors who have posts.
+    """
     authors = db.query(models.User).filter(models.User.post_count > 0).all()
     return authors
 
@@ -133,6 +157,12 @@ async def autocomplete(
     db: Session = Depends(get_db),
     limit: int = 10,
 ):
+    """
+    Return autocomplete suggestions for a given query.
+
+    - Searches for suggestions starting with the query.
+    - Orders by frequency and caches results for 5 minutes.
+    """
     cache_key = f"autocomplete:{query}"
     cached_result = redis_client.get(cache_key)
     if cached_result:
@@ -147,7 +177,6 @@ async def autocomplete(
     )
 
     result = [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
-
     redis_client.setex(cache_key, 300, json.dumps([s.dict() for s in result]))
 
     return result
@@ -159,6 +188,11 @@ async def record_search(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Record a user's search term.
+
+    - Increments frequency if the term exists or adds a new record.
+    """
     suggestion = (
         db.query(models.SearchSuggestion)
         .filter(models.SearchSuggestion.term == term)
@@ -179,6 +213,9 @@ async def popular_searches(
     current_user: models.User = Depends(oauth2.get_current_admin),
     limit: int = Query(10, ge=1, le=100),
 ):
+    """
+    Get the most popular search queries.
+    """
     return get_popular_searches(db, limit)
 
 
@@ -188,32 +225,19 @@ async def recent_searches(
     current_user: models.User = Depends(oauth2.get_current_admin),
     limit: int = Query(10, ge=1, le=100),
 ):
+    """
+    Get the most recent search queries.
+    """
     return get_recent_searches(db, limit)
 
 
 @router.get("/trends")
 async def search_trends(current_user: models.User = Depends(oauth2.get_current_admin)):
+    """
+    Get search trends chart.
+    """
     chart = generate_search_trends_chart()
     return {"chart": chart}
-
-
-def update_search_suggestions(db: Session):
-    posts = db.query(models.Post).all()
-    for post in posts:
-        words = set(post.title.split() + post.content.split())
-        for word in words:
-            if len(word) > 2:
-                suggestion = (
-                    db.query(models.SearchSuggestion)
-                    .filter(models.SearchSuggestion.term == word)
-                    .first()
-                )
-                if suggestion:
-                    suggestion.frequency += 1
-                else:
-                    suggestion = models.SearchSuggestion(term=word)
-                    db.add(suggestion)
-    db.commit()
 
 
 @router.get("/smart", response_model=List[schemas.PostOut])
@@ -224,7 +248,17 @@ async def smart_search(
     skip: int = 0,
     limit: int = 10,
 ):
-    # الحصول على تاريخ بحث المستخدم
+    """
+    Smart search using user search history and behavior.
+
+    - Retrieves the user's recent search history.
+    - Performs an initial search using plainto_tsquery.
+    - Scores results based on user behavior.
+    - Updates search statistics.
+
+    Returns a list of posts sorted by relevance.
+    """
+    # Get user search history (last 20 queries)
     user_history = (
         db.query(models.SearchStatistics.query)
         .filter(models.SearchStatistics.user_id == current_user.id)
@@ -234,7 +268,7 @@ async def smart_search(
     )
     user_history = [item[0] for item in user_history]
 
-    # البحث الأولي
+    # Perform initial search using plainto_tsquery
     search_query = func.plainto_tsquery("english", query)
     initial_results = (
         db.query(models.Post)
@@ -242,14 +276,14 @@ async def smart_search(
         .all()
     )
 
-    # تطبيق الفلترة الذكية
+    # Score results based on user behavior
     scored_results = [
         (post, analyze_user_behavior(user_history, post.content))
         for post in initial_results
     ]
     scored_results.sort(key=lambda x: x[1], reverse=True)
 
-    # تحديث إحصائيات البحث
+    # Update search statistics for the user
     update_search_statistics(db, current_user.id, query)
 
     return [
@@ -259,6 +293,12 @@ async def smart_search(
 
 
 def update_search_statistics(db: Session, user_id: int, query: str):
+    """
+    Update the search statistics for a user.
+
+    - If a record exists, increment the count and update the last searched time.
+    - Otherwise, create a new record.
+    """
     stat = (
         db.query(models.SearchStatistics)
         .filter(

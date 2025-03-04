@@ -1,11 +1,32 @@
+"""
+Business Router Module
+This module provides endpoints for business-related operations such as:
+  - Business registration.
+  - Business verification via document upload.
+  - Creating and retrieving business transactions.
+  """
+
+# =====================================================
+# ==================== Imports ========================
+# =====================================================
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from .. import models, schemas, oauth2, utils
-from ..database import get_db
 from typing import List
 import os
+from datetime import datetime, timedelta
 
+# Local imports
+from .. import models, schemas, oauth2, utils
+from ..database import get_db
+
+# =====================================================
+# =============== Global Variables ====================
+# =====================================================
 router = APIRouter(prefix="/business", tags=["Business"])
+
+# =====================================================
+# ==================== Endpoints ======================
+# =====================================================
 
 
 @router.post("/register", response_model=schemas.BusinessUserOut)
@@ -15,13 +36,25 @@ async def register_business(
     db: Session = Depends(get_db),
 ):
     """
-    تسجيل حساب تجاري جديد
+    Register a new business account.
+
+    Parameters:
+      - business_info: BusinessRegistration schema containing business details.
+      - current_user: The authenticated user.
+      - db: Database session.
+
+    Process:
+      - Checks if the user is already registered as a business.
+      - Updates the user's type and business-related fields.
+      - Commits changes and returns the updated user.
+
     """
     if current_user.user_type == models.UserType.BUSINESS:
         raise HTTPException(
             status_code=400, detail="User is already registered as a business"
         )
 
+    # Update user details for business registration
     current_user.user_type = models.UserType.BUSINESS
     current_user.business_name = business_info.business_name
     current_user.business_registration_number = (
@@ -41,14 +74,26 @@ async def verify_business(
     db: Session = Depends(get_db),
 ):
     """
-    التحقق من الحساب التجاري عن طريق رفع المستندات المطلوبة
+    Verify a business account by uploading required documents.
+
+    Parameters:
+      - files: BusinessVerificationUpdate schema containing files (ID document, passport, business document, selfie).
+      - current_user: The authenticated user.
+      - db: Database session.
+
+    Process:
+      - Checks if the user is registered as a business.
+      - Saves the uploaded files using utils.save_upload_file.
+      - Updates verification status to PENDING.
+      - Commits changes and returns the updated user.
+
     """
     if current_user.user_type != models.UserType.BUSINESS:
         raise HTTPException(
             status_code=400, detail="User is not registered as a business"
         )
 
-    # حفظ الملفات المرفوعة
+    # Save uploaded documents
     current_user.id_document_url = await utils.save_upload_file(files.id_document)
     current_user.passport_url = await utils.save_upload_file(files.passport)
     current_user.business_document_url = await utils.save_upload_file(
@@ -70,7 +115,18 @@ async def create_business_transaction(
     db: Session = Depends(get_db),
 ):
     """
-    إنشاء معاملة تجارية جديدة
+    Create a new business transaction.
+
+    Parameters:
+      - transaction: BusinessTransactionCreate schema containing transaction details.
+      - current_user: The authenticated business user.
+      - db: Database session.
+
+    Process:
+      - Checks if the business account is verified.
+      - Retrieves the client user by ID.
+      - Calculates a 5% commission on the transaction amount.
+      - Creates a new transaction with status "pending", commits, and returns the transaction.
     """
     if not current_user.is_verified_business:
         raise HTTPException(status_code=400, detail="Business is not verified")
@@ -83,7 +139,8 @@ async def create_business_transaction(
     if not client_user:
         raise HTTPException(status_code=404, detail="Client user not found")
 
-    commission = transaction.amount * 0.05  # عمولة 5%
+    commission = transaction.amount * 0.05  # 5% commission
+
     new_transaction = models.BusinessTransaction(
         business_user_id=current_user.id,
         client_user_id=client_user.id,
@@ -104,7 +161,12 @@ async def get_business_transactions(
     db: Session = Depends(get_db),
 ):
     """
-    الحصول على قائمة المعاملات التجارية للمستخدم
+    Retrieve a list of business transactions for the current business user.
+
+    Process:
+      - Checks if the business account is verified.
+      - Returns all transactions associated with the business user.
+
     """
     if not current_user.is_verified_business:
         raise HTTPException(status_code=400, detail="Business is not verified")

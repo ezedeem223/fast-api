@@ -1,28 +1,30 @@
 from celery import Celery
+from celery.schedules import crontab
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from pydantic import EmailStr
 from typing import List
+from datetime import datetime, timedelta, date
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
 from app.config import settings
 from app.database import SessionLocal
 from app import models
-from datetime import datetime, timedelta
-from .routers.post import send_notifications_and_share
 from app.utils import is_content_offensive
-from celery.schedules import crontab
-from sqlalchemy.orm import Session
+from .routers.post import send_notifications_and_share
+
 import firebase_admin
 from firebase_admin import credentials, messaging
-from . import models
 
-# إعداد Celery
+# ------------------------- Celery Setup -------------------------
 celery_app = Celery(
     "worker",
     broker=settings.celery_broker_url,
     backend=settings.celery_backend_url,
 )
 
-# إعدادات البريد الإلكتروني
-conf = ConnectionConfig(
+# ------------------------- Email Configuration -------------------------
+email_conf = ConnectionConfig(
     MAIL_USERNAME=settings.mail_username,
     MAIL_PASSWORD=settings.mail_password,
     MAIL_FROM=settings.mail_from,
@@ -33,39 +35,59 @@ conf = ConnectionConfig(
     MAIL_SSL=False,
     USE_CREDENTIALS=True,
 )
+# Create a FastMail instance to be reused in tasks.
+fm = FastMail(email_conf)
 
-# إنشاء كائن FastMail مرة واحدة لاستخدامه في جميع المهام
-fm = FastMail(conf)
-celery_app.conf.beat_schedule["check-old-posts-content"] = {
-    "task": "app.celery_worker.check_old_posts_content",
-    "schedule": crontab(hour=3, minute=0),  # تشغيل كل يوم في الساعة 3 صباحًا
+# ------------------------- Beat Schedule Configuration -------------------------
+celery_app.conf.beat_schedule = {
+    "check-old-posts-content": {
+        "task": "app.celery_worker.check_old_posts_content",
+        "schedule": crontab(hour=3, minute=0),  # Run daily at 3 AM
+    },
+    "cleanup-old-notifications": {
+        "task": "app.celery_worker.cleanup_old_notifications",
+        "schedule": crontab(hour=0, minute=0),  # Run daily at midnight
+    },
+    "process-scheduled-notifications": {
+        "task": "app.celery_worker.process_scheduled_notifications",
+        "schedule": 60.0,  # Run every minute
+    },
+    "update-notification-analytics": {
+        "task": "app.celery_worker.update_notification_analytics",
+        "schedule": crontab(hour="*/1"),  # Run every hour
+    },
+    "clean-expired-blocks": {
+        "task": "app.celery_worker.clean_expired_blocks",
+        "schedule": 3600.0,  # Run every hour
+    },
+    "calculate-ban-effectiveness": {
+        "task": "app.celery_worker.calculate_ban_effectiveness",
+        "schedule": crontab(hour=0, minute=5),  # Run daily at 00:05
+    },
+    "remove-expired-bans": {
+        "task": "app.celery_worker.remove_expired_bans",
+        "schedule": 3600.0,  # Run every hour
+    },
+    "reset-report-counters": {
+        "task": "app.celery_worker.reset_report_counters",
+        "schedule": crontab(
+            day_of_month=1, hour=0, minute=0
+        ),  # Run at the start of each month
+    },
 }
 
-
-celery_app.conf.beat_schedule.update(
-    {
-        "cleanup-old-notifications": {
-            "task": "app.celery_worker.cleanup_old_notifications",
-            "schedule": crontab(hour=0, minute=0),  # تشغيل يومياً في منتصف الليل
-        },
-        "process-scheduled-notifications": {
-            "task": "app.celery_worker.process_scheduled_notifications",
-            "schedule": 60.0,  # تشغيل كل دقيقة
-        },
-        "update-notification-analytics": {
-            "task": "app.celery_worker.update_notification_analytics",
-            "schedule": crontab(hour="*/1"),  # تشغيل كل ساعة
-        },
-    }
-)
+# ------------------------- Celery Tasks -------------------------
 
 
 @celery_app.task
 def cleanup_old_notifications():
-    """تنظيف الإشعارات القديمة وتحديث الإحصائيات"""
-    db = SessionLocal()
+    """
+    Clean up old notifications:
+    - Archive read notifications older than 30 days.
+    - Delete notifications older than 90 days that are already archived.
+    """
+    db: Session = SessionLocal()
     try:
-        # أرشفة الإشعارات القديمة المقروءة
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
         db.query(models.Notification).filter(
             models.Notification.is_read == True,
@@ -73,7 +95,6 @@ def cleanup_old_notifications():
             models.Notification.is_archived == False,
         ).update({"is_archived": True})
 
-        # حذف الإشعارات القديمة جداً
         ninety_days_ago = datetime.utcnow() - timedelta(days=90)
         db.query(models.Notification).filter(
             models.Notification.created_at < ninety_days_ago,
@@ -87,8 +108,12 @@ def cleanup_old_notifications():
 
 @celery_app.task
 def process_scheduled_notifications():
-    """معالجة الإشعارات المجدولة"""
-    db = SessionLocal()
+    """
+    Process scheduled notifications:
+    - Retrieve notifications scheduled to be delivered.
+    - Trigger delivery via separate tasks and mark as delivered.
+    """
+    db: Session = SessionLocal()
     try:
         now = datetime.utcnow()
         scheduled_notifications = (
@@ -99,11 +124,9 @@ def process_scheduled_notifications():
             )
             .all()
         )
-
         for notification in scheduled_notifications:
             deliver_notification.delay(notification.id)
             notification.is_delivered = True
-
         db.commit()
     finally:
         db.close()
@@ -111,8 +134,12 @@ def process_scheduled_notifications():
 
 @celery_app.task
 def deliver_notification(notification_id: int):
-    """تسليم الإشعار عبر جميع القنوات المكونة"""
-    db = SessionLocal()
+    """
+    Deliver a notification via all configured channels based on user preferences.
+    If email notifications are enabled, trigger the email task.
+    If push notifications are enabled, trigger the push notification task.
+    """
+    db: Session = SessionLocal()
     try:
         notification = db.query(models.Notification).get(notification_id)
         if not notification:
@@ -123,26 +150,26 @@ def deliver_notification(notification_id: int):
             .filter(models.NotificationPreferences.user_id == notification.user_id)
             .first()
         )
-
         if not user_prefs:
             return
 
-        # إرسال إشعار البريد الإلكتروني
         if user_prefs.email_notifications:
-            send_email_notification.delay(notification_id)
-
-        # إرسال إشعار Push
+            send_email_task.delay(
+                [notification.user.email], "New Notification", notification.content
+            )
         if user_prefs.push_notifications:
             send_push_notification.delay(notification_id)
-
     finally:
         db.close()
 
 
 @celery_app.task
 def send_push_notification(notification_id: int):
-    """إرسال إشعار Push باستخدام Firebase"""
-    db = SessionLocal()
+    """
+    Send a push notification using Firebase messaging.
+    Retrieves active user devices and sends the notification message.
+    """
+    db: Session = SessionLocal()
     try:
         notification = db.query(models.Notification).get(notification_id)
         if not notification:
@@ -156,7 +183,6 @@ def send_push_notification(notification_id: int):
             )
             .all()
         )
-
         for device in devices:
             message = messaging.Message(
                 notification=messaging.Notification(
@@ -170,7 +196,6 @@ def send_push_notification(notification_id: int):
                 token=device.fcm_token,
             )
             messaging.send(message)
-
     except Exception as e:
         print(f"Error sending push notification: {str(e)}")
     finally:
@@ -179,28 +204,27 @@ def send_push_notification(notification_id: int):
 
 @celery_app.task
 def update_notification_analytics():
-    """تحديث تحليلات الإشعارات"""
-    db = SessionLocal()
+    """
+    Update notification analytics for each user.
+    Calculates engagement rate, response time, and peak hours, and updates the analytics record.
+    """
+    db: Session = SessionLocal()
     try:
         users = db.query(models.User).all()
         for user in users:
             analytics = calculate_user_notification_analytics(db, user.id)
-
             user_analytics = (
                 db.query(models.NotificationAnalytics)
                 .filter(models.NotificationAnalytics.user_id == user.id)
                 .first()
             )
-
             if not user_analytics:
                 user_analytics = models.NotificationAnalytics(user_id=user.id)
                 db.add(user_analytics)
-
             user_analytics.engagement_rate = analytics["engagement_rate"]
             user_analytics.response_time = analytics["response_time"]
             user_analytics.peak_hours = analytics["peak_hours"]
             user_analytics.updated_at = datetime.utcnow()
-
         db.commit()
     finally:
         db.close()
@@ -209,7 +233,12 @@ def update_notification_analytics():
 @celery_app.task
 def send_email_task(email_to: List[EmailStr], subject: str, body: str):
     """
-    مهمة لإرسال البريد الإلكتروني باستخدام Celery.
+    Send an email using FastMail.
+
+    Parameters:
+    - email_to: List of recipient email addresses.
+    - subject: Email subject.
+    - body: Email body (HTML supported).
     """
     try:
         message = MessageSchema(
@@ -225,7 +254,11 @@ def send_email_task(email_to: List[EmailStr], subject: str, body: str):
 
 @celery_app.task
 def check_old_posts_content():
-    db = SessionLocal()
+    """
+    Check old posts content for offensive material.
+    Uses an AI utility to flag posts with potentially offensive content.
+    """
+    db: Session = SessionLocal()
     try:
         old_posts = db.query(models.Post).filter(models.Post.is_flagged == False).all()
         for post in old_posts:
@@ -240,7 +273,10 @@ def check_old_posts_content():
 
 @celery_app.task
 def unblock_user(blocker_id: int, blocked_id: int):
-    db = SessionLocal()
+    """
+    Unblock a user by deleting the block record and send an email notification about the unblock.
+    """
+    db: Session = SessionLocal()
     try:
         block = (
             db.query(models.Block)
@@ -254,14 +290,13 @@ def unblock_user(blocker_id: int, blocked_id: int):
             db.delete(block)
             db.commit()
 
-            # إرسال إشعار بالبريد الإلكتروني عن إلغاء الحظر
             blocker = db.query(models.User).filter(models.User.id == blocker_id).first()
             blocked = db.query(models.User).filter(models.User.id == blocked_id).first()
             if blocker and blocked:
                 send_email_task.delay(
                     [blocked.email],
-                    "تم إلغاء الحظر",
-                    f"لقد تم إلغاء الحظر عنك من قبل المستخدم {blocker.username}.",
+                    "Unblock Notification",
+                    f"You have been unblocked by {blocker.username}.",
                 )
     finally:
         db.close()
@@ -269,15 +304,16 @@ def unblock_user(blocker_id: int, blocked_id: int):
 
 @celery_app.task
 def clean_expired_blocks():
-    db = SessionLocal()
+    """
+    Delete expired block records and send email notifications about the expiry.
+    """
+    db: Session = SessionLocal()
     try:
         expired_blocks = (
             db.query(models.Block).filter(models.Block.ends_at < datetime.now()).all()
         )
         for block in expired_blocks:
             db.delete(block)
-
-            # إرسال إشعار بالبريد الإلكتروني عن انتهاء الحظر
             blocker = (
                 db.query(models.User).filter(models.User.id == block.blocker_id).first()
             )
@@ -287,39 +323,30 @@ def clean_expired_blocks():
             if blocker and blocked:
                 send_email_task.delay(
                     [blocked.email],
-                    "انتهاء مدة الحظر",
-                    f"لقد انتهت مدة الحظر المفروض عليك من قبل المستخدم {blocker.username}.",
+                    "Block Expired",
+                    f"Your block imposed by {blocker.username} has expired.",
                 )
-
         db.commit()
     finally:
         db.close()
 
 
-# إعداد جدول المهام الدورية
-celery_app.conf.beat_schedule = {
-    "clean-expired-blocks": {
-        "task": "app.celery_worker.clean_expired_blocks",
-        "schedule": 3600.0,  # كل ساعة
-    },
-}
-
-
-# مثال على مهمة أخرى
 @celery_app.task
 def some_other_task(data):
     """
-    مثال على مهمة أخرى يمكن معالجتها بواسطة Celery.
+    Example of another task that can be processed by Celery.
     """
-    # قم بتنفيذ المهام هنا
+    # Perform necessary operations with the provided data
     pass
 
 
 @celery_app.task
 def calculate_ban_effectiveness():
-    db = SessionLocal()
+    """
+    Calculate and update ban effectiveness statistics based on posts, comments, and reports.
+    """
+    db: Session = SessionLocal()
     try:
-        # هذا مجرد مثال بسيط. قد تحتاج إلى تعديله بناءً على معايير محددة لتطبيقك
         today = date.today()
         yesterday = today - timedelta(days=1)
 
@@ -337,7 +364,6 @@ def calculate_ban_effectiveness():
                 .filter(models.Report.created_at >= yesterday)
                 .scalar()
             )
-
             effectiveness = (
                 1 - (reported_content / total_content) if total_content > 0 else 0
             )
@@ -347,16 +373,12 @@ def calculate_ban_effectiveness():
         db.close()
 
 
-# إضافة المهمة إلى جدول celery
-celery_app.conf.beat_schedule["calculate-ban-effectiveness"] = {
-    "task": "app.celery_worker.calculate_ban_effectiveness",
-    "schedule": crontab(hour=0, minute=5),  # تشغيل في الساعة 00:05 كل يوم
-}
-
-
 @celery_app.task
 def remove_expired_bans():
-    db = SessionLocal()
+    """
+    Remove expired bans from users by resetting their ban end date.
+    """
+    db: Session = SessionLocal()
     try:
         expired_bans = (
             db.query(models.User)
@@ -370,16 +392,12 @@ def remove_expired_bans():
         db.close()
 
 
-# أضف هذه المهمة إلى جدول المهام
-celery_app.conf.beat_schedule["remove-expired-bans"] = {
-    "task": "app.celery_worker.remove_expired_bans",
-    "schedule": 3600.0,  # كل ساعة
-}
-
-
 @celery_app.task
 def reset_report_counters():
-    db = SessionLocal()
+    """
+    Reset the report counters for all users at the beginning of each month.
+    """
+    db: Session = SessionLocal()
     try:
         db.query(models.User).update(
             {models.User.total_reports: 0, models.User.valid_reports: 0}
@@ -389,23 +407,17 @@ def reset_report_counters():
         db.close()
 
 
-# أضف هذه المهمة إلى جدول المهام
-celery_app.conf.beat_schedule["reset-report-counters"] = {
-    "task": "app.celery_worker.reset_report_counters",
-    "schedule": crontab(day_of_month=1, hour=0, minute=0),  # تشغيل في بداية كل شهر
-}
-
-
 @celery_app.task
 def schedule_post_publication(post_id: int):
-    db = SessionLocal()
+    """
+    Publish a scheduled post if it is not already published and trigger notifications and sharing.
+    """
+    db: Session = SessionLocal()
     try:
         post = db.query(models.Post).filter(models.Post.id == post_id).first()
         if post and not post.is_published:
             post.is_published = True
             db.commit()
-
-            # إرسال الإشعارات ومشاركة المنشور
             user = db.query(models.User).filter(models.User.id == post.owner_id).first()
             send_notifications_and_share(None, post, user)
     finally:

@@ -9,7 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 def initialize_firebase():
-    """Initialize Firebase with the configuration from settings"""
+    """
+    Initialize Firebase using service account credentials and configuration from settings.
+
+    Returns:
+        bool: True if initialization is successful, False otherwise.
+    """
     try:
         cred = credentials.Certificate(
             {
@@ -41,7 +46,18 @@ def initialize_firebase():
 def send_multicast_notification(
     tokens: List[str], title: str, body: str, data: dict = None
 ):
-    """إرسال إشعار لعدة أجهزة"""
+    """
+    Send a multicast push notification to multiple device tokens.
+
+    Parameters:
+        tokens (List[str]): List of device tokens.
+        title (str): Notification title.
+        body (str): Notification body.
+        data (dict, optional): Additional data payload.
+
+    Returns:
+        messaging.BatchResponse or None: The response from Firebase or None on error.
+    """
     try:
         message = messaging.MulticastMessage(
             tokens=tokens,
@@ -56,7 +72,18 @@ def send_multicast_notification(
 
 
 def send_topic_notification(topic: str, title: str, body: str, data: dict = None):
-    """إرسال إشعار لموضوع معين"""
+    """
+    Send a push notification to a specific topic.
+
+    Parameters:
+        topic (str): The topic name.
+        title (str): Notification title.
+        body (str): Notification body.
+        data (dict, optional): Additional data payload.
+
+    Returns:
+        str or None: The message ID on success or None on error.
+    """
     try:
         message = messaging.Message(
             topic=topic,
@@ -71,7 +98,16 @@ def send_topic_notification(topic: str, title: str, body: str, data: dict = None
 
 
 def subscribe_to_topic(tokens: List[str], topic: str):
-    """اشتراك أجهزة في موضوع"""
+    """
+    Subscribe devices to a specified topic.
+
+    Parameters:
+        tokens (List[str]): List of device tokens.
+        topic (str): The topic to subscribe to.
+
+    Returns:
+        messaging.TopicManagementResponse or None: The response or None on error.
+    """
     try:
         response = messaging.subscribe_to_topic(tokens, topic)
         return response
@@ -81,7 +117,16 @@ def subscribe_to_topic(tokens: List[str], topic: str):
 
 
 def unsubscribe_from_topic(tokens: List[str], topic: str):
-    """إلغاء اشتراك أجهزة من موضوع"""
+    """
+    Unsubscribe devices from a specified topic.
+
+    Parameters:
+        tokens (List[str]): List of device tokens.
+        topic (str): The topic to unsubscribe from.
+
+    Returns:
+        messaging.TopicManagementResponse or None: The response or None on error.
+    """
     try:
         response = messaging.unsubscribe_from_topic(tokens, topic)
         return response
@@ -91,13 +136,21 @@ def unsubscribe_from_topic(tokens: List[str], topic: str):
 
 
 def send_push_notification(token: str, title: str, body: str, data: dict = None):
-    """Send a push notification to a specific device"""
+    """
+    Send a push notification to a single device.
+
+    Parameters:
+        token (str): The device token.
+        title (str): Notification title.
+        body (str): Notification body.
+        data (dict, optional): Additional data payload.
+
+    Returns:
+        str or None: The message ID on success or None on error.
+    """
     try:
         message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
+            notification=messaging.Notification(title=title, body=body),
             data=data or {},
             token=token,
         )

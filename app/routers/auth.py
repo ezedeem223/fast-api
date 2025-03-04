@@ -1,31 +1,40 @@
 """
 Authentication Router Module
-يوفر نقاط النهاية الخاصة بالمصادقة وإدارة الجلسات
+This module provides endpoints for authentication and session management.
 """
 
+# =====================================================
+# ==================== Imports ========================
+# =====================================================
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 import uuid
-from typing import Optional
+from typing import Optional, List
 import pyotp
 from jose import jwt, JWTError
 from fastapi_mail import FastMail, MessageSchema
 from pydantic import EmailStr
 
+# Local imports
 from .. import database, schemas, models, utils, oauth2
 from ..config import settings
 from ..notifications import send_login_notification, send_email_notification
 from ..utils import log_user_event
 
+# =====================================================
+# =============== Global Constants ====================
+# =====================================================
 router = APIRouter(tags=["Authentication"])
-
-# ثوابت المصادقة
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 TOKEN_EXPIRY = timedelta(hours=1)
+
+# =====================================================
+# ==================== Endpoints ======================
+# =====================================================
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -36,33 +45,31 @@ def login(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    تسجيل دخول المستخدم
+    User login endpoint.
 
     Parameters:
-        user_credentials: بيانات اعتماد المستخدم
-        db: جلسة قاعدة البيانات
-        request: طلب HTTP
-        background_tasks: مهام خلفية
+        - user_credentials: User login credentials.
+        - db: Database session.
+        - request: HTTP request.
+        - background_tasks: Background tasks manager.
 
     Returns:
-        Token: رمز الوصول
+        A token dictionary.
     """
-    # التحقق من وجود المستخدم
+    # Verify user existence
     user = (
         db.query(models.User)
         .filter(models.User.email == user_credentials.username)
         .first()
     )
-
     if not user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
         )
 
-    # التحقق من حالة الحساب
+    # Check account status
     if user.is_suspended:
         raise HTTPException(status_code=403, detail="الحساب موقوف")
-
     if user.account_locked_until and user.account_locked_until > datetime.now(
         timezone.utc
     ):
@@ -71,7 +78,7 @@ def login(
             detail="الحساب مقفل. حاول مرة أخرى لاحقاً",
         )
 
-    # التحقق من كلمة المرور
+    # Verify password
     if not utils.verify(user_credentials.password, user.password):
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
@@ -81,11 +88,11 @@ def login(
             status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
         )
 
-    # إعادة تعيين عدادات الفشل
+    # Reset failure counters
     user.failed_login_attempts = 0
     user.account_locked_until = None
 
-    # التحقق من المصادقة الثنائية
+    # Check for 2FA
     if user.is_2fa_enabled:
         return {
             "access_token": "2FA_REQUIRED",
@@ -105,17 +112,14 @@ def login_2fa(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    تسجيل الدخول باستخدام المصادقة الثنائية
+    Login with Two-Factor Authentication.
 
     Parameters:
-        user_id: معرف المستخدم
-        otp: رمز التحقق
-        db: جلسة قاعدة البيانات
-        request: طلب HTTP
-        background_tasks: مهام خلفية
+        - user_id: User ID.
+        - otp: One-time password.
 
     Returns:
-        Token: رمز الوصول
+        A token dictionary.
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user or not user.is_2fa_enabled:
@@ -132,21 +136,12 @@ def complete_login(
     user: models.User, db: Session, request: Request, background_tasks: BackgroundTasks
 ) -> dict:
     """
-    إكمال عملية تسجيل الدخول
-
-    Parameters:
-        user: المستخدم
-        db: جلسة قاعدة البيانات
-        request: طلب HTTP
-        background_tasks: مهام خلفية
-
-    Returns:
-        dict: رمز الوصول ونوعه
+    Complete the login process by creating a user session,
+    generating an access token, logging the event, and sending a login notification.
     """
-    # تحديث بيانات آخر تسجيل دخول
     user.last_login = datetime.now(timezone.utc)
 
-    # إنشاء جلسة جديدة
+    # Create a new session
     session = models.UserSession(
         user_id=user.id,
         session_id=str(uuid.uuid4()),
@@ -156,12 +151,12 @@ def complete_login(
     db.add(session)
     db.commit()
 
-    # إنشاء رمز الوصول
+    # Generate access token
     access_token = oauth2.create_access_token(
         data={"user_id": user.id, "session_id": session.session_id}
     )
 
-    # تسجيل الحدث
+    # Log the login event
     log_user_event(
         db,
         user.id,
@@ -172,7 +167,7 @@ def complete_login(
         },
     )
 
-    # إرسال إشعار تسجيل الدخول
+    # Send login notification asynchronously
     background_tasks.add_task(
         send_login_notification,
         user.email,
@@ -190,22 +185,17 @@ def logout(
     token: str = Depends(oauth2.oauth2_scheme),
 ):
     """
-    تسجيل خروج المستخدم
+    Logout endpoint.
 
-    Parameters:
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي
-        token: رمز الوصول
+    Terminates the current session and blacklists the access token.
     """
     try:
-        # التحقق من صحة الرمز
         token_data = oauth2.verify_access_token(token, None)
         if not token_data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="رمز غير صالح"
             )
 
-        # إنهاء الجلسة
         session = (
             db.query(models.UserSession)
             .filter(
@@ -221,10 +211,9 @@ def logout(
         else:
             utils.log_user_event(db, current_user.id, "logout_session_not_found")
 
-        # تسجيل حدث تسجيل الخروج
         utils.log_user_event(db, current_user.id, "logout")
 
-        # إضافة الرمز إلى القائمة السوداء
+        # Add token to blacklist
         blacklist_token = models.TokenBlacklist(token=token, user_id=current_user.id)
         db.add(blacklist_token)
         db.commit()
@@ -246,7 +235,7 @@ def logout_all_devices(
     db: Session = Depends(database.get_db),
 ):
     """
-    تسجيل خروج المستخدم من جميع الأجهزة باستثناء الجهاز الحالي
+    Logout from all devices except the current session.
     """
     db.query(models.UserSession).filter(
         models.UserSession.user_id == current_user.id,
@@ -262,7 +251,9 @@ async def invalidate_all_sessions(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(database.get_db),
 ):
-    """إبطال جميع الجلسات"""
+    """
+    Invalidate (delete) all sessions for the current user.
+    """
     db.query(models.UserSession).filter(
         models.UserSession.user_id == current_user.id
     ).delete()
@@ -271,7 +262,9 @@ async def invalidate_all_sessions(
 
 
 def create_password_reset_token(email: str) -> str:
-    """إنشاء رمز إعادة تعيين كلمة المرور"""
+    """
+    Create a password reset token valid for 15 minutes.
+    """
     expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode = {"exp": expire, "sub": email}
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -284,7 +277,8 @@ async def reset_password_request(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    طلب إعادة تعيين كلمة المرور
+    Endpoint to request a password reset.
+    If the account exists, generates a reset token and sends an email.
     """
     user = db.query(models.User).filter(models.User.email == email.email).first()
     if user:
@@ -316,7 +310,7 @@ async def reset_password(
     db: Session = Depends(database.get_db),
 ):
     """
-    إعادة تعيين كلمة المرور
+    Reset the user's password after verifying the reset token.
     """
     try:
         payload = jwt.decode(
@@ -352,7 +346,7 @@ async def reset_password(
 @router.post("/refresh-token", response_model=schemas.Token)
 async def refresh_token(refresh_token: str, db: Session = Depends(database.get_db)):
     """
-    تجديد رمز الوصول باستخدام رمز التحديث
+    Refresh the access token using the provided refresh token.
     """
     try:
         payload = jwt.decode(
@@ -375,11 +369,7 @@ async def refresh_token(refresh_token: str, db: Session = Depends(database.get_d
 @router.post("/verify-email")
 async def verify_email(token: str, db: Session = Depends(database.get_db)):
     """
-    التحقق من البريد الإلكتروني
-
-    Parameters:
-        token: رمز التحقق
-        db: جلسة قاعدة البيانات
+    Verify the user's email address using a token.
     """
     try:
         payload = jwt.decode(
@@ -398,7 +388,6 @@ async def verify_email(token: str, db: Session = Depends(database.get_db)):
     user.is_verified = True
     db.commit()
     log_user_event(db, user.id, "email_verified")
-
     return {"message": "تم التحقق من البريد الإلكتروني بنجاح"}
 
 
@@ -409,12 +398,7 @@ async def resend_verification_email(
     db: Session = Depends(database.get_db),
 ):
     """
-    إعادة إرسال رابط التحقق من البريد الإلكتروني
-
-    Parameters:
-        email: نموذج البريد الإلكتروني
-        background_tasks: مهام خلفية
-        db: جلسة قاعدة البيانات
+    Resend the email verification link if the account exists and is not verified.
     """
     user = db.query(models.User).filter(models.User.email == email.email).first()
     if user and not user.is_verified:
@@ -442,18 +426,11 @@ async def change_email(
     db: Session = Depends(database.get_db),
 ):
     """
-    تغيير البريد الإلكتروني للمستخدم
-
-    Parameters:
-        email_change: نموذج تغيير البريد الإلكتروني
-        current_user: المستخدم الحالي
-        db: جلسة قاعدة البيانات
+    Change the user's email address.
+    Verifies the current password and checks for uniqueness of the new email.
     """
-    # التحقق من كلمة المرور
     if not utils.verify(email_change.password, current_user.password):
         raise HTTPException(status_code=400, detail="كلمة المرور غير صحيحة")
-
-    # التحقق من عدم استخدام البريد الإلكتروني من قبل مستخدم آخر
     existing_user = (
         db.query(models.User)
         .filter(models.User.email == email_change.new_email)
@@ -462,18 +439,15 @@ async def change_email(
     if existing_user:
         raise HTTPException(status_code=400, detail="البريد الإلكتروني مستخدم بالفعل")
 
-    # تحديث البريد الإلكتروني
     current_user.email = email_change.new_email
     current_user.is_verified = False
     db.commit()
-
     log_user_event(
         db,
         current_user.id,
         "email_changed",
         {"old_email": email_change.old_email, "new_email": email_change.new_email},
     )
-
     return {"message": "تم تغيير البريد الإلكتروني بنجاح"}
 
 
@@ -483,11 +457,7 @@ async def get_active_sessions(
     db: Session = Depends(database.get_db),
 ):
     """
-    الحصول على قائمة الجلسات النشطة للمستخدم
-
-    Parameters:
-        current_user: المستخدم الحالي
-        db: جلسة قاعدة البيانات
+    Retrieve a list of active sessions for the current user.
     """
     sessions = (
         db.query(models.UserSession)
@@ -505,12 +475,7 @@ async def end_session(
     db: Session = Depends(database.get_db),
 ):
     """
-    إنهاء جلسة محددة
-
-    Parameters:
-        session_id: معرف الجلسة
-        current_user: المستخدم الحالي
-        db: جلسة قاعدة البيانات
+    End a specific session by session ID.
     """
     session = (
         db.query(models.UserSession)
@@ -520,13 +485,10 @@ async def end_session(
         )
         .first()
     )
-
     if not session:
         raise HTTPException(status_code=404, detail="الجلسة غير موجودة")
-
     db.delete(session)
     db.commit()
-
     log_user_event(db, current_user.id, "session_ended", {"session_id": session_id})
     return {"message": "تم إنهاء الجلسة بنجاح"}
 
@@ -534,39 +496,30 @@ async def end_session(
 @router.post("/password-strength")
 async def check_password_strength(password: str):
     """
-    التحقق من قوة كلمة المرور
-
-    Parameters:
-        password: كلمة المرور المراد فحصها
+    Check the strength of a given password and provide suggestions.
     """
     strength = 0
     suggestions = []
-
     if len(password) >= 8:
         strength += 1
     else:
         suggestions.append("يجب أن تكون كلمة المرور 8 أحرف على الأقل")
-
     if any(c.isupper() for c in password):
         strength += 1
     else:
         suggestions.append("يجب أن تحتوي على حرف كبير واحد على الأقل")
-
     if any(c.islower() for c in password):
         strength += 1
     else:
         suggestions.append("يجب أن تحتوي على حرف صغير واحد على الأقل")
-
     if any(c.isdigit() for c in password):
         strength += 1
     else:
         suggestions.append("يجب أن تحتوي على رقم واحد على الأقل")
-
     if any(not c.isalnum() for c in password):
         strength += 1
     else:
         suggestions.append("يجب أن تحتوي على رمز خاص واحد على الأقل")
-
     strength_text = {
         0: "ضعيفة جداً",
         1: "ضعيفة",
@@ -575,7 +528,6 @@ async def check_password_strength(password: str):
         4: "قوية",
         5: "قوية جداً",
     }
-
     return {
         "strength": strength,
         "strength_text": strength_text[strength],
@@ -590,19 +542,11 @@ async def set_security_questions(
     db: Session = Depends(database.get_db),
 ):
     """
-    تعيين أسئلة الأمان للمستخدم
-
-    Parameters:
-        questions: نموذج أسئلة الأمان
-        current_user: المستخدم الحالي
-        db: جلسة قاعدة البيانات
+    Set security questions for the user by encrypting the answers.
     """
-    # تشفير الإجابات قبل التخزين
     encrypted_answers = {q.question: utils.hash(q.answer) for q in questions.questions}
-
     current_user.security_questions = encrypted_answers
     db.commit()
-
     log_user_event(db, current_user.id, "security_questions_set")
     return {"message": "تم تعيين أسئلة الأمان بنجاح"}
 
@@ -614,46 +558,31 @@ async def verify_security_questions(
     db: Session = Depends(database.get_db),
 ):
     """
-    التحقق من إجابات أسئلة الأمان
-
-    Parameters:
-        answers: قائمة الإجابات
-        email: البريد الإلكتروني للمستخدم
-        db: جلسة قاعدة البيانات
+    Verify the answers to the security questions.
+    If correct, generate a password reset token.
     """
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user or not user.security_questions:
         raise HTTPException(
             status_code=404, detail="المستخدم غير موجود أو لم يتم تعيين أسئلة الأمان"
         )
-
     correct_answers = 0
     for answer in answers:
         stored_answer = user.security_questions.get(answer.question)
         if stored_answer and utils.verify(answer.answer, stored_answer):
             correct_answers += 1
-
     if correct_answers < len(answers):
         raise HTTPException(status_code=400, detail="بعض الإجابات غير صحيحة")
-
-    # إنشاء رمز إعادة تعيين كلمة المرور
     token = create_password_reset_token(email)
     user.reset_token = token
     user.reset_token_expires = datetime.now() + TOKEN_EXPIRY
     db.commit()
-
     return {"reset_token": token}
 
 
 def create_verification_token(email: str) -> str:
     """
-    إنشاء رمز التحقق من البريد الإلكتروني
-
-    Parameters:
-        email: البريد الإلكتروني
-
-    Returns:
-        str: رمز التحقق
+    Create an email verification token valid for 1 day.
     """
     expire = datetime.utcnow() + timedelta(days=1)
     to_encode = {"exp": expire, "sub": email}

@@ -1,29 +1,41 @@
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from . import schemas, database, models, oauth2
+from . import schemas, database, models
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
 from typing import Optional
-from .ip_utils import get_client_ip, is_ip_banned, detect_ip_evasion
-from ..utils import get_client_ip, is_ip_banned, detect_ip_evasion
 
+# Removed duplicate import from ..utils; using functions from .ip_utils only
+from .ip_utils import get_client_ip, is_ip_banned, detect_ip_evasion
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# OAuth2 scheme configuration for token retrieval
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
+# TokenData model for storing token-related data
 class TokenData(schemas.BaseModel):
     id: Optional[int] = None
 
 
 def create_access_token(data: dict):
+    """
+    Create a JWT access token with an expiration time.
+
+    - Copies input data.
+    - Adds an expiry field using current UTC time plus the configured minutes.
+    - Converts 'user_id' to an integer if present.
+    - Encodes the token using RSA private key.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
@@ -46,6 +58,12 @@ def create_access_token(data: dict):
 
 
 def get_current_session(token: str = Depends(oauth2_scheme)):
+    """
+    Extract the current session ID from the token.
+
+    - Decodes the token using the secret key.
+    - Returns session_id if present; otherwise, raises an HTTPException.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -62,9 +80,15 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
 
 
 def verify_access_token(token: str, credentials_exception):
+    """
+    Verify the JWT access token.
+
+    - Decodes the token using the RSA public key.
+    - Retrieves and validates the user_id.
+    - Returns a TokenData instance with the user_id.
+    """
     try:
         logger.debug(f"Token to verify: {token[:20]}...")
-
         payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
         logger.debug(f"Decoded Payload: {payload}")
 
@@ -94,6 +118,17 @@ def get_current_user(
     db: Session = Depends(database.get_db),
     request: Request = None,
 ):
+    """
+    Retrieve the current user based on the provided JWT token.
+
+    - Optionally checks the client IP if a request is provided.
+    - Validates token against RSA public key.
+    - Verifies token is not blacklisted.
+    - Checks for possible IP evasion.
+    - Checks if the user is banned.
+    - Updates the user's current token in the database.
+    - Returns the user instance.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -122,7 +157,7 @@ def get_current_user(
         if user is None:
             raise credentials_exception
 
-        # التحقق من القائمة السوداء للتوكن
+        # Check if the token is blacklisted
         blacklisted_token = (
             db.query(models.TokenBlacklist)
             .filter(models.TokenBlacklist.token == token)
@@ -137,19 +172,19 @@ def get_current_user(
         if request:
             if detect_ip_evasion(db, user.id, client_ip):
                 logger.warning(f"Possible IP evasion detected for user {user.id}")
-                # هنا يمكنك إضافة منطق إضافي، مثل:
-                # - إرسال إشعار للمسؤول
-                # - حظر المستخدم مؤقتًا
-                # - طلب مصادقة إضافية
+                # Additional logic can be added here, e.g.:
+                # - Sending a notification to the admin
+                # - Temporarily blocking the user
+                # - Requesting additional authentication
 
-        # التحقق من حالة الحظر للمستخدم
+        # Check if the user is banned
         if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User is banned until {user.current_ban_end}",
             )
 
-        # تحديث التوكن الحالي للمستخدم
+        # Update the user's current token in the database
         user.current_token = token
         db.commit()
 
@@ -160,3 +195,6 @@ def get_current_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
         )
+
+
+# التكرار في الاستيراد: هناك استيراد مزدوج لنفس الدوال (get_client_ip, is_ip_banned, detect_ip_evasion) من مسارين مختلفين؛ لذلك يجب إزالة التكرار وترك مصدر واحد.

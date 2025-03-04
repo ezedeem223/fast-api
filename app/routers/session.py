@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 from .. import models, schemas, oauth2, crypto
 from ..database import get_db
 
@@ -14,12 +15,18 @@ def create_encrypted_session(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    إنشاء جلسة مشفرة جديدة بين المستخدم الحالي ومستخدم آخر.
+    Create a new encrypted session between the current user and another user.
+    """
+    # Retrieve the other user based on the provided ID.
     other_user = (
         db.query(models.User).filter(models.User.id == session.other_user_id).first()
     )
     if not other_user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check if an encrypted session already exists between the two users.
     existing_session = (
         db.query(models.EncryptedSession)
         .filter(
@@ -28,14 +35,15 @@ def create_encrypted_session(
         )
         .first()
     )
-
     if existing_session:
         raise HTTPException(status_code=400, detail="Session already exists")
 
-    # إنشاء جلسة Signal جديدة
+    # Initialize a new Signal Protocol session.
+    # The SignalProtocol class should handle key exchange and generate the necessary keys.
     signal_protocol = crypto.SignalProtocol()
     signal_protocol.initial_key_exchange(other_user.public_key)
 
+    # Create a new EncryptedSession record with the keys obtained.
     new_session = models.EncryptedSession(
         user_id=current_user.id,
         other_user_id=other_user.id,
@@ -49,6 +57,7 @@ def create_encrypted_session(
     db.commit()
     db.refresh(new_session)
 
+    # Return a simplified session response.
     return schemas.EncryptedSessionOut(
         id=new_session.id,
         user_id=new_session.user_id,
@@ -64,6 +73,11 @@ def update_encrypted_session(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث بيانات الجلسة المشفرة للمستخدم الحالي.
+    Update the encrypted session data for the current user.
+    """
+    # Retrieve the session by ID and verify it belongs to the current user.
     session = (
         db.query(models.EncryptedSession)
         .filter(
@@ -72,10 +86,10 @@ def update_encrypted_session(
         )
         .first()
     )
-
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Update the session keys with the new values provided.
     session.root_key = session_update.root_key
     session.chain_key = session_update.chain_key
     session.next_header_key = session_update.next_header_key
@@ -84,6 +98,7 @@ def update_encrypted_session(
     db.commit()
     db.refresh(session)
 
+    # Return the updated session details.
     return schemas.EncryptedSessionOut(
         id=session.id,
         user_id=session.user_id,

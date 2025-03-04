@@ -7,9 +7,9 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
+from datetime import datetime
 from .. import models, schemas, oauth2
 from ..database import get_db
-from datetime import datetime
 from ..notifications import ConnectionManager
 
 router = APIRouter(prefix="/screen-share", tags=["Screen Share"])
@@ -21,7 +21,26 @@ async def start_screen_share(
     screen_share: schemas.ScreenShareStart,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-):
+) -> schemas.ScreenShareSessionOut:
+    """
+    Start a new screen sharing session for a call.
+
+    This endpoint verifies that the call exists and that the current user is either
+    the caller or receiver of the call. It also ensures that no active screen share
+    session already exists for the call.
+
+    Args:
+        screen_share (schemas.ScreenShareStart): Data containing the call_id.
+        db (Session): Database session.
+        current_user (models.User): The authenticated user.
+
+    Returns:
+        schemas.ScreenShareSessionOut: The newly created screen share session.
+
+    Raises:
+        HTTPException: If the call is not found, if the user is not authorized, or
+                       if an active screen share session already exists.
+    """
     call = db.query(models.Call).filter(models.Call.id == screen_share.call_id).first()
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
@@ -39,7 +58,6 @@ async def start_screen_share(
         )
         .first()
     )
-
     if active_share:
         raise HTTPException(
             status_code=400,
@@ -51,11 +69,11 @@ async def start_screen_share(
     db.commit()
     db.refresh(new_session)
 
-    # Update the call with the current screen share session
+    # Update the call with the current screen share session ID
     call.current_screen_share_id = new_session.id
     db.commit()
 
-    # Notify other participants
+    # Notify the other participant that screen sharing has started
     other_user_id = (
         call.receiver_id if current_user.id == call.caller_id else call.caller_id
     )
@@ -71,7 +89,25 @@ async def end_screen_share(
     screen_share: schemas.ScreenShareEnd,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-):
+) -> schemas.ScreenShareSessionOut:
+    """
+    End an active screen sharing session.
+
+    Verifies that the session exists and that the current user is the one who started it.
+    Updates the session's end time and status, clears the current screen share from the call,
+    and notifies the other participant.
+
+    Args:
+        screen_share (schemas.ScreenShareEnd): Data containing the session_id.
+        db (Session): Database session.
+        current_user (models.User): The authenticated user.
+
+    Returns:
+        schemas.ScreenShareSessionOut: The updated screen share session.
+
+    Raises:
+        HTTPException: If the session is not found or if the user is not authorized.
+    """
     session = (
         db.query(models.ScreenShareSession)
         .filter(models.ScreenShareSession.id == screen_share.session_id)
@@ -96,7 +132,7 @@ async def end_screen_share(
         call.current_screen_share_id = None
         db.commit()
 
-    # Notify other participants
+    # Notify the other participant that screen sharing has ended
     other_user_id = (
         call.receiver_id if current_user.id == call.caller_id else call.caller_id
     )
@@ -113,7 +149,26 @@ async def update_screen_share(
     update_data: schemas.ScreenShareUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
-):
+) -> schemas.ScreenShareSessionOut:
+    """
+    Update an existing screen share session.
+
+    Allows the sharer to update the status and error message of the session.
+    If the status is updated to ENDED, the end time is recorded.
+    The other participant is notified of the update.
+
+    Args:
+        session_id (int): The ID of the screen share session.
+        update_data (schemas.ScreenShareUpdate): Data containing the new status and error message.
+        db (Session): Database session.
+        current_user (models.User): The authenticated user.
+
+    Returns:
+        schemas.ScreenShareSessionOut: The updated screen share session.
+
+    Raises:
+        HTTPException: If the session is not found or if the user is not authorized.
+    """
     session = (
         db.query(models.ScreenShareSession)
         .filter(models.ScreenShareSession.id == session_id)
@@ -135,7 +190,7 @@ async def update_screen_share(
     db.commit()
     db.refresh(session)
 
-    # Notify other participants about the update
+    # Notify the other participant about the update
     call = db.query(models.Call).filter(models.Call.id == session.call_id).first()
     if call:
         other_user_id = (
@@ -160,6 +215,19 @@ async def screen_share_websocket(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    WebSocket endpoint for real-time screen sharing data transmission.
+
+    Accepts a WebSocket connection, verifies the user’s participation in the call,
+    and continuously relays screen share data to the other participant.
+    In case of disconnection, if an active session exists, it is marked as ended.
+
+    Args:
+        websocket (WebSocket): The WebSocket connection.
+        call_id (int): The ID of the call.
+        db (Session): Database session.
+        current_user (models.User): The authenticated user.
+    """
     await websocket.accept()
     try:
         call = db.query(models.Call).filter(models.Call.id == call_id).first()
@@ -169,8 +237,7 @@ async def screen_share_websocket(
 
         while True:
             data = await websocket.receive_text()
-            # Here you would process the screen share data and send it to other participants
-            # For example:
+            # Relay screen share data to the other participant
             other_user_id = (
                 call.receiver_id
                 if current_user.id == call.caller_id
@@ -180,7 +247,7 @@ async def screen_share_websocket(
                 {"type": "screen_share_data", "data": data}, other_user_id
             )
     except WebSocketDisconnect:
-        # Handle WebSocket disconnection
+        # On disconnection, end the active screen share session if exists
         active_share = (
             db.query(models.ScreenShareSession)
             .filter(

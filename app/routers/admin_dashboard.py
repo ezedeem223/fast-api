@@ -1,17 +1,21 @@
 """
 Admin Dashboard Router Module
-يوفر نقاط النهاية الخاصة بلوحة تحكم المسؤول مع وظائف التحليلات والإحصائيات
+This module provides endpoints for the admin dashboard,
+including analytics and statistics functions.
 """
 
+# =====================================================
+# ==================== Imports ========================
+# =====================================================
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
-from typing import List, Optional
-from fastapi.templating import Jinja2Templates
 from datetime import date, timedelta
-from ..utils import cache
+from typing import List, Optional
 
+# Local imports
 from .. import models, schemas, oauth2
 from ..database import get_db
 from ..analytics import (
@@ -22,19 +26,30 @@ from ..analytics import (
     get_recent_searches,
     generate_search_trends_chart,
 )
+from ..utils import cache
 
+# =====================================================
+# =============== Global Variables ====================
+# =====================================================
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 templates = Jinja2Templates(directory="app/templates")
 
+# =====================================================
+# =================== Endpoints =======================
+# =====================================================
 
-# لوحة التحكم الرئيسية
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(
     request: Request,
     current_user: models.User = Depends(oauth2.get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """عرض لوحة التحكم الرئيسية للمسؤول"""
+    """
+    Main admin dashboard view.
+    Retrieves search trends, popular searches, and recent searches
+    to render the admin dashboard template.
+    """
     search_trends_chart = generate_search_trends_chart()
     popular_searches = get_popular_searches(db, limit=10)
     recent_searches = get_recent_searches(db, limit=10)
@@ -50,24 +65,33 @@ async def admin_dashboard(
     )
 
 
-# التحقق من صلاحيات المسؤول
+# -----------------------------------------------------
+# Helper function for Admin Authentication
+# -----------------------------------------------------
 async def get_current_admin(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """التحقق من صلاحيات المسؤول"""
+    """
+    Verify that the current user has admin privileges.
+    """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     return current_user
 
 
-# الإحصائيات العامة
+# -----------------------------------------------------
+# General Statistics Endpoint
+# -----------------------------------------------------
 @router.get("/stats")
-@cache(expire=300)  # تخزين مؤقت لمدة 5 دقائق
+@cache(expire=300)  # Cache for 5 minutes
 async def get_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على الإحصائيات العامة للنظام"""
+    """
+    Get overall system statistics.
+    Returns counts for posts, users, reports, and communities.
+    """
     try:
         stats = {
             "total_posts": db.query(models.Post).count(),
@@ -83,7 +107,9 @@ async def get_statistics(
         )
 
 
-# إدارة المستخدمين
+# -----------------------------------------------------
+# Users Management Endpoints
+# -----------------------------------------------------
 @router.get("/users", response_model=List[schemas.UserOut])
 async def get_users(
     db: Session = Depends(get_db),
@@ -93,18 +119,18 @@ async def get_users(
     sort_by: str = Query("id", description="Field to sort by"),
     order: str = Query("asc", description="Sort order (asc or desc)"),
 ):
-    """الحصول على قائمة المستخدمين مع إمكانية الترتيب والتصفية"""
+    """
+    Retrieve a list of users with optional sorting and filtering.
+    """
     try:
         query = db.query(models.User)
-
-        # تطبيق الترتيب
+        # Apply sorting if the attribute exists in the User model.
         if hasattr(models.User, sort_by):
             order_column = getattr(models.User, sort_by)
             if order == "desc":
                 query = query.order_by(desc(order_column))
             else:
                 query = query.order_by(asc(order_column))
-
         users = query.offset(skip).limit(limit).all()
         return users
     except Exception as e:
@@ -114,7 +140,6 @@ async def get_users(
         )
 
 
-# تحديث دور المستخدم
 @router.put("/users/{user_id}/role", response_model=schemas.UserOut)
 async def update_user_role(
     user_id: int,
@@ -122,27 +147,32 @@ async def update_user_role(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """تحديث دور المستخدم"""
+    """
+    Update a user's role (e.g. moderator, admin).
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     user.is_moderator = role_update.is_moderator
     user.is_admin = role_update.is_admin
-
     db.commit()
     db.refresh(user)
     return user
 
 
-# نظرة عامة على التقارير
+# -----------------------------------------------------
+# Reports Overview Endpoint
+# -----------------------------------------------------
 @router.get("/reports/overview")
 @cache(expire=300)
 async def get_reports_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على نظرة عامة على التقارير"""
+    """
+    Get an overview of reports.
+    Returns total reports, pending reports, and resolved reports counts.
+    """
     try:
         stats = {
             "total_reports": db.query(models.Report).count(),
@@ -161,14 +191,19 @@ async def get_reports_overview(
         )
 
 
-# نظرة عامة على المجتمعات
+# -----------------------------------------------------
+# Communities Overview Endpoint
+# -----------------------------------------------------
 @router.get("/communities/overview")
 @cache(expire=300)
 async def get_communities_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على نظرة عامة على المجتمعات"""
+    """
+    Get an overview of communities.
+    Returns total communities and active communities counts.
+    """
     try:
         stats = {
             "total_communities": db.query(models.Community).count(),
@@ -184,7 +219,9 @@ async def get_communities_overview(
         )
 
 
-# نشاط المستخدم
+# -----------------------------------------------------
+# User Activity Endpoint
+# -----------------------------------------------------
 @router.get("/user-activity/{user_id}")
 async def user_activity(
     user_id: int,
@@ -192,7 +229,9 @@ async def user_activity(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على نشاط المستخدم خلال فترة محددة"""
+    """
+    Retrieve user activity for a specified number of days.
+    """
     try:
         return get_user_activity(db, user_id, days)
     except Exception as e:
@@ -202,14 +241,18 @@ async def user_activity(
         )
 
 
-# المستخدمين المشكلين
+# -----------------------------------------------------
+# Problematic Users Endpoint
+# -----------------------------------------------------
 @router.get("/problematic-users", response_model=List[schemas.UserOut])
 async def problematic_users(
     threshold: int = Query(5, ge=1),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على قائمة المستخدمين المشكلين"""
+    """
+    Retrieve a list of problematic users based on a threshold.
+    """
     try:
         users = get_problematic_users(db, threshold)
         return [schemas.UserOut.from_orm(user) for user in users]
@@ -220,14 +263,18 @@ async def problematic_users(
         )
 
 
-# إحصائيات الحظر
+# -----------------------------------------------------
+# Ban Statistics Endpoints
+# -----------------------------------------------------
 @router.get("/ban-statistics")
 @cache(expire=300)
 async def ban_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على إحصائيات الحظر"""
+    """
+    Retrieve ban statistics.
+    """
     try:
         return get_ban_statistics(db)
     except Exception as e:
@@ -237,14 +284,15 @@ async def ban_statistics(
         )
 
 
-# نظرة عامة على إحصائيات الحظر
 @router.get("/ban-overview", response_model=schemas.BanStatisticsOverview)
 @cache(expire=300)
 async def get_ban_statistics_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    """الحصول على نظرة عامة على إحصائيات الحظر"""
+    """
+    Retrieve an overview of ban statistics for the last 30 days.
+    """
     try:
         thirty_days_ago = date.today() - timedelta(days=30)
         stats = (
@@ -252,14 +300,13 @@ async def get_ban_statistics_overview(
             .filter(models.BanStatistics.date >= thirty_days_ago)
             .all()
         )
-
         overview = {
             "total_bans": sum(stat.total_bans for stat in stats),
             "ip_bans": sum(stat.ip_bans for stat in stats),
             "word_bans": sum(stat.word_bans for stat in stats),
             "user_bans": sum(stat.user_bans for stat in stats),
             "average_effectiveness": (
-                sum(stat.effectiveness_score for stat in stats) / len(stats)
+                (sum(stat.effectiveness_score for stat in stats) / len(stats))
                 if stats
                 else 0
             ),
@@ -272,7 +319,6 @@ async def get_ban_statistics_overview(
         )
 
 
-# أسباب الحظر الشائعة
 @router.get("/common-ban-reasons", response_model=List[schemas.BanReasonOut])
 async def get_common_ban_reasons(
     db: Session = Depends(get_db),
@@ -281,24 +327,23 @@ async def get_common_ban_reasons(
     sort_by: str = Query("count", description="Field to sort by (count or reason)"),
     order: str = Query("desc", description="Sort order (asc or desc)"),
 ):
-    """الحصول على أسباب الحظر الشائعة"""
+    """
+    Retrieve common ban reasons with sorting options.
+    """
     try:
         query = db.query(models.BanReason)
-
-        # تطبيق الترتيب
         if sort_by == "count":
-            query = query.order_by(
-                desc(models.BanReason.count)
+            query = (
+                query.order_by(desc(models.BanReason.count))
                 if order == "desc"
-                else asc(models.BanReason.count)
+                else query.order_by(asc(models.BanReason.count))
             )
         elif sort_by == "reason":
-            query = query.order_by(
-                desc(models.BanReason.reason)
+            query = (
+                query.order_by(desc(models.BanReason.reason))
                 if order == "desc"
-                else asc(models.BanReason.reason)
+                else query.order_by(asc(models.BanReason.reason))
             )
-
         reasons = query.limit(limit).all()
         return reasons
     except Exception as e:
@@ -308,7 +353,6 @@ async def get_common_ban_reasons(
         )
 
 
-# اتجاه فعالية الحظر
 @router.get("/ban-effectiveness-trend", response_model=List[schemas.EffectivenessTrend])
 @cache(expire=300)
 async def get_ban_effectiveness_trend(
@@ -316,13 +360,14 @@ async def get_ban_effectiveness_trend(
     current_admin: models.User = Depends(get_current_admin),
     days: int = Query(30, ge=1, le=365),
 ):
-    """الحصول على اتجاه فعالية الحظر"""
+    """
+    Retrieve the trend of ban effectiveness over a specified number of days.
+    """
     try:
         start_date = date.today() - timedelta(days=days)
         trend = (
             db.query(
-                models.BanStatistics.date,
-                models.BanStatistics.effectiveness_score,
+                models.BanStatistics.date, models.BanStatistics.effectiveness_score
             )
             .filter(models.BanStatistics.date >= start_date)
             .order_by(models.BanStatistics.date)
@@ -336,7 +381,6 @@ async def get_ban_effectiveness_trend(
         )
 
 
-# توزيع أنواع الحظر
 @router.get("/ban-type-distribution", response_model=schemas.BanTypeDistribution)
 @cache(expire=300)
 async def get_ban_type_distribution(
@@ -344,7 +388,9 @@ async def get_ban_type_distribution(
     current_admin: models.User = Depends(get_current_admin),
     days: int = Query(30, ge=1, le=365),
 ):
-    """الحصول على توزيع أنواع الحظر"""
+    """
+    Retrieve the distribution of different ban types over a specified period.
+    """
     try:
         start_date = date.today() - timedelta(days=days)
         distribution = (
@@ -356,7 +402,6 @@ async def get_ban_type_distribution(
             .filter(models.BanStatistics.date >= start_date)
             .first()
         )
-
         return {
             "ip_bans": distribution.ip_bans or 0,
             "word_bans": distribution.word_bans or 0,

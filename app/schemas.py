@@ -1,3 +1,6 @@
+# ================================================================
+# Imports
+# ================================================================
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -8,9 +11,13 @@ from pydantic import (
     HttpUrl,
     Field,
 )
-from datetime import datetime, date
-from typing import Optional, List, ForwardRef, Dict
+from datetime import datetime, date, timedelta, time
+from typing import Optional, List, Dict, Tuple, Union, Any, ForwardRef
 from enum import Enum
+
+# ================================================================
+# Reactions and Vote Models
+# ================================================================
 
 
 class ReactionType(str, Enum):
@@ -22,15 +29,17 @@ class ReactionType(str, Enum):
     ANGRY = "angry"
 
 
+# Base model for a reaction
 class ReactionBase(BaseModel):
     reaction_type: ReactionType
 
 
+# Model for creating a reaction (includes post id)
 class ReactionCreate(ReactionBase):
     post_id: int
-    reaction_type: ReactionType
 
 
+# Reaction model with id and user information
 class Reaction(ReactionBase):
     id: int
     user_id: int
@@ -38,9 +47,15 @@ class Reaction(ReactionBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Model to count reactions of each type
 class ReactionCount(BaseModel):
     reaction_type: ReactionType
     count: int
+
+
+# ================================================================
+# Post Vote and Analytics Models
+# ================================================================
 
 
 class PostVoteStatisticsBase(BaseModel):
@@ -67,6 +82,7 @@ class PostVoteStatistics(PostVoteStatisticsBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Model to represent analytics of a post's votes
 class PostVoteAnalytics(BaseModel):
     post_id: int
     title: str
@@ -76,6 +92,7 @@ class PostVoteAnalytics(BaseModel):
     most_common_reaction: str
 
 
+# Aggregated vote analytics for a user
 class UserVoteAnalytics(BaseModel):
     total_posts: int
     total_votes_received: int
@@ -83,6 +100,11 @@ class UserVoteAnalytics(BaseModel):
     most_upvoted_post: PostVoteAnalytics
     most_downvoted_post: PostVoteAnalytics
     most_reacted_post: PostVoteAnalytics
+
+
+# ================================================================
+# Hashtag Models
+# ================================================================
 
 
 class HashtagBase(BaseModel):
@@ -100,6 +122,11 @@ class Hashtag(HashtagBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ================================================================
+# Search and Sorting Models
+# ================================================================
+
+
 class SortOption(str, Enum):
     DATE = "date"
     USERNAME = "username"
@@ -112,15 +139,22 @@ class SortOption(str, Enum):
     DATE_ASC = "date_asc"
 
 
+# Parameters used for search queries
 class SearchParams(BaseModel):
     query: str
     sort_by: SortOption = SortOption.RELEVANCE
 
 
+# Settings for user followers display and sorting
 class UserFollowersSettings(BaseModel):
     followers_visibility: str
     followers_custom_visibility: Optional[Dict[str, List[int]]] = None
     followers_sort_preference: SortOption
+
+
+# ================================================================
+# Screen Share and Appeal Models
+# ================================================================
 
 
 class VerificationStatus(str, Enum):
@@ -135,19 +169,23 @@ class ScreenShareStatus(str, Enum):
     FAILED = "failed"
 
 
+# Model for starting a screen share session
 class ScreenShareStart(BaseModel):
     call_id: int
 
 
+# Model for ending a screen share session
 class ScreenShareEnd(BaseModel):
     session_id: int
 
 
+# Update model for screen sharing (status and error message)
 class ScreenShareUpdate(BaseModel):
     status: ScreenShareStatus
     error_message: Optional[str] = None
 
 
+# Output model for screen share session details
 class ScreenShareSessionOut(BaseModel):
     id: int
     call_id: int
@@ -158,6 +196,11 @@ class ScreenShareSessionOut(BaseModel):
     error_message: Optional[str]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================
+# Ban, Block, and Appeal Models
+# ================================================================
 
 
 class AppealStatus(str, Enum):
@@ -171,6 +214,7 @@ class WordSeverity(str, Enum):
     ban = "ban"
 
 
+# Base model for banned words
 class BannedWordBase(BaseModel):
     word: str
     severity: WordSeverity = WordSeverity.warn
@@ -193,6 +237,7 @@ class BannedWordOut(BannedWordBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Models for block appeals
 class BlockAppealCreate(BaseModel):
     block_id: int
     reason: str
@@ -215,6 +260,7 @@ class BlockAppealReview(BaseModel):
     status: AppealStatus
 
 
+# IP ban models
 class IPBanBase(BaseModel):
     ip_address: str
     reason: Optional[str] = None
@@ -233,6 +279,7 @@ class IPBanOut(IPBanBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Block models and logs
 class CallType(str, Enum):
     AUDIO = "audio"
     VIDEO = "video"
@@ -277,6 +324,11 @@ class AdvancedSearchQuery(BaseModel):
     search_in: List[str] = Field(default=["title", "content", "comments"])
 
 
+# ================================================================
+# Message and Notification Related Models
+# ================================================================
+
+
 class MessageType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
@@ -289,12 +341,14 @@ class SortOrder(str, Enum):
     DESC = "desc"
 
 
+# Business registration model
 class BusinessRegistration(BaseModel):
     business_name: str
     business_registration_number: str
     bank_account_info: str
 
 
+# Follow statistics model
 class FollowStatistics(BaseModel):
     followers_count: int
     following_count: int
@@ -302,6 +356,7 @@ class FollowStatistics(BaseModel):
     interaction_rate: float
 
 
+# Block duration and type models
 class BlockDuration(str, Enum):
     HOURS = "hours"
     DAYS = "days"
@@ -353,6 +408,7 @@ class BlockLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Ban statistics models
 class BanStatisticsOverview(BaseModel):
     total_bans: int
     ip_bans: int
@@ -380,12 +436,14 @@ class BanTypeDistribution(BaseModel):
     user_bans: int
 
 
+# Copyright types for posts
 class CopyrightType(str, Enum):
     ALL_RIGHTS_RESERVED = "all_rights_reserved"
     CREATIVE_COMMONS = "creative_commons"
     PUBLIC_DOMAIN = "public_domain"
 
 
+# Model for blocked user details
 class BlockedUserOut(BaseModel):
     id: int
     username: str
@@ -397,18 +455,25 @@ class BlockedUserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ================================================================
+# Business and Comment Statistics Models
+# ================================================================
+
+
 class BusinessVerificationUpdate(BaseModel):
-    id_document: UploadFile
-    passport: UploadFile
-    business_document: UploadFile
-    selfie: UploadFile
+    id_document: Any  # Expected to be an UploadFile (from fastapi)
+    passport: Any
+    business_document: Any
+    selfie: Any
 
 
-class BusinessUserOut(UserOut):
+class BusinessUserOut(BaseModel):
     business_name: str
     business_registration_number: str
     verification_status: VerificationStatus
     is_verified_business: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BusinessTransactionCreate(BaseModel):
@@ -418,8 +483,8 @@ class BusinessTransactionCreate(BaseModel):
 
 class BusinessTransactionOut(BaseModel):
     id: int
-    business_user: UserOut
-    client_user: UserOut
+    business_user: "UserOut"
+    client_user: "UserOut"
     amount: float
     commission: float
     status: str
@@ -433,6 +498,11 @@ class CommentStatistics(BaseModel):
     top_commenters: List[Tuple[int, str, int]]
     most_commented_posts: List[Tuple[int, str, int]]
     average_sentiment: float
+
+
+# ================================================================
+# Privacy and User Profile Models
+# ================================================================
 
 
 class PrivacyLevel(str, Enum):
@@ -494,6 +564,11 @@ class UserAnalytics(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ================================================================
+# Search and Ticket Models
+# ================================================================
+
+
 class SearchStatOut(BaseModel):
     query: str
     count: int
@@ -502,7 +577,7 @@ class SearchStatOut(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    results: List[PostOut]
+    results: List["PostOut"]
     spell_suggestion: str
     search_suggestions: List[str]
 
@@ -516,7 +591,7 @@ class TicketResponse(BaseModel):
     id: int
     content: str
     created_at: datetime
-    user: UserOut
+    user: "UserOut"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -525,12 +600,17 @@ class Ticket(BaseModel):
     id: int
     subject: str
     description: str
-    status: TicketStatus
+    status: str  # Could be further defined (e.g., TicketStatus enum)
     created_at: datetime
     updated_at: datetime
     responses: List[TicketResponse]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================
+# Warning and Ban Models for Users
+# ================================================================
 
 
 class WarningCreate(BaseModel):
@@ -560,7 +640,11 @@ class UserBanOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Base models
+# ================================================================
+# Base Models for Users, Posts, Comments, and Reports
+# ================================================================
+
+
 class UserBase(BaseModel):
     email: EmailStr
     interests: Optional[List[str]] = None
@@ -608,6 +692,11 @@ class UserPublicKeyUpdate(BaseModel):
     public_key: str
 
 
+# ================================================================
+# Message Attachment and Messaging Models
+# ================================================================
+
+
 class MessageAttachmentBase(BaseModel):
     file_url: str
     file_type: str
@@ -641,6 +730,7 @@ class MessageBase(BaseModel):
     file_url: Optional[str]
 
 
+# Models for encrypted calls (voice/video)
 class EncryptedCallCreate(BaseModel):
     receiver_id: int
     call_type: str
@@ -663,6 +753,7 @@ class EncryptedCallOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Models for search statistics of messages
 class SearchStatisticsBase(BaseModel):
     query: str
     count: int
@@ -678,6 +769,11 @@ class SearchStatistics(SearchStatisticsBase):
     user_id: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================
+# Article, Community, and Reel Models (Content Models)
+# ================================================================
 
 
 class ArticleBase(BaseModel):
@@ -696,6 +792,7 @@ class ReelBase(BaseModel):
     description: Optional[str] = None
 
 
+# UI and Notification Settings
 class UISettings(BaseModel):
     theme: Optional[str] = "light"
     language: Optional[str] = "en"
@@ -708,6 +805,7 @@ class NotificationsSettings(BaseModel):
     newsletter: bool = True
 
 
+# Repost statistics model
 class RepostStatisticsOut(BaseModel):
     post_id: int
     repost_count: int
@@ -716,6 +814,7 @@ class RepostStatisticsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Settings for reposting posts
 class RepostSettings(BaseModel):
     scope: str = "public"
     community_id: Optional[int] = None
@@ -723,10 +822,13 @@ class RepostSettings(BaseModel):
     custom_message: Optional[str] = None
 
 
-class RepostCreate(PostCreate):
+# Model for creating reposts (extends PostCreate later)
+class RepostCreate(BaseModel):
+    # This will be merged with PostCreate in the Post Models section
     repost_settings: Optional[RepostSettings] = None
 
 
+# Preferences for notification updates
 class NotificationPreferencesUpdate(BaseModel):
     email_notifications: Optional[bool] = None
     push_notifications: Optional[bool] = None
@@ -753,6 +855,7 @@ class NotificationPreferencesOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Amenhotep (chatbot or analytics) models
 class AmenhotepMessageCreate(BaseModel):
     message: str
 
@@ -793,12 +896,12 @@ class AmenhotepSessionSummary(BaseModel):
     average_satisfaction: float
 
 
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List, Dict
-from datetime import datetime
-from enum import Enum
+# ================================================================
+# Social Media and Account Models
+# ================================================================
 
 
+# Enum for supported social media platforms
 class SocialMediaType(str, Enum):
     REDDIT = "reddit"
     LINKEDIN = "linkedin"
@@ -811,6 +914,7 @@ class PostStatus(str, Enum):
     FAILED = "failed"
 
 
+# Base model for a social account
 class SocialAccountBase(BaseModel):
     platform: SocialMediaType
     account_username: Optional[str] = None
@@ -830,6 +934,7 @@ class SocialAccountOut(SocialAccountBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Models for social posts
 class SocialPostBase(BaseModel):
     title: Optional[str] = None
     content: str
@@ -870,11 +975,12 @@ class EngagementStats(BaseModel):
     likes: Optional[int]
 
 
+# Notification models
 class NotificationBase(BaseModel):
     content: str
     notification_type: str
-    priority: NotificationPriority
-    category: NotificationCategory
+    priority: Any  # Could be defined as an enum NotificationPriority
+    category: Any  # Could be defined as an enum NotificationCategory
 
 
 class NotificationCreate(NotificationBase):
@@ -934,21 +1040,20 @@ class NotificationDeliveryLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class NotificationWithLogs(NotificationOut):
+class NotificationWithLogs(BaseModel):
     delivery_logs: List[NotificationDeliveryLogOut]
     retry_count: int
-    status: NotificationStatus
-    last_retry: Optional[datetime]
-
-    model_config = ConfigDict(from_attributes=True)
+    status: Any  # Could be defined as NotificationStatus enum
+    last_retry: Optional[datetime] = None
+    # Inherit fields from NotificationOut in actual implementation
 
 
 class NotificationOut(BaseModel):
     id: int
     content: str
     notification_type: str
-    priority: NotificationPriority
-    category: NotificationCategory
+    priority: Any
+    category: Any
     link: Optional[str]
     is_read: bool
     is_archived: bool
@@ -960,6 +1065,7 @@ class NotificationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# User settings models
 class UserSettings(BaseModel):
     ui_settings: UISettings
     notifications_settings: NotificationsSettings
@@ -970,7 +1076,11 @@ class UserSettingsUpdate(BaseModel):
     notifications_settings: Optional[NotificationsSettings]
 
 
-# User models
+# ================================================================
+# User Models
+# ================================================================
+
+
 class UserCreate(UserBase):
     password: str
     email: EmailStr
@@ -995,14 +1105,14 @@ class UserOut(UserBase):
     email: EmailStr
     role: "UserRole"
     is_2fa_enabled: bool
-    model_config = ConfigDict(from_attributes=True)
     privacy_level: PrivacyLevel
     custom_privacy: Optional[dict] = None
     ui_settings: Optional[UISettings]
     notifications_settings: Optional[NotificationsSettings]
-    public_key: Optional[str] = None  # إضافة حقل المفتاح العام
+    public_key: Optional[str] = None  # Public key field
     followers_count: int
     is_verified: bool
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1032,7 +1142,11 @@ class SessionKeyUpdate(BaseModel):
     new_public_key: str
 
 
-# Token models
+# ================================================================
+# Token Models
+# ================================================================
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -1042,7 +1156,11 @@ class TokenData(BaseModel):
     id: Optional[int] = None
 
 
-# Vote model
+# ================================================================
+# Vote Models
+# ================================================================
+
+
 class Vote(BaseModel):
     post_id: int
     dir: conint(le=1)
@@ -1061,7 +1179,10 @@ class VotersListOut(BaseModel):
     total_count: int
 
 
-# Community models
+# ================================================================
+# Community Models
+# ================================================================
+
 CommunityOutRef = ForwardRef("CommunityOut")
 
 
@@ -1136,6 +1257,7 @@ class CategoryOut(CategoryCreate):
 class Category(CategoryBase):
     id: int
     name: str
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1147,7 +1269,7 @@ class SearchSuggestionOut(BaseModel):
 
 class AdvancedSearchResponse(BaseModel):
     total: int
-    posts: List[PostOut]
+    posts: List["PostOut"]
 
 
 class PostCategoryBase(BaseModel):
@@ -1258,7 +1380,11 @@ class EncryptedSessionUpdate(BaseModel):
     ratchet_key: str
 
 
-# Post models
+# ================================================================
+# Post Models
+# ================================================================
+
+
 class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = []
@@ -1281,10 +1407,6 @@ class Post(PostBase):
 
 class PostOut(Post):
     community: Optional[CommunityOutRef]
-    id: int
-    created_at: datetime
-    owner_id: int
-    owner: UserOut
     privacy_level: PrivacyLevel
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
@@ -1299,9 +1421,8 @@ class PostOut(Post):
     mentioned_users: List[UserOut]
     is_audio_post: bool
     audio_url: Optional[str]
-    model_config = ConfigDict(from_attributes=True)
     is_poll: bool
-    poll_data: Optional[PollData]
+    poll_data: Optional["PollData"]
     copyright_type: CopyrightType
     custom_copyright: Optional[str]
     is_archived: bool
@@ -1309,6 +1430,8 @@ class PostOut(Post):
     media_url: Optional[str]
     media_type: Optional[str]
     media_text: Optional[str]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PollOption(BaseModel):
@@ -1336,7 +1459,11 @@ class PollResults(BaseModel):
     end_date: Optional[datetime]
 
 
-# Comment models
+# ================================================================
+# Comment Models
+# ================================================================
+
+
 class CommentCreate(CommentBase):
     content: str
     post_id: int
@@ -1355,16 +1482,16 @@ class CommentOut(BaseModel):
     flag_reason: Optional[str] = None
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
-    model_config = ConfigDict(from_attributes=True)
     is_highlighted: bool = False
     is_best_answer: bool = False
     image_url: Optional[HttpUrl] = None
     video_url: Optional[HttpUrl] = None
     has_emoji: bool
     has_sticker: bool
-    sticker: Optional[StickerOut] = None
+    sticker: Optional[Any] = None  # Expected to be a StickerOut model
     is_pinned: bool = False
     pinned_at: Optional[datetime] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1400,10 +1527,9 @@ class Comment(CommentBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Report models
-class ReportCreate(ReportBase):
-    post_id: Optional[int] = None
-    comment_id: Optional[int] = None
+# ================================================================
+# Report Models
+# ================================================================
 
 
 class Report(ReportBase):
@@ -1427,7 +1553,7 @@ class ReportUpdate(BaseModel):
     resolution_notes: Optional[str] = None
 
 
-class ReportOut(BaseModel):
+class ReportOut(ReportBase):
     id: int
     report_reason: str
     post_id: Optional[int]
@@ -1441,10 +1567,14 @@ class ReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Message models
+# ================================================================
+# Message Models
+# ================================================================
+
+
 class MessageCreate(MessageBase):
     receiver_id: int
-    encrypted_content: str  # محتوى مشفر بدلاً من النص العادي
+    encrypted_content: str  # Encrypted content instead of plain text
     message_type: MessageType
     attachments: List[MessageAttachmentCreate] = []
 
@@ -1453,13 +1583,13 @@ class Message(MessageBase):
     id: int
     sender_id: int
     receiver_id: int
-    encrypted_content: str  # محتوى مشفر
+    encrypted_content: str  # Encrypted content
     timestamp: datetime
     replied_to: Optional["Message"] = None
     quoted_message: Optional["Message"] = None
     is_edited: bool = False
     conversation_id: str
-    link_preview: Optional[LinkPreview] = None
+    link_preview: Optional["LinkPreview"] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1510,6 +1640,7 @@ class ConversationStatistics(ConversationStatisticsBase):
     total_emojis: int
     total_stickers: int
     average_response_time: float
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1518,6 +1649,11 @@ class LinkPreview(BaseModel):
     description: Optional[str] = None
     image: Optional[str] = None
     url: str
+
+
+# ================================================================
+# Community Member and Role Models
+# ================================================================
 
 
 class CommunityRole(str, Enum):
@@ -1548,7 +1684,11 @@ class CommunityMemberOut(CommunityMemberBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Article models
+# ================================================================
+# Article Models
+# ================================================================
+
+
 class ArticleCreate(ArticleBase):
     community_id: int
 
@@ -1569,7 +1709,11 @@ class ArticleOut(Article):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Reel models
+# ================================================================
+# Reel Models
+# ================================================================
+
+
 class ReelCreate(ReelBase):
     community_id: int
 
@@ -1590,7 +1734,11 @@ class ReelOut(Reel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Community Invitation models
+# ================================================================
+# Community Invitation Models
+# ================================================================
+
+
 class CommunityInvitationBase(BaseModel):
     community_id: int
     invitee_id: int
@@ -1610,10 +1758,15 @@ class CommunityInvitationOut(BaseModel):
     community: CommunityOutRef
     inviter: UserOut
     invitee: UserOut
+
     model_config = ConfigDict(from_attributes=True)
 
 
-# 2FA models
+# ================================================================
+# 2FA Models
+# ================================================================
+
+
 class Enable2FAResponse(BaseModel):
     otp_secret: str
 
@@ -1624,6 +1777,11 @@ class Verify2FARequest(BaseModel):
 
 class Verify2FAResponse(BaseModel):
     message: str
+
+
+# ================================================================
+# Additional User Session and Authentication Models
+# ================================================================
 
 
 class UserRole(str, Enum):
@@ -1681,6 +1839,11 @@ class PostSearch(BaseModel):
     category_id: Optional[int] = None
 
 
+# ================================================================
+# Sticker Models
+# ================================================================
+
+
 class StickerPackBase(BaseModel):
     name: str
 
@@ -1712,7 +1875,7 @@ class Sticker(StickerBase):
     pack_id: int
     created_at: datetime
     approved: bool
-    categories: List[StickerCategory]
+    categories: List["StickerCategory"]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1752,7 +1915,9 @@ class StickerReport(StickerReportBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Resolve forward references
+# ================================================================
+# Resolve Forward References
+# ================================================================
 Message.update_forward_refs()
 CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
@@ -1762,9 +1927,12 @@ PostOut.update_forward_refs()
 Comment.update_forward_refs()
 CommunityInvitationOut.model_rebuild()
 
-# Example instances for testing
+# ================================================================
+# Example Instance for Testing
+# ================================================================
 if __name__ == "__main__":
     try:
+        # Create an example PostOut instance for testing purposes
         post_example = PostOut(
             id=1,
             title="Sample Post",
@@ -1778,6 +1946,10 @@ if __name__ == "__main__":
                 email="test@example.com",
                 created_at=datetime.now(),
                 role=UserRole.USER,
+                is_2fa_enabled=False,
+                privacy_level=PrivacyLevel.PUBLIC,
+                followers_count=0,
+                is_verified=False,
             ),
             community=CommunityOut(
                 id=1,
@@ -1790,14 +1962,40 @@ if __name__ == "__main__":
                     email="owner@example.com",
                     created_at=datetime.now(),
                     role=UserRole.ADMIN,
+                    is_2fa_enabled=False,
+                    privacy_level=PrivacyLevel.PUBLIC,
+                    followers_count=0,
+                    is_verified=True,
                 ),
                 member_count=1,
                 members=[],
-                category=Category(id=1, name="Sample Category"),
+                category=Category(id=1, name="Sample Category", description=""),
                 tags=[Tag(id=1, name="Sample Tag")],
             ),
+            privacy_level=PrivacyLevel.PUBLIC,
+            reactions=[],
+            reaction_counts=[],
+            has_best_answer=False,
+            category=None,
+            hashtags=[],
+            repost_count=0,
+            original_post=None,
+            sentiment=None,
+            sentiment_score=None,
+            content_suggestion=None,
+            mentioned_users=[],
+            is_audio_post=False,
+            audio_url=None,
+            is_poll=False,
+            poll_data=None,
+            copyright_type=CopyrightType.ALL_RIGHTS_RESERVED,
+            custom_copyright=None,
+            is_archived=False,
+            archived_at=None,
+            media_url=None,
+            media_type=None,
+            media_text=None,
         )
         print("PostOut instance:", post_example)
-
     except ValidationError as e:
         print("Validation error:", e)

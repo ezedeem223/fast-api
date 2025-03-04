@@ -3,7 +3,17 @@ from bs4 import BeautifulSoup
 import validators
 
 
-def extract_link_preview(url):
+def extract_link_preview(url: str) -> dict | None:
+    """
+    Extract preview information from the given URL.
+
+    Parameters:
+        url (str): The URL to extract preview data from.
+
+    Returns:
+        dict: A dictionary containing the title, description, image, and URL if successful.
+        None: If the URL is invalid or an error occurs during extraction.
+    """
     if not validators.url(url):
         return None
 
@@ -11,21 +21,21 @@ def extract_link_preview(url):
         response = requests.get(url, timeout=5)
         soup = BeautifulSoup(response.content, "html.parser")
 
-        title = soup.title.string if soup.title else ""
+        title = soup.title.string.strip() if soup.title and soup.title.string else ""
         description = ""
         image = ""
 
-        # محاولة استخراج الوصف
+        # Attempt to extract description from meta tags.
         meta_desc = soup.find("meta", attrs={"name": "description"})
         og_desc = soup.find("meta", property="og:description")
-        if meta_desc:
+        if meta_desc and meta_desc.get("content"):
             description = meta_desc["content"]
-        elif og_desc:
+        elif og_desc and og_desc.get("content"):
             description = og_desc["content"]
 
-        # محاولة استخراج الصورة
+        # Attempt to extract image from meta tags.
         og_image = soup.find("meta", property="og:image")
-        if og_image:
+        if og_image and og_image.get("content"):
             image = og_image["content"]
 
         return {"title": title, "description": description, "image": image, "url": url}

@@ -15,6 +15,8 @@ from sqlalchemy import (
     JSON,
     ARRAY,
     LargeBinary,
+    Interval,
+    Time,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import text
@@ -22,22 +24,26 @@ from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.sql import func
 from .database import Base
 import enum
-from datetime import date
-from sqlalchemy.dialects.postgresql import JSONB
+from datetime import date, timedelta
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.postgresql import TSVECTOR
 
-Base = declarative_base()
+Base = declarative_base()  # Declarative base for all models
 
+# -------------------------
+# Association Tables
+# -------------------------
 
+# Table for linking posts and mentioned users
 post_mentions = Table(
     "post_mentions",
     Base.metadata,
     Column("post_id", Integer, ForeignKey("posts.id")),
     Column("user_id", Integer, ForeignKey("users.id")),
 )
-# Определение таблиц ассоциаций
+
+# Table for linking communities and tags
 community_tags = Table(
     "community_tags",
     Base.metadata,
@@ -45,6 +51,7 @@ community_tags = Table(
     Column("tag_id", Integer, ForeignKey("tags.id")),
 )
 
+# Table for linking stickers and sticker categories
 sticker_category_association = Table(
     "sticker_category_association",
     Base.metadata,
@@ -52,8 +59,27 @@ sticker_category_association = Table(
     Column("category_id", Integer, ForeignKey("sticker_categories.id")),
 )
 
+# Table for linking users and hashtags they follow
+user_hashtag_follows = Table(
+    "user_hashtag_follows",
+    Base.metadata,
+    Column("user_id", Integer, ForeignKey("users.id")),
+    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+)
 
-# Определение Enum классов
+# Table for post hashtags association
+post_hashtags = Table(
+    "post_hashtags",
+    Base.metadata,
+    Column("post_id", Integer, ForeignKey("posts.id")),
+    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+)
+
+# -------------------------
+# Enum Classes Definitions
+# -------------------------
+
+
 class UserType(str, enum.Enum):
     PERSONAL = "personal"
     BUSINESS = "business"
@@ -155,24 +181,40 @@ class NotificationStatus(str, enum.Enum):
     RETRYING = "retrying"
 
 
-class BlockAppeal(Base):
-    __tablename__ = "block_appeals"
-
-    id = Column(Integer, primary_key=True, index=True)
-    block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"))
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    reason = Column(String, nullable=False)
-    status = Column(Enum(AppealStatus), default=AppealStatus.PENDING)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-
-    block = relationship("Block", back_populates="appeals")
-    user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
-    reviewer = relationship("User", foreign_keys=[reviewer_id])
+class NotificationPriority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
 
 
-class NotificationType(str, Enum):
+class NotificationCategory(str, enum.Enum):
+    SYSTEM = "system"
+    SOCIAL = "social"
+    SECURITY = "security"
+    PROMOTIONAL = "promotional"
+    COMMUNITY = "community"
+
+
+class CopyrightType(str, enum.Enum):
+    ALL_RIGHTS_RESERVED = "all_rights_reserved"
+    CREATIVE_COMMONS = "creative_commons"
+    PUBLIC_DOMAIN = "public_domain"
+
+
+class PostStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class SocialMediaType(str, enum.Enum):
+    REDDIT = "reddit"
+    LINKEDIN = "linkedin"
+
+
+class NotificationType(str, enum.Enum):
     NEW_FOLLOWER = "new_follower"
     NEW_COMMENT = "new_comment"
     NEW_REACTION = "new_reaction"
@@ -185,24 +227,37 @@ class NotificationType(str, Enum):
     SYSTEM_UPDATE = "system_update"
 
 
+# -------------------------
+# Models Definitions
+# -------------------------
+
+
+class BlockAppeal(Base):
+    __tablename__ = "block_appeals"
+    id = Column(Integer, primary_key=True, index=True)
+    block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    reason = Column(String, nullable=False)
+    status = Column(Enum(AppealStatus), default=AppealStatus.PENDING)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Relationship: Links the appeal with the block and involved users.
+    block = relationship("Block", back_populates="appeals")
+    user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
+    reviewer = relationship("User", foreign_keys=[reviewer_id])
+
+
 class Hashtag(Base):
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-
-
-# إضافة جدول وسيط لربط المستخدمين بالهاشتاغات التي يتابعونها
-user_hashtag_follows = Table(
-    "user_hashtag_follows",
-    Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id")),
-    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
-)
+    # 'followers' relationship is established via association table.
 
 
 class Reaction(Base):
     __tablename__ = "reactions"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -213,6 +268,7 @@ class Reaction(Base):
     )
     reaction_type = Column(Enum(ReactionType), nullable=False)
 
+    # Relationships for linking reaction to user, post, or comment.
     user = relationship("User", back_populates="reactions")
     post = relationship("Post", back_populates="reactions")
     comment = relationship("Comment", back_populates="reactions")
@@ -224,10 +280,8 @@ class Reaction(Base):
     )
 
 
-# Определение моделей
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, nullable=False)
     email = Column(String, nullable=False, unique=True)
     hashed_password = Column(String, nullable=False)
@@ -304,11 +358,12 @@ class User(Base):
     reset_token_expires = Column(DateTime, nullable=True)
     reputation_score = Column(Float, default=0.0)
     is_suspended = Column(Boolean, default=False)
-    preferred_language = Column(String, default=ar)
+    preferred_language = Column(String, default="ar")  # Fixed default value as string
     auto_translate = Column(Boolean, default=True)
     suspension_end_date = Column(DateTime, nullable=True)
     language = Column(String, nullable=False, default="en")
 
+    # Relationships linking User to various entities
     token_blacklist = relationship("TokenBlacklist", back_populates="user")
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -395,47 +450,36 @@ class User(Base):
         "Reaction", back_populates="user", cascade="all, delete-orphan"
     )
     block_logs_given = relationship(
-        "BlockLog", foreign_keys=[BlockLog.blocker_id], back_populates="blocker"
+        "BlockLog", foreign_keys="[BlockLog.blocker_id]", back_populates="blocker"
     )
     block_logs_received = relationship(
-        "BlockLog", foreign_keys=[BlockLog.blocked_id], back_populates="blocked"
+        "BlockLog", foreign_keys="[BlockLog.blocked_id]", back_populates="blocked"
     )
     block_appeals = relationship(
-        "BlockAppeal", foreign_keys=[BlockAppeal.user_id], back_populates="user"
+        "BlockAppeal", foreign_keys="[BlockAppeal.user_id]", back_populates="user"
     )
     mentions = relationship(
         "Post", secondary=post_mentions, back_populates="mentioned_users"
     )
     outgoing_encrypted_calls = relationship(
-        "EncryptedCall", foreign_keys=[EncryptedCall.caller_id], back_populates="caller"
+        "EncryptedCall",
+        foreign_keys="[EncryptedCall.caller_id]",
+        back_populates="caller",
     )
     incoming_encrypted_calls = relationship(
         "EncryptedCall",
-        foreign_keys=[EncryptedCall.receiver_id],
+        foreign_keys="[EncryptedCall.receiver_id]",
         back_populates="receiver",
     )
     search_history = relationship("SearchStatistics", back_populates="user")
     notifications = relationship("Notification", back_populates="user")
-    User.amenhotep_analytics = relationship(
-        "AmenhotepChatAnalytics", back_populates="user"
-    )
-
-
-class PostStatus(str, enum.Enum):
-    DRAFT = "draft"
-    SCHEDULED = "scheduled"
-    PUBLISHED = "published"
-    FAILED = "failed"
-
-
-class SocialMediaType(str, enum.Enum):
-    REDDIT = "reddit"
-    LINKEDIN = "linkedin"
+    amenhotep_analytics = relationship("AmenhotepChatAnalytics", back_populates="user")
+    social_accounts = relationship("SocialMediaAccount", back_populates="user")
+    social_posts = relationship("SocialMediaPost", back_populates="user")
 
 
 class SocialMediaAccount(Base):
     __tablename__ = "social_media_accounts"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     platform = Column(SQLAlchemyEnum(SocialMediaType))
@@ -447,13 +491,13 @@ class SocialMediaAccount(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Relationship: Links account to its owner and associated posts.
     user = relationship("User", back_populates="social_accounts")
     posts = relationship("SocialMediaPost", back_populates="account")
 
 
 class SocialMediaPost(Base):
     __tablename__ = "social_media_posts"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     account_id = Column(Integer, ForeignKey("social_media_accounts.id"))
@@ -469,16 +513,16 @@ class SocialMediaPost(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Relationship: Links social post to its owner and account.
     user = relationship("User", back_populates="social_posts")
     account = relationship("SocialMediaAccount", back_populates="posts")
 
 
 class UserActivity(Base):
     __tablename__ = "user_activities"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    activity_type = Column(String)
+    activity_type = Column(String)  # e.g., login, post, comment, report
     timestamp = Column(DateTime, default=func.now())
     details = Column(JSON)
 
@@ -490,20 +534,18 @@ User.activities = relationship("UserActivity", back_populates="user")
 
 class CommunityCategory(Base):
     __tablename__ = "community_categories"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     description = Column(String)
 
+    communities = relationship("Community", back_populates="category")
+
 
 class UserEvent(Base):
     __tablename__ = "user_events"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    event_type = Column(
-        String, nullable=False
-    )  # e.g., "login", "post", "comment", "report"
+    event_type = Column(String, nullable=False)  # e.g., login, post, comment, report
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     details = Column(JSON, nullable=True)
 
@@ -532,7 +574,6 @@ class UserBan(Base):
 
 class IPBan(Base):
     __tablename__ = "ip_bans"
-
     id = Column(Integer, primary_key=True, index=True)
     ip_address = Column(String, unique=True, index=True, nullable=False)
     reason = Column(String)
@@ -548,7 +589,6 @@ User.ip_bans_created = relationship("IPBan", back_populates="created_by_user")
 
 class BannedWord(Base):
     __tablename__ = "banned_words"
-
     id = Column(Integer, primary_key=True, index=True)
     word = Column(String, unique=True, nullable=False)
     severity = Column(Enum("warn", "ban", name="word_severity"), default="warn")
@@ -563,7 +603,6 @@ User.banned_words_created = relationship("BannedWord", back_populates="created_b
 
 class BanStatistics(Base):
     __tablename__ = "ban_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False)
     total_bans = Column(Integer, default=0)
@@ -576,7 +615,6 @@ class BanStatistics(Base):
 
 class BanReason(Base):
     __tablename__ = "ban_reasons"
-
     id = Column(Integer, primary_key=True, index=True)
     reason = Column(String, nullable=False)
     count = Column(Integer, default=1)
@@ -585,7 +623,6 @@ class BanReason(Base):
 
 class Post(Base):
     __tablename__ = "posts"
-
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
@@ -608,7 +645,7 @@ class Post(Base):
     has_best_answer = Column(Boolean, default=False)
     comment_count = Column(Integer, default=0)
     max_pinned_comments = Column(Integer, default=3)
-    category_id = Column(Integer, ForeignKey("post_categories.id"))
+    category_id = Column(Integer, ForeignKey("post_categories.id"), nullable=True)
     scheduled_time = Column(DateTime(timezone=True), nullable=True)
     is_published = Column(Boolean, default=False)
     original_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
@@ -627,19 +664,22 @@ class Post(Base):
     custom_copyright = Column(String, nullable=True)
     is_archived = Column(Boolean, default=False)
     archived_at = Column(DateTime(timezone=True), nullable=True)
-    is_flagged: Column = Column(Boolean, default=False)
-    flag_reason: Column = Column(String, nullable=True)
+    is_flagged = Column(Boolean, default=False)
+    flag_reason = Column(String, nullable=True)
     search_vector = Column(TSVECTOR)
-    __table_args__ = (
-        Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
-    )
-    share_scope = Column(String, default="public")  # public, community, group
+    share_scope = Column(String, default="public")  # Options: public, community, group
     shared_with_community_id = Column(
         Integer, ForeignKey("communities.id"), nullable=True
     )
     score = Column(Float, default=0.0, index=True)
+    sharing_settings = Column(JSONB, default={})  # Advanced sharing settings
 
-    sharing_settings = Column(JSONB, default={})  # لتخزين إعدادات المشاركة المتقدمة
+    __table_args__ = (
+        Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
+        Index("idx_title_user", "title", "owner_id"),
+    )
+
+    # Relationships linking post to other entities
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -651,16 +691,10 @@ class Post(Base):
     reports = relationship(
         "Report", back_populates="post", cascade="all, delete-orphan"
     )
-    votes = relationship("Vote", back_populates="post", cascade="all, delete-orphan")
-
-    __table_args__ = (Index("idx_title_user", "title", "owner_id"),)
-    hashtags = relationship("Hashtag", secondary="post_hashtags")
-    post_hashtags = Table(
-        "post_hashtags",
-        Base.metadata,
-        Column("post_id", Integer, ForeignKey("posts.id")),
-        Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+    votes_rel = relationship(
+        "Vote", back_populates="post", cascade="all, delete-orphan"
     )
+    hashtags = relationship("Hashtag", secondary=post_hashtags)
     reactions = relationship(
         "Reaction", back_populates="post", cascade="all, delete-orphan"
     )
@@ -679,29 +713,8 @@ class Post(Base):
     )
 
 
-User.notification_preferences = relationship(
-    "NotificationPreferences", back_populates="user", uselist=False
-)
-
-
-class NotificationPriority(str, enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
-
-
-class NotificationCategory(str, enum.Enum):
-    SYSTEM = "system"
-    SOCIAL = "social"
-    SECURITY = "security"
-    PROMOTIONAL = "promotional"
-    COMMUNITY = "community"
-
-
 class NotificationPreferences(Base):
     __tablename__ = "notification_preferences"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     email_notifications = Column(Boolean, default=True)
@@ -712,18 +725,22 @@ class NotificationPreferences(Base):
     categories_preferences = Column(JSONB, default={})
     notification_frequency = Column(
         String, default="realtime"
-    )  # realtime, hourly, daily, weekly
+    )  # Options: realtime, hourly, daily, weekly
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="notification_preferences")
 
 
+User.notification_preferences = relationship(
+    "NotificationPreferences", back_populates="user", uselist=False
+)
+
+
 class NotificationGroup(Base):
     __tablename__ = "notification_groups"
-
     id = Column(Integer, primary_key=True, index=True)
-    group_type = Column(String, nullable=False)  # e.g., "comment_thread", "post_likes"
+    group_type = Column(String, nullable=False)  # e.g., comment_thread, post_likes
     last_updated = Column(DateTime(timezone=True), server_default=func.now())
     count = Column(Integer, default=1)
     sample_notification_id = Column(Integer, ForeignKey("notifications.id"))
@@ -734,16 +751,16 @@ class NotificationGroup(Base):
 
 class TokenBlacklist(Base):
     __tablename__ = "token_blacklist"
-
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, index=True)
-    blacklisted_on = Column(DateTime, default=datetime.utcnow)
+    blacklisted_on = Column(DateTime, default=func.now())
     user_id = Column(Integer, ForeignKey("users.id"))
+
+    user = relationship("User", back_populates="token_blacklist")
 
 
 class PostVoteStatistics(Base):
     __tablename__ = "post_vote_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"))
     total_votes = Column(Integer, default=0)
@@ -803,15 +820,11 @@ class PollVote(Base):
     option = relationship("PollOption", back_populates="votes")
 
 
-class CopyrightType(str, PyEnum):
-    ALL_RIGHTS_RESERVED = "all_rights_reserved"
-    CREATIVE_COMMONS = "creative_commons"
-    PUBLIC_DOMAIN = "public_domain"
+User.poll_votes = relationship("PollVote", back_populates="user")
 
 
 class Notification(Base):
     __tablename__ = "notifications"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     content = Column(String, nullable=False)
@@ -830,33 +843,39 @@ class Notification(Base):
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    status = Column(
-        Enum(NotificationStatus), default=NotificationStatus.PENDING
-    )  # جديد
-    retry_count = Column(Integer, default=0)  # جديد
-    last_retry = Column(DateTime(timezone=True), nullable=True)  # جديد
-    delivery_attempts = Column(JSONB, default=list)
+    status = Column(Enum(NotificationStatus), default=NotificationStatus.PENDING)
+    retry_count = Column(Integer, default=0)
+    last_retry = Column(DateTime(timezone=True), nullable=True)
     notification_version = Column(Integer, default=1)
     importance_level = Column(Integer, default=1)
     seen_at = Column(DateTime(timezone=True), nullable=True)
     interaction_count = Column(Integer, default=0)
     custom_data = Column(JSONB, default={})
     device_info = Column(JSONB, nullable=True)
-    notification_channel = Column(String, default="in_app")  # in_app, email, push
+    notification_channel = Column(
+        String, default="in_app"
+    )  # Options: in_app, email, push
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
     delivery_tracking = Column(JSONB, default={})
-    retry_strategy = Column(String, nullable=True)  # exponential, linear, etc.
+    retry_strategy = Column(String, nullable=True)  # Options: exponential, linear, etc.
     max_retries = Column(Integer, default=3)
     current_retry_count = Column(Integer, default=0)
     last_retry_timestamp = Column(DateTime(timezone=True), nullable=True)
 
+    # Relationships linking notification with its user and delivery logs/attempts.
     user = relationship("User", back_populates="notifications")
     group = relationship("NotificationGroup", back_populates="notifications")
     analytics = relationship(
         "NotificationAnalytics", back_populates="notification", uselist=False
+    )
+    delivery_logs = relationship(
+        "NotificationDeliveryLog", back_populates="notification"
+    )
+    delivery_attempts_rel = relationship(
+        "NotificationDeliveryAttempt", back_populates="notification"
     )
 
     __table_args__ = (
@@ -864,49 +883,41 @@ class Notification(Base):
         Index("idx_notifications_type", "notification_type"),
         Index("idx_notifications_status", "status"),
     )
-    delivery_logs = relationship(
-        "NotificationDeliveryLog", back_populates="notification"
-    )
-    delivery_attempts = relationship(
-        "NotificationDeliveryAttempt", back_populates="notification"
-    )
 
     def should_retry(self) -> bool:
-        """التحقق مما إذا كان يجب إعادة محاولة الإشعار"""
+        """Check if the notification should be retried"""
         if self.status != NotificationStatus.FAILED:
             return False
         if self.current_retry_count >= self.max_retries:
             return False
+        from datetime import datetime, timezone
+
         if self.expiration_date and datetime.now(timezone.utc) > self.expiration_date:
             return False
         return True
 
     def get_next_retry_delay(self) -> int:
-        """حساب التأخير قبل المحاولة التالية"""
+        """Calculate delay before the next retry attempt"""
         if self.retry_strategy == "exponential":
             return 300 * (2**self.current_retry_count)  # 5 minutes * 2^retry_count
-        return 300  # 5 minutes default
-
-
-User.notifications = relationship("Notification", back_populates="user")
+        return 300  # Default delay of 5 minutes
 
 
 class NotificationDeliveryAttempt(Base):
     __tablename__ = "notification_delivery_attempts"
-
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
         Integer, ForeignKey("notifications.id", ondelete="CASCADE")
     )
     attempt_number = Column(Integer, nullable=False)
     attempt_time = Column(DateTime(timezone=True), server_default=func.now())
-    status = Column(String, nullable=False)  # success, failure
+    status = Column(String, nullable=False)  # Options: success, failure
     error_message = Column(String, nullable=True)
     delivery_channel = Column(String, nullable=False)
-    response_time = Column(Float)  # في الثواني
+    response_time = Column(Float)  # In seconds
     metadata = Column(JSONB, default={})
 
-    notification = relationship("Notification", back_populates="delivery_attempts")
+    notification = relationship("Notification", back_populates="delivery_attempts_rel")
 
     __table_args__ = (
         Index(
@@ -917,7 +928,6 @@ class NotificationDeliveryAttempt(Base):
 
 class NotificationAnalytics(Base):
     __tablename__ = "notification_analytics"
-
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
         Integer, ForeignKey("notifications.id", ondelete="CASCADE")
@@ -940,7 +950,6 @@ class NotificationAnalytics(Base):
 
 class NotificationDeliveryLog(Base):
     __tablename__ = "notification_delivery_logs"
-
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
         Integer, ForeignKey("notifications.id", ondelete="CASCADE")
@@ -948,14 +957,13 @@ class NotificationDeliveryLog(Base):
     attempt_time = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(String)
     error_message = Column(String, nullable=True)
-    delivery_channel = Column(String)  # email, push, websocket
+    delivery_channel = Column(String)  # e.g., email, push, websocket
 
     notification = relationship("Notification", back_populates="delivery_logs")
 
 
 class Comment(Base):
     __tablename__ = "comments"
-
     id = Column(Integer, primary_key=True, nullable=False)
     content = Column(String, nullable=False)
     post_id = Column(
@@ -988,10 +996,11 @@ class Comment(Base):
     has_sticker = Column(Boolean, default=False)
     sentiment_score = Column(Float, nullable=True)
     language = Column(String, nullable=False, default="en")
-
     sticker_id = Column(Integer, ForeignKey("stickers.id"), nullable=True)
     is_pinned = Column(Boolean, default=False)
     pinned_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships linking comment to sticker, owner, post, and nested replies.
     sticker = relationship("Sticker", back_populates="comments")
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
@@ -1006,6 +1015,7 @@ class Comment(Base):
     reactions = relationship(
         "Reaction", back_populates="comment", cascade="all, delete-orphan"
     )
+
     __table_args__ = (
         Index("ix_comments_post_id_created_at", "post_id", "created_at"),
         Index("ix_comments_post_id_likes_count", "post_id", "likes_count"),
@@ -1014,7 +1024,6 @@ class Comment(Base):
 
 class AmenhotepMessage(Base):
     __tablename__ = "amenhotep_messages"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     message = Column(String, nullable=False)
@@ -1024,15 +1033,17 @@ class AmenhotepMessage(Base):
     user = relationship("User", back_populates="amenhotep_messages")
 
 
+User.amenhotep_messages = relationship("AmenhotepMessage", back_populates="user")
+
+
 class AmenhotepChatAnalytics(Base):
     __tablename__ = "amenhotep_chat_analytics"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
     topics_discussed = Column(ARRAY(String), default=list)
-    session_duration = Column(Integer)  # بالثواني
+    session_duration = Column(Integer)  # in seconds
     satisfaction_score = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -1056,7 +1067,6 @@ class PostCategory(Base):
 
 class CommentEditHistory(Base):
     __tablename__ = "comment_edit_history"
-
     id = Column(Integer, primary_key=True, nullable=False)
     comment_id = Column(
         Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False
@@ -1067,14 +1077,11 @@ class CommentEditHistory(Base):
     )
 
     comment = relationship("Comment", back_populates="edit_history")
-
-    # Добавление индекса для улучшения производительности
     __table_args__ = (Index("ix_comment_edit_history_comment_id", "comment_id"),)
 
 
 class BusinessTransaction(Base):
     __tablename__ = "business_transactions"
-
     id = Column(Integer, primary_key=True, index=True)
     business_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     client_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1089,7 +1096,6 @@ class BusinessTransaction(Base):
 
 class UserSession(Base):
     __tablename__ = "user_sessions"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, unique=True, index=True)
@@ -1113,12 +1119,11 @@ class Vote(Base):
     )
 
     user = relationship("User", back_populates="votes")
-    post = relationship("Post", back_populates="votes")
+    post = relationship("Post", back_populates="votes_rel")
 
 
 class Report(Base):
     __tablename__ = "reports"
-
     id = Column(Integer, primary_key=True, nullable=False)
     report_reason = Column(String, nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=True)
@@ -1135,18 +1140,16 @@ class Report(Base):
         SQLAlchemyEnum(ReportStatus, name="report_status_enum"),
         default=ReportStatus.PENDING,
     )
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(String, nullable=True)
+    is_valid = Column(Boolean, default=False)
+    ai_detected = Column(Boolean, default=False)
+    ai_confidence = Column(Float, nullable=True)
 
     reporter = relationship(
         "User", foreign_keys=[reporter_id], back_populates="reports"
     )
-    is_valid = Column(Boolean, default=False)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    ai_detected: Column = Column(Boolean, default=False)
-    ai_confidence: Column = Column(Float, nullable=True)
-
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     post = relationship("Post", back_populates="reports")
     comment = relationship("Comment", back_populates="reports")
@@ -1220,21 +1223,19 @@ class Message(Base):
         "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
     )
 
-
-__table_args__ = (
-    Index(
-        "idx_message_content",
-        "content",
-        postgresql_ops={"content": "gin_trgm_ops"},
-        postgresql_using="gin",
-    ),
-    Index("idx_message_timestamp", "timestamp"),
-)
+    __table_args__ = (
+        Index(
+            "idx_message_content",
+            "content",
+            postgresql_ops={"content": "gin_trgm_ops"},
+            postgresql_using="gin",
+        ),
+        Index("idx_message_timestamp", "timestamp"),
+    )
 
 
 class EncryptedSession(Base):
     __tablename__ = "encrypted_sessions"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     other_user_id = Column(Integer, ForeignKey("users.id"))
@@ -1253,7 +1254,6 @@ class EncryptedSession(Base):
 
 class EncryptedCall(Base):
     __tablename__ = "encrypted_calls"
-
     id = Column(Integer, primary_key=True, index=True)
     caller_id = Column(Integer, ForeignKey("users.id"))
     receiver_id = Column(Integer, ForeignKey("users.id"))
@@ -1283,8 +1283,8 @@ class Community(Base):
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-    category_id = Column(Integer, ForeignKey("community_categories.id"))
+    # Using CommunityCategory for categorization; removed duplicate definition.
+    category_id = Column(Integer, ForeignKey("community_categories.id"), nullable=True)
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
@@ -1310,7 +1310,6 @@ class Community(Base):
     statistics = relationship(
         "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
     )
-    category = relationship("Category", back_populates="communities")
     tags = relationship("Tag", secondary=community_tags, back_populates="communities")
 
     @property
@@ -1318,12 +1317,8 @@ class Community(Base):
         return len(self.members)
 
 
-CommunityCategory.communities = relationship("Community", back_populates="category")
-
-
 class Category(Base):
     __tablename__ = "categories"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     description = Column(String)
@@ -1333,7 +1328,6 @@ class Category(Base):
 
 class SearchSuggestion(Base):
     __tablename__ = "search_suggestions"
-
     id = Column(Integer, primary_key=True, index=True)
     term = Column(String, unique=True, index=True)
     frequency = Column(Integer, default=1)
@@ -1342,7 +1336,6 @@ class SearchSuggestion(Base):
 
 class SearchStatistics(Base):
     __tablename__ = "search_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     query = Column(String, index=True)
     count = Column(Integer, default=1)
@@ -1356,7 +1349,6 @@ class SearchStatistics(Base):
 
 class Tag(Base):
     __tablename__ = "tags"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
 
@@ -1368,7 +1360,6 @@ class Tag(Base):
 class CommunityMember(Base):
     __tablename__ = "community_members"
     __table_args__ = {"extend_existing": True}
-
     community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), primary_key=True
     )
@@ -1391,7 +1382,6 @@ class CommunityMember(Base):
 
 class CommunityStatistics(Base):
     __tablename__ = "community_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
@@ -1405,7 +1395,6 @@ class CommunityStatistics(Base):
     average_posts_per_user = Column(Float, default=0.0)
 
     community = relationship("Community", back_populates="statistics")
-
     __table_args__ = (
         UniqueConstraint("community_id", "date", name="uix_community_date"),
     )
@@ -1413,7 +1402,6 @@ class CommunityStatistics(Base):
 
 class CommunityRule(Base):
     __tablename__ = "community_rules"
-
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
@@ -1434,7 +1422,6 @@ class CommunityRule(Base):
 
 class CommunityInvitation(Base):
     __tablename__ = "community_invitations"
-
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"))
     inviter_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1453,7 +1440,6 @@ class CommunityInvitation(Base):
 
 class Reel(Base):
     __tablename__ = "reels"
-
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
     video_url = Column(String, nullable=False)
@@ -1474,7 +1460,6 @@ class Reel(Base):
 
 class Article(Base):
     __tablename__ = "articles"
-
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
@@ -1506,18 +1491,17 @@ class Block(Base):
     duration = Column(Integer, nullable=True)
     duration_unit = Column(Enum(BlockDuration), nullable=True)
     ends_at = Column(DateTime(timezone=True), nullable=True)
+    block_type = Column(Enum(BlockType), nullable=False, default=BlockType.FULL)
 
     blocker = relationship("User", foreign_keys=[blocker_id], back_populates="blocks")
     blocked = relationship(
         "User", foreign_keys=[blocked_id], back_populates="blocked_by"
     )
-    block_type = Column(Enum(BlockType), nullable=False, default=BlockType.FULL)
     appeals = relationship("BlockAppeal", back_populates="block")
 
 
 class BlockLog(Base):
     __tablename__ = "block_logs"
-
     id = Column(Integer, primary_key=True, index=True)
     blocker_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     blocked_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1536,7 +1520,6 @@ class BlockLog(Base):
 
 class UserStatistics(Base):
     __tablename__ = "user_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     date = Column(Date, nullable=False)
@@ -1550,7 +1533,6 @@ class UserStatistics(Base):
 
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
-
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     subject = Column(String, nullable=False)
@@ -1570,7 +1552,6 @@ class SupportTicket(Base):
 
 class TicketResponse(Base):
     __tablename__ = "ticket_responses"
-
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1583,7 +1564,6 @@ class TicketResponse(Base):
 
 class StickerPack(Base):
     __tablename__ = "sticker_packs"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     creator_id = Column(Integer, ForeignKey("users.id"))
@@ -1595,7 +1575,6 @@ class StickerPack(Base):
 
 class Sticker(Base):
     __tablename__ = "stickers"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     image_url = Column(String)
@@ -1612,14 +1591,12 @@ class Sticker(Base):
 
 class StickerCategory(Base):
     __tablename__ = "sticker_categories"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
 
 
 class StickerReport(Base):
     __tablename__ = "sticker_reports"
-
     id = Column(Integer, primary_key=True, index=True)
     sticker_id = Column(Integer, ForeignKey("stickers.id"))
     reporter_id = Column(Integer, ForeignKey("users.id"))
@@ -1632,7 +1609,6 @@ class StickerReport(Base):
 
 class Call(Base):
     __tablename__ = "calls"
-
     id = Column(Integer, primary_key=True, index=True)
     caller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1645,6 +1621,7 @@ class Call(Base):
     encryption_key = Column(String, nullable=False)
     last_key_update = Column(DateTime(timezone=True), nullable=False)
     quality_score = Column(Integer, default=100)
+
     caller = relationship(
         "User", foreign_keys=[caller_id], back_populates="outgoing_calls"
     )
@@ -1656,7 +1633,6 @@ class Call(Base):
 
 class ScreenShareSession(Base):
     __tablename__ = "screen_share_sessions"
-
     id = Column(Integer, primary_key=True, index=True)
     call_id = Column(Integer, ForeignKey("calls.id", ondelete="CASCADE"))
     sharer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1674,7 +1650,6 @@ class ScreenShareSession(Base):
 
 class MessageAttachment(Base):
     __tablename__ = "message_attachments"
-
     id = Column(Integer, primary_key=True, index=True)
     message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"))
     file_url = Column(String, nullable=False)
@@ -1686,11 +1661,10 @@ class MessageAttachment(Base):
 
 class ConversationStatistics(Base):
     __tablename__ = "conversation_statistics"
-
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
-    total_time = Column(Integer, default=0)  # в секундах
+    total_time = Column(Integer, default=0)  # in seconds
     last_message_at = Column(DateTime(timezone=True), server_default=func.now())
     user1_id = Column(Integer, ForeignKey("users.id"))
     user2_id = Column(Integer, ForeignKey("users.id"))

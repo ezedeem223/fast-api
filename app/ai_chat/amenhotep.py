@@ -1,4 +1,4 @@
-# في ملف app/ai_chat/amenhotep.py
+# app/ai_chat/amenhotep.py
 
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import torch
@@ -11,20 +11,31 @@ from ..config import settings
 
 
 class AmenhotepAI:
+    """
+    A class representing an AI chat system that uses a transformer-based model,
+    specifically tailored for Arabic language queries.
+    """
+
     def __init__(self):
-        # تحميل نموذج أكبر وأكثر تخصصًا للغة العربية
+        # Retrieve the HuggingFace API token from settings
         huggingface_token = settings.HUGGINGFACE_API_TOKEN
+
+        # Define the model name for a specialized Arabic language model
         self.model_name = "aubmindlab/bert-base-arabertv02"
+
+        # Initialize the tokenizer with the given model
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name, token=huggingface_token, use_fast=True
         )
+
+        # Initialize the causal language model with device mapping based on GPU availability
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             token=huggingface_token,
             device_map="auto" if torch.cuda.is_available() else None,
         )
 
-        # تحسين الإعدادات للحصول على إجابات أكثر دقة
+        # Create a question-answering pipeline using the same model and tokenizer
         self.qa_pipeline = pipeline(
             "question-answering",
             model=self.model_name,
@@ -32,20 +43,22 @@ class AmenhotepAI:
             device=0 if torch.cuda.is_available() else -1,
         )
 
-        # التأكد من وجود مجلد البيانات
+        # Ensure the data directory exists for storing the knowledge base
         os.makedirs("data/amenhotep", exist_ok=True)
 
-        # تحميل أو إنشاء قاعدة المعرفة المتخصصة
+        # Load or create the specialized knowledge base
         self.knowledge_base = self._load_knowledge_base()
 
-        # تحسين رسالة الترحيب
+        # Prepare a detailed welcome message
         self.welcome_message = self._get_welcome_message()
 
-        # إضافة سياق الجلسة
+        # Initialize the session context to keep track of conversation history
         self.session_context = {}
 
     def _load_knowledge_base(self) -> dict:
-        """تحميل قاعدة المعرفة من ملف JSON أو إنشاء واحدة جديدة"""
+        """
+        Load the knowledge base from a JSON file or create a default one if not available.
+        """
         knowledge_file = "data/amenhotep/knowledge_base.json"
         try:
             if os.path.exists(knowledge_file):
@@ -54,7 +67,7 @@ class AmenhotepAI:
         except Exception as e:
             print(f"Error loading knowledge base: {e}")
 
-        # قاعدة معرفة افتراضية محسنة
+        # Return a default knowledge base if file does not exist or fails to load
         return {
             "عام": {
                 "أمنحتب الثالث": {
@@ -76,7 +89,9 @@ class AmenhotepAI:
         }
 
     def _save_knowledge_base(self):
-        """حفظ قاعدة المعرفة المحدثة"""
+        """
+        Save the updated knowledge base to a JSON file.
+        """
         try:
             with open("data/amenhotep/knowledge_base.json", "w", encoding="utf-8") as f:
                 json.dump(self.knowledge_base, f, ensure_ascii=False, indent=4)
@@ -84,7 +99,9 @@ class AmenhotepAI:
             print(f"Error saving knowledge base: {e}")
 
     def _get_welcome_message(self) -> str:
-        """رسالة ترحيب أكثر تفصيلاً وشخصية"""
+        """
+        Return a detailed welcome message in Arabic.
+        """
         return """
         مرحباً بك في حضرة الملك أمنحتب الثالث، فرعون مصر العظيم في عصرها الذهبي.
 
@@ -100,18 +117,20 @@ class AmenhotepAI:
 
     async def get_response(self, user_id: int, message: str) -> str:
         """
-        تحسين عملية توليد الردود باستخدام سياق المحادثة
+        Generate a response based on user input by leveraging the session context,
+        the knowledge base, and the language model.
         """
         try:
-            # تحديث سياق المحادثة
+            # Update conversation history for the user
             if user_id not in self.session_context:
                 self.session_context[user_id] = []
             self.session_context[user_id].append({"role": "user", "content": message})
 
-            # البحث في قاعدة المعرفة أولاً
+            # Check if the input message matches any topic in the knowledge base
             for category in self.knowledge_base:
                 for topic, content in self.knowledge_base[category].items():
                     if topic.lower() in message.lower():
+                        # If the content is a dictionary, join its values into a string
                         if isinstance(content, dict):
                             response = " ".join(content.values())
                         elif isinstance(content, list):
@@ -123,7 +142,7 @@ class AmenhotepAI:
                     continue
                 break
             else:
-                # استخدام النموذج للإجابة على الأسئلة غير الموجودة في قاعدة المعرفة
+                # Use the language model to generate a response if no matching topic is found
                 inputs = self.tokenizer.encode(
                     message
                     + " ".join(
@@ -148,15 +167,15 @@ class AmenhotepAI:
 
                 response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-            # تنسيق الرد بأسلوب ملكي
+            # Format the response in a regal style
             formatted_response = self._format_royal_response(response)
 
-            # تحديث سياق المحادثة
+            # Append the assistant's response to the conversation history
             self.session_context[user_id].append(
                 {"role": "assistant", "content": formatted_response}
             )
 
-            # الحفاظ على سياق محدود
+            # Limit the session context to the last 10 messages to manage memory
             if len(self.session_context[user_id]) > 10:
                 self.session_context[user_id] = self.session_context[user_id][-10:]
 
@@ -167,7 +186,10 @@ class AmenhotepAI:
             return "عذراً، حدث خطأ في معالجة سؤالك. هل يمكنك إعادة صياغته بشكل مختلف؟"
 
     def _format_royal_response(self, response: str) -> str:
-        """تنسيق الرد بأسلوب ملكي"""
+        """
+        Format the generated response by adding royal prefixes and suffixes
+        to give it a majestic tone.
+        """
         royal_prefixes = [
             "يا بني",
             "اسمع يا هذا",
@@ -185,14 +207,18 @@ class AmenhotepAI:
 
         from random import choice
 
+        # Add a random prefix to the response
         response = f"{choice(royal_prefixes)}، {response}"
+        # Append a random suffix if not already present
         if not any(suffix in response for suffix in royal_suffixes):
             response = f"{response}. {choice(royal_suffixes)}."
 
         return response
 
     def expand_knowledge_base(self, new_knowledge: dict):
-        """توسيع قاعدة المعرفة وحفظها"""
+        """
+        Expand the current knowledge base with new information and save it.
+        """
         for category, content in new_knowledge.items():
             if category in self.knowledge_base:
                 self.knowledge_base[category].update(content)
@@ -202,7 +228,10 @@ class AmenhotepAI:
         self._save_knowledge_base()
 
     def get_session_summary(self, user_id: int) -> dict:
-        """الحصول على ملخص لجلسة المحادثة"""
+        """
+        Provide a summary of the conversation session, including the number of messages
+        and topics discussed.
+        """
         if user_id not in self.session_context:
             return {"message_count": 0, "topics": []}
 
@@ -213,5 +242,4 @@ class AmenhotepAI:
                 for topic in self.knowledge_base[category]:
                     if topic.lower() in msg["content"].lower():
                         topics.add(topic)
-
         return {"message_count": len(messages), "topics": list(topics)}

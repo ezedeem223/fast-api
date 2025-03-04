@@ -16,18 +16,18 @@ def create_category(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    إنشاء تصنيف جديد
+    Create a new category.
 
     Parameters:
-        category: البيانات المطلوبة لإنشاء التصنيف
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي
+        category: Data required to create the category.
+        db: Database session.
+        current_user: The current authenticated user.
 
     Returns:
-        schemas.PostCategory: التصنيف الذي تم إنشاؤه
+        schemas.PostCategory: The created category.
 
     Raises:
-        HTTPException: في حالة عدم وجود صلاحيات كافية
+        HTTPException: If the current user does not have admin privileges.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can create categories")
@@ -47,19 +47,19 @@ def update_category(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    تحديث تصنيف موجود
+    Update an existing category.
 
     Parameters:
-        category_id: معرف التصنيف المراد تحديثه
-        category: البيانات الجديدة للتصنيف
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي
+        category_id: The ID of the category to update.
+        category: New data for the category.
+        db: Database session.
+        current_user: The current authenticated user.
 
     Returns:
-        schemas.PostCategory: التصنيف بعد التحديث
+        schemas.PostCategory: The updated category.
 
     Raises:
-        HTTPException: في حالة عدم وجود التصنيف أو عدم وجود صلاحيات كافية
+        HTTPException: If the category is not found or if the user lacks admin privileges.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can update categories")
@@ -69,7 +69,6 @@ def update_category(
         .filter(models.PostCategory.id == category_id)
         .first()
     )
-
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
 
@@ -88,18 +87,18 @@ def delete_category(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    حذف تصنيف
+    Delete a category.
 
     Parameters:
-        category_id: معرف التصنيف المراد حذفه
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي
+        category_id: The ID of the category to delete.
+        db: Database session.
+        current_user: The current authenticated user.
 
     Returns:
-        dict: رسالة تأكيد الحذف
+        dict: A confirmation message upon successful deletion.
 
     Raises:
-        HTTPException: في حالة عدم وجود التصنيف أو عدم وجود صلاحيات كافية
+        HTTPException: If the category is not found or if the user lacks admin privileges.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can delete categories")
@@ -109,7 +108,6 @@ def delete_category(
         .filter(models.PostCategory.id == category_id)
         .first()
     )
-
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
 
@@ -121,13 +119,13 @@ def delete_category(
 @router.get("/", response_model=List[schemas.PostCategory])
 def get_categories(db: Session = Depends(get_db)):
     """
-    الحصول على قائمة التصنيفات
+    Retrieve the list of main categories.
 
     Parameters:
-        db: جلسة قاعدة البيانات
+        db: Database session.
 
     Returns:
-        List[schemas.PostCategory]: قائمة بجميع التصنيفات الرئيسية
+        List[schemas.PostCategory]: A list of all main categories.
     """
     categories = (
         db.query(models.PostCategory)

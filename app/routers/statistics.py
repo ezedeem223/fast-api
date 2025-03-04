@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from .. import models, schemas, oauth2
-from ..database import get_db
 from typing import List
 from datetime import date, timedelta
+
+# Import project modules
+from .. import models, schemas, oauth2
+from ..database import get_db
 from ..utils import get_user_vote_analytics
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
+
+# ------------------------------------------------------------------
+#                         Endpoints
+# ------------------------------------------------------------------
 
 
 @router.get("/vote-analytics", response_model=schemas.UserVoteAnalytics)
@@ -15,12 +21,24 @@ def get_vote_analytics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    Retrieve vote analytics for the current user.
+    This endpoint calls a utility function to process user vote data.
+    """
     return get_user_vote_analytics(db, current_user.id)
 
 
 @router.get("/comments", response_model=schemas.CommentStatistics)
 async def get_comment_statistics(db: Session = Depends(get_db)):
+    """
+    Retrieve statistics about comments.
+    - total_comments: Total number of comments.
+    - top_commenters: Top 5 users with the highest comment counts.
+    - most_commented_posts: Top 5 posts with the highest comment counts.
+    - average_sentiment: Average sentiment score of comments.
+    """
     total_comments = db.query(func.count(models.Comment.id)).scalar()
+
     top_commenters = (
         db.query(
             models.User.id,
@@ -62,6 +80,11 @@ async def get_ban_statistics_overview(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
 ):
+    """
+    Provide an overview of ban statistics for the last 30 days.
+    Aggregates total bans, IP bans, word bans, and user bans.
+    Also calculates the average effectiveness score of bans.
+    """
     today = date.today()
     last_30_days = today - timedelta(days=30)
 
@@ -94,6 +117,10 @@ async def get_common_ban_reasons(
     current_user: models.User = Depends(oauth2.get_current_admin),
     limit: int = 10,
 ):
+    """
+    Retrieve a list of the most common ban reasons.
+    The list is ordered by the count of each ban reason in descending order.
+    """
     reasons = (
         db.query(models.BanReason)
         .order_by(models.BanReason.count.desc())
@@ -109,6 +136,10 @@ async def get_ban_effectiveness_trend(
     current_user: models.User = Depends(oauth2.get_current_admin),
     days: int = 30,
 ):
+    """
+    Retrieve the trend of ban effectiveness scores over a specified number of days.
+    Returns a list of dates with their corresponding effectiveness scores.
+    """
     today = date.today()
     start_date = today - timedelta(days=days)
 
@@ -128,6 +159,10 @@ async def get_ban_type_distribution(
     current_user: models.User = Depends(oauth2.get_current_admin),
     days: int = 30,
 ):
+    """
+    Retrieve the distribution of different ban types (IP bans, word bans, user bans)
+    over a specified number of days.
+    """
     today = date.today()
     start_date = today - timedelta(days=days)
 

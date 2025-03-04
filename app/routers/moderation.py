@@ -1,17 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
+# Import project modules
 from .. import database, models, schemas, oauth2, utils
 from ..moderation import warn_user, ban_user, process_report
 
-# تكوين الراوتر للمشرفين
+# Configure the moderation router
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
 
-# ثوابت مهمة
-REPORT_THRESHOLD = 5  # عدد البلاغات قبل الحظر التلقائي
-REPORT_WINDOW = timedelta(days=30)  # فترة النظر في البلاغات
+# Constants for report handling
+REPORT_THRESHOLD = 5  # Number of reports before automatic ban
+REPORT_WINDOW = timedelta(days=30)  # Time window to consider reports
 
 
 @router.post("/warn/{user_id}")
@@ -21,13 +22,20 @@ def warn_user_route(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """تحذير مستخدم
+    """
+    Warn a user.
 
     Parameters:
-        user_id: معرف المستخدم المراد تحذيره
-        warning: بيانات التحذير
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        user_id: ID of the user to be warned.
+        warning: Warning details containing the reason.
+        db: Database session.
+        current_user: The current moderator or admin user.
+
+    Raises:
+        HTTPException: If the current user is not authorized.
+
+    Returns:
+        A success message if the user is warned successfully.
     """
     if not current_user.is_moderator and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -43,13 +51,20 @@ def ban_user_route(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """حظر مستخدم
+    """
+    Ban a user.
 
     Parameters:
-        user_id: معرف المستخدم المراد حظره
-        ban: بيانات الحظر
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        user_id: ID of the user to be banned.
+        ban: Ban details containing the reason.
+        db: Database session.
+        current_user: The current moderator or admin user.
+
+    Raises:
+        HTTPException: If the current user is not authorized.
+
+    Returns:
+        A success message if the user is banned successfully.
     """
     if not current_user.is_moderator and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -65,13 +80,20 @@ def review_report(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """مراجعة تقرير
+    """
+    Review a report submitted by users.
 
     Parameters:
-        report_id: معرف التقرير
-        review: بيانات المراجعة
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        report_id: ID of the report to review.
+        review: Review details (validity of the report).
+        db: Database session.
+        current_user: The current moderator or admin user.
+
+    Raises:
+        HTTPException: If the current user is not authorized.
+
+    Returns:
+        A success message if the report is reviewed successfully.
     """
     if not current_user.is_moderator and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -86,19 +108,26 @@ def ban_ip(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """حظر عنوان IP
+    """
+    Ban an IP address.
 
     Parameters:
-        ip_ban: بيانات حظر IP
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        ip_ban: IP ban details including the IP address and reason.
+        db: Database session.
+        current_user: The current admin user.
+
+    Raises:
+        HTTPException: If the current user is not an admin or if the IP is already banned.
+
+    Returns:
+        The newly created IP ban record.
     """
     if not current_user.is_admin:
         raise HTTPException(
             status_code=403, detail="Not authorized to ban IP addresses"
         )
 
-    # التحقق من عدم وجود حظر مسبق
+    # Check if the IP is already banned
     existing_ban = (
         db.query(models.IPBan)
         .filter(models.IPBan.ip_address == ip_ban.ip_address)
@@ -107,13 +136,13 @@ def ban_ip(
     if existing_ban:
         raise HTTPException(status_code=400, detail="This IP address is already banned")
 
-    # إنشاء حظر IP جديد
+    # Create a new IP ban record
     new_ban = models.IPBan(**ip_ban.dict(), created_by=current_user.id)
     db.add(new_ban)
     db.commit()
     db.refresh(new_ban)
 
-    # تحديث إحصائيات الحظر
+    # Update ban statistics using utility function
     utils.update_ban_statistics(db, "ip", ip_ban.reason, 1.0)
 
     return new_ban
@@ -124,11 +153,18 @@ def get_banned_ips(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """الحصول على قائمة عناوين IP المحظورة
+    """
+    Retrieve a list of banned IP addresses.
 
     Parameters:
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        db: Database session.
+        current_user: The current admin user.
+
+    Raises:
+        HTTPException: If the current user is not authorized.
+
+    Returns:
+        A list of IP ban records.
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to view banned IPs")
@@ -142,19 +178,26 @@ def unban_ip(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """إلغاء حظر عنوان IP
+    """
+    Unban an IP address.
 
     Parameters:
-        ip_address: عنوان IP المراد إلغاء حظره
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي (المشرف)
+        ip_address: The IP address to unban.
+        db: Database session.
+        current_user: The current admin user.
+
+    Raises:
+        HTTPException: If the current user is not authorized or if the IP ban is not found.
+
+    Returns:
+        A message indicating successful unbanning.
     """
     if not current_user.is_admin:
         raise HTTPException(
             status_code=403, detail="Not authorized to unban IP addresses"
         )
 
-    # البحث عن الحظر وإزالته
+    # Locate the existing ban record for the given IP
     ban = db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
     if not ban:
         raise HTTPException(status_code=404, detail="IP ban not found")

@@ -1,18 +1,13 @@
-from fastapi import (
-    APIRouter,
-    HTTPException,
-    status,
-    Depends,
-    BackgroundTasks,
-    Query,
-)
+from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, asc
+from typing import List, Optional
+from datetime import datetime, timedelta
+import emoji
+
 from ..models import Comment, Post, User
 from .. import schemas, oauth2
 from ..database import get_db
-from typing import List, Optional
-from datetime import datetime, timedelta
 from ..utils import (
     check_content_against_rules,
     check_for_profanity,
@@ -27,7 +22,6 @@ from ..utils import (
     create_notification,
 )
 from ..config import settings
-import emoji
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -36,7 +30,9 @@ EDIT_WINDOW = timedelta(minutes=settings.COMMENT_EDIT_WINDOW_MINUTES)
 
 # Utility Functions
 def check_comment_owner(comment: Comment, user: User):
-    """التحقق من ملكية التعليق"""
+    """
+    Verify that the comment belongs to the given user.
+    """
     if comment.owner_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -49,8 +45,11 @@ async def validate_comment_content(
     post: Post,
     db: Session,
 ):
-    """التحقق من صحة محتوى التعليق"""
-    # التحقق من قواعد المجتمع
+    """
+    Validate the comment content.
+
+    Checks community rules, and validates image and video URLs.
+    """
     if post.community_id:
         community_rules = [rule.rule for rule in post.community.rules]
         if not check_content_against_rules(comment.content, community_rules):
@@ -58,7 +57,6 @@ async def validate_comment_content(
                 status_code=400, detail="Comment content violates community rules"
             )
 
-    # التحقق من الروابط والوسائط
     if comment.image_url and not is_valid_image_url(comment.image_url):
         raise HTTPException(status_code=400, detail="Invalid image URL")
 
@@ -66,7 +64,9 @@ async def validate_comment_content(
         raise HTTPException(status_code=400, detail="Invalid video URL")
 
 
-# Comment CRUD Endpoints
+# API Endpoints
+
+
 @router.post(
     "/", status_code=status.HTTP_201_CREATED, response_model=schemas.CommentOut
 )
@@ -76,7 +76,26 @@ async def create_comment(
     db: Session = Depends(get_db),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """إنشاء تعليق جديد"""
+    """
+    Create a new comment.
+
+    Parameters:
+      - comment: CommentCreate schema containing comment data.
+      - background_tasks: For scheduling background tasks.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Process:
+      - Verify user is verified.
+      - Verify that the post exists.
+      - Validate the comment content.
+      - Create a new comment and update related counts.
+      - Log the event and send notifications.
+      - Update the post score.
+
+    Returns:
+      The newly created comment.
+    """
     if not current_user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
@@ -124,7 +143,7 @@ async def create_comment(
     create_notification(
         db,
         post.owner_id,
-        f"{current_user.username} علق على منشورك",
+        f"{current_user.username} commented on your post",
         f"/post/{post.id}",
         "new_comment",
         new_comment.id,
@@ -138,13 +157,14 @@ async def create_comment(
             create_notification(
                 db,
                 parent_comment.owner_id,
-                f"{current_user.username} رد على تعليقك",
+                f"{current_user.username} replied to your comment",
                 f"/post/{post.id}#comment-{new_comment.id}",
                 "reply_to_comment",
                 new_comment.id,
             )
 
     update_post_score(db, post)
+
     return new_comment
 
 
@@ -158,7 +178,25 @@ async def get_comments(
     skip: int = 0,
     limit: int = 100,
 ):
-    """الحصول على تعليقات المنشور"""
+    """
+    Retrieve comments for a post.
+
+    Parameters:
+      - post_id: ID of the post.
+      - sort_by: Field to sort comments by.
+      - sort_order: Sort order.
+      - skip: Number of comments to skip.
+      - limit: Maximum number of comments to return.
+
+    Process:
+      - Verify that the post exists.
+      - Apply sorting.
+      - Filter out flagged comments for non-moderators.
+      - Translate comment content.
+
+    Returns:
+      A list of comments.
+    """
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(
@@ -169,7 +207,6 @@ async def get_comments(
         Comment.post_id == post_id, Comment.parent_id == None
     )
 
-    # تطبيق الترتيب
     if sort_by == "created_at":
         query = query.order_by(
             desc(Comment.created_at)
@@ -183,14 +220,12 @@ async def get_comments(
             else asc(Comment.likes_count)
         )
 
-    # تصفية التعليقات المسيئة للمستخدمين العاديين
     if not current_user.is_moderator:
         query = query.filter(Comment.is_flagged == False)
 
     comments = (
         query.options(joinedload(Comment.replies)).offset(skip).limit(limit).all()
     )
-
     for comment in comments:
         comment.content = await get_translated_content(
             comment.content, current_user, comment.language
@@ -203,11 +238,21 @@ async def get_comments(
 def get_comment_replies(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
     sort_by: Optional[str] = Query("created_at", enum=["created_at", "likes_count"]),
     sort_order: Optional[str] = Query("desc", enum=["asc", "desc"]),
 ):
-    """الحصول على الردود على تعليق محدد"""
+    """
+    Retrieve replies for a specific comment.
+
+    Parameters:
+      - comment_id: ID of the parent comment.
+      - sort_by: Field to sort by.
+      - sort_order: Sort order.
+
+    Returns:
+      A list of replies.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(
@@ -232,7 +277,8 @@ def get_comment_replies(
     if not current_user.is_moderator:
         query = query.filter(Comment.is_flagged == False)
 
-    return query.all()
+    replies = query.all()
+    return replies
 
 
 @router.put("/{comment_id}", response_model=schemas.Comment)
@@ -240,9 +286,26 @@ def update_comment(
     comment_id: int,
     updated_comment: schemas.CommentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """تحديث تعليق"""
+    """
+    Update an existing comment.
+
+    Parameters:
+      - comment_id: ID of the comment to update.
+      - updated_comment: New content for the comment.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Process:
+      - Verify comment existence.
+      - Check ownership and edit window.
+      - Save previous content to edit history.
+      - Update the comment and mark it as edited.
+
+    Returns:
+      The updated comment.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(
@@ -274,9 +337,23 @@ def update_comment(
 def delete_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """حذف تعليق"""
+    """
+    Soft delete a comment.
+
+    Parameters:
+      - comment_id: ID of the comment to delete.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Process:
+      - Verify comment existence and ownership.
+      - Mark the comment as deleted and update deletion timestamp.
+
+    Returns:
+      A confirmation message.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(
@@ -297,9 +374,22 @@ def delete_comment(
 def get_comment_edit_history(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """الحصول على سجل تعديلات التعليق"""
+    """
+    Retrieve the edit history for a specific comment.
+
+    Parameters:
+      - comment_id: ID of the comment.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      A list of edit history records for the comment.
+
+    Raises:
+      HTTPException: If the comment is not found or if access is unauthorized.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(
@@ -315,17 +405,34 @@ def get_comment_edit_history(
     return comment.edit_history
 
 
-# Moderation Endpoints
 @router.post(
     "/report", status_code=status.HTTP_201_CREATED, response_model=schemas.Report
 )
 def report_comment(
     report: schemas.ReportCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
-    """الإبلاغ عن تعليق"""
+    """
+    Report a post or comment.
+
+    Parameters:
+      - report: ReportCreate schema containing report details.
+      - db: Database session.
+      - current_user: The authenticated user.
+      - background_tasks: For sending notifications asynchronously.
+
+    Process:
+      - Determine the reported content (post or comment).
+      - Check content for profanity and invalid URLs.
+      - Create a new report record.
+      - Automatically flag the content if violations are found.
+      - Notify moderators if necessary.
+
+    Returns:
+      The created report record.
+    """
     if report.post_id:
         post = db.query(Post).filter(Post.id == report.post_id).first()
         if not post:
@@ -389,9 +496,20 @@ def flag_comment(
     comment_id: int,
     flag_reason: schemas.FlagCommentRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """وضع علامة على تعليق"""
+    """
+    Flag a comment manually.
+
+    Parameters:
+      - comment_id: ID of the comment to flag.
+      - flag_reason: FlagCommentRequest schema with flag reason.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      A confirmation message.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -402,14 +520,23 @@ def flag_comment(
     return {"message": "Comment flagged successfully"}
 
 
-# Interaction Endpoints
 @router.post("/{comment_id}/like", status_code=status.HTTP_200_OK)
 def like_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """الإعجاب بتعليق"""
+    """
+    Like a comment.
+
+    Parameters:
+      - comment_id: ID of the comment to like.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      A confirmation message.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -423,9 +550,19 @@ def like_comment(
 def highlight_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """تمييز تعليق"""
+    """
+    Toggle the highlighted status of a comment.
+
+    Parameters:
+      - comment_id: ID of the comment to highlight.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      The updated comment.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -445,9 +582,19 @@ def highlight_comment(
 def set_best_answer(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """تعيين تعليق كأفضل إجابة"""
+    """
+    Set a comment as the best answer for a post.
+
+    Parameters:
+      - comment_id: ID of the comment to mark as best answer.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      The updated comment.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -456,7 +603,6 @@ def set_best_answer(
     if post.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to set best answer")
 
-    # Reset previous best answer if exists
     previous_best = (
         db.query(Comment)
         .filter(Comment.post_id == post.id, Comment.is_best_answer == True)
@@ -475,9 +621,22 @@ def set_best_answer(
 def pin_comment(
     comment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(oauth2.get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """تثبيت تعليق"""
+    """
+    Pin or unpin a comment on a post.
+
+    Parameters:
+      - comment_id: ID of the comment to pin.
+      - db: Database session.
+      - current_user: The authenticated user.
+
+    Returns:
+      The updated comment.
+
+    Raises:
+      HTTPException: If maximum number of pinned comments is reached.
+    """
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
@@ -494,7 +653,6 @@ def pin_comment(
             .filter(Comment.post_id == post.id, Comment.is_pinned == True)
             .count()
         )
-
         if pinned_comments_count >= post.max_pinned_comments:
             raise HTTPException(
                 status_code=400,

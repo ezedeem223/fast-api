@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path  # Used for file path operations
 from fastapi import (
     FastAPI,
     WebSocket,
@@ -13,6 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from apscheduler.schedulers.background import BackgroundScheduler
+from fastapi_utils.tasks import repeat_every
+import gettext
+
+# Import custom modules and routers
 from . import models, oauth2
 from .database import engine, get_db, SessionLocal
 from .routers import (
@@ -48,30 +54,31 @@ from .routers import (
     social_posts,
 )
 from .config import settings
-from .notifications import ConnectionManager, send_real_time_notification
-from apscheduler.schedulers.background import BackgroundScheduler
+from .notifications import (
+    ConnectionManager,
+    send_real_time_notification,
+    NotificationService,
+)  # Added NotificationService
 from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
 from .ip_utils import get_client_ip, is_ip_banned
 from .analytics import model, tokenizer, clean_old_statistics
-from fastapi_utils.tasks import repeat_every
 from app.routers.search import update_search_suggestions
 from .utils import update_search_vector, spell, update_post_score
 from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
 from .middleware.language import language_middleware
-import gettext
 from .firebase_config import initialize_firebase
 from .ai_chat.amenhotep import AmenhotepAI
 
+# Configure logging and initial settings
 logger = logging.getLogger(__name__)
-train_content_classifier()
-app.state.default_language = settings.DEFAULT_LANGUAGE
-
+train_content_classifier()  # Train content classifier on startup
 app = FastAPI(
     title="Your API",
     description="API for social media platform with comment filtering and sorting",
     version="1.0.0",
 )
+app.state.default_language = settings.DEFAULT_LANGUAGE
 
 # CORS settings
 origins = [
@@ -79,7 +86,6 @@ origins = [
     "https://www.example.com",
     # Add your trusted domains here
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -88,19 +94,71 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# Internationalization setup
 localedir = "locales"
 translation = gettext.translation("messages", localedir, fallback=True)
 _ = translation.gettext
 
+# Include routers (all endpoints are registered here)
+app.include_router(post.router)
+app.include_router(user.router)
+app.include_router(auth.router)
+app.include_router(vote.router)
+app.include_router(comment.router)
+app.include_router(follow.router)
+app.include_router(block.router)
+app.include_router(admin_dashboard.router)
+app.include_router(oauth.router)
+app.include_router(search.router)
+app.include_router(message.router)
+app.include_router(community.router)
+app.include_router(p2fa.router)
+app.include_router(moderator.router)
+app.include_router(support.router)
+app.include_router(business.router)
+app.include_router(sticker.router)
+app.include_router(call.router)
+app.include_router(screen_share.router)
+app.include_router(session.router)
+app.include_router(hashtag.router)
+app.include_router(reaction.router)
+app.include_router(statistics.router)
+app.include_router(ip_ban.router)
+app.include_router(banned_words.router)  # Assuming banned_words is a valid router
+app.include_router(moderation.router)
+app.include_router(category_management.router)
+app.include_router(social_auth.router)
+app.include_router(amenhotep.router)
+app.include_router(social_posts.router)
 
+# Add language middleware to all HTTP requests
+app.middleware("http")(language_middleware)
+
+# Initialize WebSocket connection manager
+manager = ConnectionManager()
+
+# Create a single scheduler instance and add all scheduled jobs
+scheduler = BackgroundScheduler()
+scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
+scheduler.add_job(update_all_communities_statistics, "cron", hour=0)  # Defined below
+scheduler.start()
+
+
+# Root endpoint (only one definition to avoid conflicts)
 @app.get("/")
 async def root():
+    """
+    English Explanation: Returns a welcome message to the application.
+    """
     return {"message": _("Welcome to our application")}
 
 
+# Exception handler for request validation errors
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    English Explanation: Handles request validation errors with proper logging and response.
+    """
     logger.error(f"ValidationError for request: {request.url.path}")
     logger.error(f"Error details: {exc.errors()}")
 
@@ -146,58 +204,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-# Include routers
-app.include_router(post.router)
-app.include_router(user.router)
-app.include_router(auth.router)
-app.include_router(vote.router)
-app.include_router(comment.router)
-app.include_router(follow.router)
-app.include_router(block.router)
-app.include_router(admin_dashboard.router)
-app.include_router(oauth.router)
-app.include_router(search.router)
-app.include_router(message.router)
-app.include_router(community.router)
-app.include_router(p2fa.router)
-app.include_router(moderator.router)
-app.include_router(support.router)
-app.include_router(business.router)
-app.include_router(sticker.router)
-app.include_router(call.router)
-app.include_router(screen_share.router)
-app.include_router(session.router)
-app.include_router(hashtag.router)
-app.include_router(reaction.router)
-app.include_router(statistics.router)
-app.include_router(ip_ban.router)
-app.include_router(moderation.router)
-app.include_router(category_management.router)
-app.include_router(social_auth.router)
-app.include_router(amenhotep.router)
-app.include_router(social_posts.router)
-
-app.middleware("http")(language_middleware)
-
-
-manager = ConnectionManager()
-scheduler = BackgroundScheduler()
-scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
-scheduler.start()
-
-
-@app.get("/")
-def read_root():
-    return {"message": "Hello, World!"}
-
-
-@app.get("/")
-def root():
-    return {"message": "Welcome to the secure messaging API"}
-
-
+# WebSocket endpoint for real-time notifications
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int):
+    """
+    English Explanation: Handles WebSocket connections for real-time messaging.
+    """
     await manager.connect(websocket)
     try:
         while True:
@@ -213,34 +225,42 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
         await manager.disconnect(websocket)
 
 
+# Startup event to execute initial configuration tasks
 @app.on_event("startup")
 async def startup_event():
+    """
+    English Explanation: Executes startup tasks such as creating default categories,
+    updating search vectors, initializing services, and loading the content analysis model.
+    """
     db = SessionLocal()
     create_default_categories(db)
     db.close()
     update_search_vector()
+    # Ensure the Path module is available for constructing file paths
     arabic_words_path = Path(__file__).parent / "arabic_words.txt"
     app.state.amenhotep = AmenhotepAI()
-
     spell.word_frequency.load_dictionary(str(arabic_words_path))
     celery_app.conf.beat_schedule = {
         "check-scheduled-posts": {
             "task": "app.celery_worker.schedule_post_publication",
-            "schedule": 60.0,  # كل دقيقة
+            "schedule": 60.0,  # every minute
         },
     }
     print("Loading content analysis model...")
     model.eval()
     print("Content analysis model loaded successfully!")
-
     if not initialize_firebase():
         logger.warning(
             "Firebase initialization failed - push notifications will be disabled"
         )
 
 
+# Middleware to check if the client's IP is banned
 @app.middleware("http")
 async def check_ip_ban(request: Request, call_next):
+    """
+    English Explanation: Blocks requests from banned IP addresses.
+    """
     db = next(get_db())
     client_ip = get_client_ip(request)
     if is_ip_banned(db, client_ip):
@@ -251,50 +271,63 @@ async def check_ip_ban(request: Request, call_next):
     return response
 
 
+# Protected endpoint that requires authentication
 @app.get("/protected-resource")
 def protected_resource(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    English Explanation: Returns a protected resource accessible only to authenticated users.
+    """
     return {
         "message": "You have access to this protected resource",
         "user_id": current_user.id,
     }
 
 
-# New function to update all communities statistics
+# Function to update statistics for all communities
 def update_all_communities_statistics():
+    """
+    English Explanation: Iterates through all communities and updates their statistics.
+    """
     db = SessionLocal()
     try:
         communities = db.query(models.Community).all()
         for community in communities:
+            # Assuming update_community_statistics is implemented in the community router
             community.router.update_community_statistics(db, community.id)
     finally:
         db.close()
 
 
-# Initialize and start the scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(update_all_communities_statistics, "cron", hour=0)
-scheduler.start()
-
-
-# Shutdown event to stop the scheduler when the app shuts down
+# Shutdown event to gracefully stop the scheduler when the app shuts down
 @app.on_event("shutdown")
 def shutdown_event():
+    """
+    English Explanation: Shuts down the scheduler on application shutdown.
+    """
     scheduler.shutdown()
 
 
+# Scheduled task: Update search suggestions daily
 @app.on_event("startup")
-@repeat_every(seconds=60 * 60 * 24)  # مرة واحدة يوميًا
+@repeat_every(seconds=60 * 60 * 24)  # every 24 hours
 def update_search_suggestions_task():
+    """
+    English Explanation: Updates search suggestions once a day.
+    """
     db = next(get_db())
     update_search_suggestions(db)
 
 
+# Scheduled task: Update post scores hourly
 @app.on_event("startup")
-@repeat_every(seconds=60 * 60)  # تحديث كل ساعة
+@repeat_every(seconds=60 * 60)  # every hour
 def update_all_post_scores():
+    """
+    English Explanation: Recalculates and updates the scores for all posts every hour.
+    """
     db = SessionLocal()
     try:
         posts = db.query(models.Post).all()
@@ -304,26 +337,33 @@ def update_all_post_scores():
         db.close()
 
 
+# Middleware to add the 'Content-Language' header to all responses
 @app.middleware("http")
 async def add_language_header(request: Request, call_next):
+    """
+    English Explanation: Adds the Content-Language header based on the request's locale.
+    """
     response = await call_next(request)
     lang = get_locale(request)
     response.headers["Content-Language"] = lang
     return response
 
 
+# Endpoint to retrieve all available languages (single definition)
 @app.get("/languages")
 def get_available_languages():
+    """
+    English Explanation: Returns a list of supported languages.
+    """
     return ALL_LANGUAGES
 
 
-@app.get("/languages")
-def get_available_languages():
-    return ALL_LANGUAGES
-
-
+# Endpoint to translate content from one language to another
 @app.post("/translate")
 async def translate_content(request: Request):
+    """
+    English Explanation: Translates provided text using source and target languages.
+    """
     data = await request.json()
     text = data.get("text")
     source_lang = data.get("source_lang", get_locale(request))
@@ -336,24 +376,28 @@ async def translate_content(request: Request):
     }
 
 
-# إضافة مهمة دورية لتنظيف الإشعارات القديمة
+# Scheduled task: Clean up notifications older than 30 days daily
 @app.on_event("startup")
-@repeat_every(seconds=86400)  # كل 24 ساعة
+@repeat_every(seconds=86400)  # every 24 hours
 def cleanup_old_notifications():
+    """
+    English Explanation: Removes notifications older than 30 days.
+    """
     db = SessionLocal()
     try:
         notification_service = NotificationService(db)
-        await notification_service.cleanup_old_notifications(
-            30
-        )  # تنظيف الإشعارات الأقدم من 30 يوماً
+        notification_service.cleanup_old_notifications(30)
     finally:
         db.close()
 
 
-# إضافة مهمة دورية لإعادة محاولة الإشعارات الفاشلة
+# Scheduled task: Retry failed notifications every hour (up to 3 attempts)
 @app.on_event("startup")
-@repeat_every(seconds=3600)  # كل ساعة
+@repeat_every(seconds=3600)  # every hour
 def retry_failed_notifications():
+    """
+    English Explanation: Attempts to resend notifications that previously failed.
+    """
     db = SessionLocal()
     try:
         notifications = (
@@ -364,9 +408,8 @@ def retry_failed_notifications():
             )
             .all()
         )
-
         notification_service = NotificationService(db)
         for notification in notifications:
-            await notification_service.retry_failed_notification(notification.id)
+            notification_service.retry_failed_notification(notification.id)
     finally:
         db.close()

@@ -8,22 +8,29 @@ from fastapi import (
     BackgroundTasks,
     UploadFile,
     File,
+    Query,
 )
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, desc, asc
+from datetime import timedelta, datetime, date
+import pyotp
+from typing import List, Optional
+from pydantic import HttpUrl
+
+# Importing local modules
 from .. import models, schemas, utils, oauth2, crypto
 from ..database import get_db
 from ..notifications import send_email_notification
-from typing import List, Optional
-from pydantic import HttpUrl
-import pyotp
-from datetime import timedelta
 from ..cache import cache
 from ..utils import log_user_event
-from ..i18n import ALL_LANGUAGES
-
+from ..i18n import (
+    ALL_LANGUAGES,
+    get_translated_content,
+)  # Assuming get_translated_content is defined here
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+# --- User Endpoints ---
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
@@ -32,17 +39,21 @@ async def create_user(
     user: schemas.UserCreate,
     db: Session = Depends(get_db),
 ):
-    # التحقق من وجود المستخدم
+    """
+    إنشاء مستخدم جديد وإنشاء إشعار بالبريد الإلكتروني
+    Create a new user and send an email notification.
+    """
+    # Check if user already exists
     existing_user = (
         db.query(models.User).filter(models.User.email == user.email).first()
     )
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # تشفير كلمة المرور
+    # Hash the password
     hashed_password = utils.hash(user.password)
 
-    # إنشاء مستخدم جديد
+    # Create a new user object
     new_user = models.User(
         email=user.email,
         hashed_password=hashed_password,
@@ -53,7 +64,7 @@ async def create_user(
     db.commit()
     db.refresh(new_user)
 
-    # إرسال إشعار بالبريد الإلكتروني
+    # Send email notification asynchronously
     background_tasks.add_task(
         send_email_notification,
         to=new_user.email,
@@ -75,10 +86,15 @@ async def get_user_followers(
     skip: int = 0,
     limit: int = 100,
 ):
+    """
+    الحصول على قائمة المتابعين مع إمكانية الفرز
+    Retrieve a list of followers with sorting options.
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check privacy settings for followers
     if user.followers_visibility == "private" and user.id != current_user.id:
         raise HTTPException(status_code=403, detail="Followers list is private")
 
@@ -99,6 +115,7 @@ async def get_user_followers(
         .filter(models.Follow.followed_id == user_id)
     )
 
+    # Determine the column to sort by
     if sort_by == schemas.SortOption.DATE:
         order_column = models.Follow.created_at
     elif sort_by == schemas.SortOption.USERNAME:
@@ -108,6 +125,7 @@ async def get_user_followers(
     elif sort_by == schemas.SortOption.INTERACTION_COUNT:
         order_column = models.User.interaction_count
 
+    # Apply sorting order
     if order == "desc":
         query = query.order_by(desc(order_column))
     else:
@@ -139,6 +157,10 @@ async def update_followers_settings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث إعدادات رؤية المتابعين
+    Update user's followers settings.
+    """
     current_user.followers_visibility = settings.followers_visibility
     current_user.followers_custom_visibility = settings.followers_custom_visibility
     current_user.followers_sort_preference = settings.followers_sort_preference
@@ -152,6 +174,10 @@ def update_public_key(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث المفتاح العام للمستخدم
+    Update the user's public key.
+    """
     current_user.public_key = key_update.public_key
     db.commit()
     db.refresh(current_user)
@@ -164,10 +190,15 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    الحصول على بيانات المستخدم حسب المعرف
+    Get user details by ID.
+    """
     user = db.query(models.User).filter(models.User.id == id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Check privacy settings for profile
     if user.privacy_level == models.PrivacyLevel.PRIVATE and user.id != current_user.id:
         raise HTTPException(status_code=403, detail="This profile is private")
 
@@ -188,6 +219,10 @@ async def verify_user(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    رفع وثيقة التحقق وتفعيل الحساب
+    Upload verification document and verify the user.
+    """
     if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
@@ -202,7 +237,7 @@ async def verify_user(
     await send_email_notification(
         to=current_user.email,
         subject="Verification Completed",
-        body=f"Your account has been verified successfully.",
+        body="Your account has been verified successfully.",
     )
 
     return {"info": "Verification document uploaded and user verified successfully."}
@@ -215,16 +250,19 @@ async def get_user_content(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ):
+    """
+    الحصول على محتوى المستخدم (المنشورات، التعليقات، المقالات، والفيديوهات القصيرة)
+    Retrieve the user's content including posts, comments, articles, and reels.
+    """
+    # Ensure the user is authenticated
     if not current_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this content",
         )
 
-    # استعلام المنشورات مع مراعاة الخصوصية
+    # Query posts with privacy considerations
     posts_query = db.query(models.Post).filter(models.Post.owner_id == current_user.id)
-
-    # إذا كانت إعدادات الخصوصية مخصصة، نطبق القيود المخصصة
     if current_user.privacy_level == models.PrivacyLevel.CUSTOM:
         allowed_users = current_user.custom_privacy.get("allowed_users", [])
         posts_query = posts_query.filter(
@@ -233,14 +271,11 @@ async def get_user_content(
                 models.Post.id.in_(allowed_users),
             )
         )
-    elif current_user.privacy_level == models.PrivacyLevel.PRIVATE:
-        # إذا كان الملف الشخصي خاص، نعرض جميع المنشورات للمستخدم نفسه
-        pass
-    else:  # PUBLIC
-        # نعرض جميع المنشورات العامة
+    elif current_user.privacy_level == models.PrivacyLevel.PUBLIC:
         posts_query = posts_query.filter(
             models.Post.privacy_level == models.PrivacyLevel.PUBLIC
         )
+    # If PRIVATE, show all posts of the user (no filtering needed)
 
     posts = (
         posts_query.options(joinedload(models.Post.owner))
@@ -250,7 +285,7 @@ async def get_user_content(
         .all()
     )
 
-    # استعلامات التعليقات والمقالات والفيديوهات القصيرة تبقى كما هي
+    # Query comments, articles, and reels similarly
     comments = (
         db.query(models.Comment)
         .filter(models.Comment.owner_id == current_user.id)
@@ -260,7 +295,6 @@ async def get_user_content(
         .limit(limit)
         .all()
     )
-
     articles = (
         db.query(models.Article)
         .filter(models.Article.author_id == current_user.id)
@@ -270,7 +304,6 @@ async def get_user_content(
         .limit(limit)
         .all()
     )
-
     reels = (
         db.query(models.Reel)
         .filter(models.Reel.owner_id == current_user.id)
@@ -289,27 +322,16 @@ async def get_user_content(
     )
 
 
-@router.get("/my-content", response_model=schemas.UserContentOut)
-async def get_user_content(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
-):
-    # التحقق من أن المستخدم يطلب محتواه الخاص فقط
-    if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this content",
-        )
-
-
 @router.put("/profile", response_model=schemas.UserProfileOut)
 def update_user_profile(
     profile_update: schemas.UserProfileUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث الملف الشخصي للمستخدم
+    Update the user's profile.
+    """
     for key, value in profile_update.dict(exclude_unset=True).items():
         setattr(current_user, key, value)
 
@@ -326,6 +348,10 @@ def update_privacy_settings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث إعدادات الخصوصية للمستخدم
+    Update the user's privacy settings.
+    """
     if (
         privacy_settings.privacy_level == schemas.PrivacyLevel.CUSTOM
         and not privacy_settings.custom_privacy
@@ -345,12 +371,22 @@ def update_privacy_settings(
 
 
 @router.get("/profile/{user_id}", response_model=schemas.UserProfileOut)
-def get_user_profile(user_id: int, db: Session = Depends(get_db)):
+async def get_user_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    الحصول على الملف الشخصي للمستخدم مع ترجمة الـ bio (في حال تفعيل الترجمة)
+    Get the user profile and translate bio if needed.
+    """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Translate bio if necessary (assuming get_translated_content is an async function)
     user.bio = await get_translated_content(user.bio, current_user, user.language)
+
     post_count = (
         db.query(func.count(models.Post.id))
         .filter(models.Post.owner_id == user_id)
@@ -375,7 +411,9 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
         db.query(func.count(models.Post.id))
         .filter(
             models.Post.owner_id == user_id,
-            models.Post.content.like("%image%") | models.Post.content.like("%video%"),
+            or_(
+                models.Post.content.like("%image%"), models.Post.content.like("%video%")
+            ),
         )
         .scalar()
     )
@@ -400,6 +438,10 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
 def get_user_posts(
     user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
 ):
+    """
+    الحصول على منشورات المستخدم حسب المعرف
+    Get posts of a user by user ID.
+    """
     posts = (
         db.query(models.Post)
         .filter(models.Post.owner_id == user_id)
@@ -414,6 +456,10 @@ def get_user_posts(
 def get_user_articles(
     user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
 ):
+    """
+    الحصول على مقالات المستخدم حسب المعرف
+    Get articles of a user by user ID.
+    """
     articles = (
         db.query(models.Article)
         .filter(models.Article.author_id == user_id)
@@ -428,11 +474,17 @@ def get_user_articles(
 def get_user_media(
     user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
 ):
+    """
+    الحصول على وسائط المستخدم (صور وفيديوهات)
+    Get media posts of a user by user ID.
+    """
     media = (
         db.query(models.Post)
         .filter(
             models.Post.owner_id == user_id,
-            models.Post.content.like("%image%") | models.Post.content.like("%video%"),
+            or_(
+                models.Post.content.like("%image%"), models.Post.content.like("%video%")
+            ),
         )
         .offset(skip)
         .limit(limit)
@@ -445,6 +497,10 @@ def get_user_media(
 def get_user_likes(
     user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
 ):
+    """
+    الحصول على المشاركات التي أعجب بها المستخدم
+    Get posts liked by the user.
+    """
     liked_posts = (
         db.query(models.Post)
         .join(models.Vote)
@@ -462,6 +518,10 @@ async def upload_profile_image(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    رفع صورة الملف الشخصي للمستخدم
+    Upload the user's profile image.
+    """
     if file.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(
             status_code=400,
@@ -484,6 +544,10 @@ def change_password(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    تغيير كلمة المرور للمستخدم
+    Change the user's password.
+    """
     if not utils.verify(password_change.current_password, current_user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
@@ -500,6 +564,10 @@ def enable_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    تفعيل المصادقة الثنائية (2FA)
+    Enable Two-Factor Authentication.
+    """
     if current_user.otp_secret:
         raise HTTPException(status_code=400, detail="2FA is already enabled")
 
@@ -516,6 +584,10 @@ def verify_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    التحقق من رمز المصادقة الثنائية
+    Verify the Two-Factor Authentication code.
+    """
     if not current_user.otp_secret:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -536,6 +608,10 @@ def disable_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    تعطيل المصادقة الثنائية (2FA)
+    Disable Two-Factor Authentication.
+    """
     if not current_user.otp_secret:
         raise HTTPException(status_code=400, detail="2FA is not enabled")
 
@@ -551,6 +627,10 @@ def logout_all_devices(
     current_session: str = Depends(oauth2.get_current_session),
     db: Session = Depends(get_db),
 ):
+    """
+    تسجيل الخروج من جميع الأجهزة الأخرى
+    Log out the user from all other devices.
+    """
     db.query(models.UserSession).filter(
         models.UserSession.user_id == current_user.id,
         models.UserSession.session_id != current_session,
@@ -566,6 +646,7 @@ def get_suggested_follows(
     limit: int = 10,
 ):
     """
+    الحصول على اقتراحات للمتابعة بناءً على الاهتمامات والاتصالات المشتركة
     Get suggested users to follow based on shared interests and connections.
     """
     if not current_user.interests:
@@ -573,7 +654,7 @@ def get_suggested_follows(
             status_code=status.HTTP_400_BAD_REQUEST, detail="User has no interests set"
         )
 
-    # Get users with similar interests
+    # Users with similar interests
     similar_interests = (
         db.query(models.User.id)
         .filter(models.User.id != current_user.id)
@@ -581,7 +662,7 @@ def get_suggested_follows(
         .subquery()
     )
 
-    # Get users who are followed by users that the current user follows
+    # Users followed by those the current user follows
     followed_by_current_user = (
         db.query(models.Follow.followed_id)
         .filter(models.Follow.follower_id == current_user.id)
@@ -619,6 +700,10 @@ async def get_user_analytics(
     current_user: models.User = Depends(oauth2.get_current_user),
     days: int = Query(30, ge=1, le=365),
 ):
+    """
+    الحصول على إحصائيات المستخدم خلال فترة محددة
+    Get user analytics for a specified period.
+    """
     end_date = date.today()
     start_date = end_date - timedelta(days=days)
 
@@ -655,6 +740,10 @@ async def get_user_analytics(
 async def get_user_settings(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    الحصول على إعدادات المستخدم (واجهة المستخدم وإشعارات)
+    Get user settings (UI and notification settings).
+    """
     return schemas.UserSettings(
         ui_settings=schemas.UISettings(**current_user.ui_settings),
         notifications_settings=schemas.NotificationsSettings(
@@ -669,6 +758,10 @@ async def update_user_settings(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    تحديث إعدادات المستخدم (واجهة المستخدم وإشعارات)
+    Update the user's settings.
+    """
     if settings.ui_settings:
         current_user.ui_settings.update(settings.ui_settings.dict(exclude_unset=True))
     if settings.notifications_settings:
@@ -693,6 +786,10 @@ async def update_block_settings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث إعدادات الحظر للمستخدم
+    Update the user's block settings.
+    """
     current_user.default_block_type = settings.default_block_type
     db.commit()
     db.refresh(current_user)
@@ -705,6 +802,10 @@ def update_repost_settings(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث إعدادات إعادة النشر للمستخدم
+    Update the user's repost settings.
+    """
     if settings.allow_reposts is not None:
         current_user.allow_reposts = settings.allow_reposts
         db.commit()
@@ -720,6 +821,10 @@ def get_user_notifications(
     skip: int = 0,
     limit: int = 10,
 ):
+    """
+    الحصول على إشعارات المستخدم
+    Retrieve the user's notifications.
+    """
     notifications = (
         db.query(models.Notification)
         .filter(models.Notification.user_id == current_user.id)
@@ -740,6 +845,10 @@ def mark_notification_as_read(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تعليم إشعار كمقروء
+    Mark a specific notification as read.
+    """
     notification = (
         db.query(models.Notification)
         .filter(
@@ -760,7 +869,11 @@ def mark_notification_as_read(
 
 
 def log_user_activity(db: Session, user_id: int, activity_type: str, details: dict):
-    activity = UserActivity(
+    """
+    تسجيل نشاط المستخدم في قاعدة البيانات
+    Log the user's activity.
+    """
+    activity = models.UserActivity(
         user_id=user_id, activity_type=activity_type, details=details
     )
     db.add(activity)
@@ -769,7 +882,13 @@ def log_user_activity(db: Session, user_id: int, activity_type: str, details: di
 
 @router.post("/users/{user_id}/suspend")
 def suspend_user(user_id: int, days: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    """
+    تعليق حساب المستخدم لمدة محددة
+    Suspend the user for a specified number of days.
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     user.is_suspended = True
     user.suspension_end_date = datetime.utcnow() + timedelta(days=days)
     db.commit()
@@ -778,7 +897,13 @@ def suspend_user(user_id: int, days: int, db: Session = Depends(get_db)):
 
 @router.post("/users/{user_id}/unsuspend")
 def unsuspend_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    """
+    رفع تعليق حساب المستخدم
+    Unsuspend the user.
+    """
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     user.is_suspended = False
     user.suspension_end_date = None
     db.commit()
@@ -787,10 +912,14 @@ def unsuspend_user(user_id: int, db: Session = Depends(get_db)):
 
 @router.put("/users/me/language")
 def update_user_language(
-    language: UserLanguageUpdate,
+    language: schemas.UserLanguageUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """
+    تحديث لغة المستخدم وخيارات الترجمة التلقائية
+    Update the user's preferred language and auto-translate settings.
+    """
     if language.preferred_language not in ALL_LANGUAGES:
         raise HTTPException(status_code=400, detail="Invalid language code")
 
@@ -802,4 +931,8 @@ def update_user_language(
 
 @router.get("/languages")
 def get_language_options():
+    """
+    الحصول على خيارات اللغات المتاحة
+    Get available language options.
+    """
     return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]

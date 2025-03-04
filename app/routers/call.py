@@ -1,3 +1,13 @@
+"""
+Call Router Module
+This module provides endpoints for handling calls, including starting calls,
+updating call status, retrieving active calls, and managing WebSocket connections
+for real-time call communication.
+"""
+
+# =====================================================
+# ==================== Imports ========================
+# =====================================================
 from fastapi import (
     APIRouter,
     Depends,
@@ -8,10 +18,12 @@ from fastapi import (
     BackgroundTasks,
 )
 from sqlalchemy.orm import Session
-from .. import models, schemas, oauth2, notifications, database
-from ..database import get_db
 from typing import List
 from datetime import datetime, timezone, timedelta
+
+# Local imports
+from .. import models, schemas, oauth2, notifications, database
+from ..database import get_db
 from ..notifications import ConnectionManager
 from ..utils import (
     generate_encryption_key,
@@ -23,25 +35,42 @@ from ..utils import (
 )
 from fastapi_utils.tasks import repeat_every
 
+# =====================================================
+# =============== Global Variables ====================
+# =====================================================
 router = APIRouter(prefix="/calls", tags=["Calls"])
-manager = ConnectionManager()
+manager = ConnectionManager()  # Manages WebSocket connections for calls
 
+# Interval for updating encryption key (every 30 minutes)
 KEY_UPDATE_INTERVAL = timedelta(minutes=30)
 
+# =====================================================
+# =================== Endpoints =======================
+# =====================================================
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.CallOut)
+
+@router.post("/", response_model=schemas.CallOut, status_code=status.HTTP_201_CREATED)
 async def start_call(
     call: schemas.CallCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    بدء مكالمة جديدة
+    Start a new call.
 
     Parameters:
-        call: معلومات المكالمة
-        db: جلسة قاعدة البيانات
-        current_user: المستخدم الحالي
+      - call: CallCreate schema with call information.
+      - db: Database session.
+      - current_user: The authenticated caller.
+
+    Process:
+      - Verify the receiver exists.
+      - Check that the number of active calls does not exceed the limit.
+      - Generate an encryption key and create a new call record.
+      - Send a real-time notification to the receiver.
+
+    Returns:
+      The newly created call record.
     """
     receiver = db.query(models.User).filter(models.User.id == call.receiver_id).first()
     if not receiver:
@@ -49,7 +78,6 @@ async def start_call(
             status_code=status.HTTP_404_NOT_FOUND, detail="Receiver not found"
         )
 
-    # التحقق من عدد المكالمات النشطة
     active_calls_count = (
         db.query(models.Call)
         .filter(
@@ -78,7 +106,6 @@ async def start_call(
     db.commit()
     db.refresh(new_call)
 
-    # إرسال إشعار للمستقبل
     await notifications.send_real_time_notification(
         receiver.id, f"Incoming {call.call_type} call from {current_user.username}"
     )
@@ -94,14 +121,24 @@ async def update_call_status(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    تحديث حالة المكالمة
+    Update the status of an existing call.
+
+    Parameters:
+      - call_id: ID of the call.
+      - call_update: CallUpdate schema with new status.
+      - db: Database session.
+      - current_user: The authenticated user (caller or receiver).
+
+    If the status is updated to ENDED, also update the end time and any active screen share session.
+
+    Returns:
+      The updated call record.
     """
     call = db.query(models.Call).filter(models.Call.id == call_id).first()
     if not call:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Call not found"
         )
-
     if current_user.id not in [call.caller_id, call.receiver_id]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -111,7 +148,6 @@ async def update_call_status(
     call.status = call_update.status
     if call_update.status == models.CallStatus.ENDED:
         call.end_time = datetime.now(timezone.utc)
-        # إنهاء جلسة مشاركة الشاشة النشطة
         active_share = (
             db.query(models.ScreenShareSession)
             .filter(
@@ -135,7 +171,10 @@ async def get_active_calls(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    الحصول على قائمة المكالمات النشطة
+    Retrieve a list of active calls for the current user.
+
+    Returns:
+      A list of active calls.
     """
     active_calls = (
         db.query(models.Call)
@@ -158,7 +197,10 @@ async def websocket_endpoint(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
-    نقطة نهاية WebSocket للمكالمات
+    WebSocket endpoint for call communication.
+
+    Handles real-time data exchange during the call, manages encryption key updates,
+    and checks call quality.
     """
     await websocket.accept()
     try:
@@ -175,25 +217,39 @@ async def websocket_endpoint(
                 else call.caller_id
             )
 
-            # التحقق وتحديث مفتاح التشفير
             await _handle_encryption_key_update(call, db, other_user_id)
-
-            # التحقق من جودة المكالمة
             await _handle_call_quality(
                 data, call_id, db, current_user.id, other_user_id, background_tasks
             )
-
-            # معالجة بيانات المكالمة
             await _handle_call_data(data, other_user_id, notifications)
 
     except WebSocketDisconnect:
         await _handle_call_disconnect(call, db, other_user_id)
-
-        # تنظيف بيانات جودة المكالمة القديمة
         clean_old_quality_buffers()
+    except Exception as e:
+        await websocket.close(code=1011, reason="Internal server error")
+
+
+def update_call_quality(db: Session, call_id: int, quality_score: int):
+    """
+    Update the call quality score in the database.
+    """
+    call = db.query(models.Call).filter(models.Call.id == call_id).first()
+    if call:
+        call.quality_score = quality_score
+        db.commit()
+
+
+# =====================================================
+# ============== Helper Functions =====================
+# =====================================================
 
 
 async def _handle_encryption_key_update(call, db, other_user_id):
+    """
+    Check if the encryption key needs to be updated based on KEY_UPDATE_INTERVAL.
+    If so, update the key and notify both participants.
+    """
     if datetime.now(timezone.utc) - call.last_key_update > KEY_UPDATE_INTERVAL:
         new_key = update_encryption_key(call.encryption_key)
         call.encryption_key = new_key
@@ -208,6 +264,11 @@ async def _handle_encryption_key_update(call, db, other_user_id):
 async def _handle_call_quality(
     data, call_id, db, current_user_id, other_user_id, background_tasks
 ):
+    """
+    Check the call quality using provided data. If the quality has changed,
+    update it in the database. If video quality adjustment is needed,
+    notify both participants.
+    """
     call_quality = check_call_quality(data, call_id)
     call = db.query(models.Call).filter(models.Call.id == call_id).first()
     if call_quality != call.quality_score:
@@ -223,7 +284,10 @@ async def _handle_call_quality(
 
 
 async def _handle_call_data(data, other_user_id, notifications):
-    if data["type"] in [
+    """
+    Forward call signaling data to the other participant if the data type is valid.
+    """
+    valid_types = [
         "offer",
         "answer",
         "ice_candidate",
@@ -231,11 +295,18 @@ async def _handle_call_data(data, other_user_id, notifications):
         "screen_share_answer",
         "screen_share_ice_candidate",
         "screen_share_data",
-    ]:
+    ]
+    if data.get("type") in valid_types:
         await notifications.send_real_time_notification(other_user_id, data)
 
 
 async def _handle_call_disconnect(call, db, other_user_id):
+    """
+    Handle call disconnect:
+      - Update call status to ENDED.
+      - Update end times for the call and any active screen share session.
+      - Notify the other participant.
+    """
     call.status = models.CallStatus.ENDED
     call.end_time = datetime.now(timezone.utc)
 
@@ -252,23 +323,20 @@ async def _handle_call_disconnect(call, db, other_user_id):
         active_share.end_time = datetime.now(timezone.utc)
 
     db.commit()
-
     await notifications.send_real_time_notification(
         other_user_id, {"type": "call_ended", "call_id": call.id}
     )
 
 
-def update_call_quality(db: Session, call_id: int, quality_score: int):
-    """تحديث جودة المكالمة في قاعدة البيانات"""
-    call = db.query(models.Call).filter(models.Call.id == call_id).first()
-    if call:
-        call.quality_score = quality_score
-        db.commit()
+# =====================================================
+# ========== Periodic Tasks (Startup Event) =========
+# =====================================================
 
 
-# تنظيف البيانات القديمة دورياً
 @router.on_event("startup")
-@repeat_every(seconds=3600)  # كل ساعة
+@repeat_every(seconds=3600)  # Execute every hour
 def clean_quality_buffers_periodically():
-    """تنظيف بيانات جودة المكالمات القديمة بشكل دوري"""
+    """
+    Periodically clean old call quality buffers.
+    """
     clean_old_quality_buffers()
