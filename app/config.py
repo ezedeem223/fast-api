@@ -5,54 +5,51 @@ from pydantic import EmailStr, PrivateAttr
 from fastapi_mail import ConnectionConfig
 import redis
 
-# Configure logging
+# إعدادات تسجيل الأحداث
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    # AI and model configuration
+    # إعدادات الذكاء الاصطناعي والنموذج
     AI_MODEL_PATH: str = "bigscience/bloom-1b7"
     AI_MAX_LENGTH: int = 150
     AI_TEMPERATURE: float = 0.7
 
-    # Database configuration
+    # إعدادات قاعدة البيانات
     database_hostname: str
     database_port: str
     database_password: str
     database_name: str
     database_username: str
 
-    # Security settings
+    # إعدادات الأمان
     secret_key: str
-    algorithm: str = (
-        ALGORITHM  # Ensure ALGORITHM is set in your environment or elsewhere
-    )
+    # تم تعديل الخاصية لإزالة الإشارة إلى متغير غير معرف، وستستمد القيمة من ملف البيئة (ALGORITHM)
+    algorithm: str
     access_token_expire_minutes: int
 
-    # Google OAuth settings
+    # إعدادات Google OAuth
     google_client_id: str = "default_google_client_id"
     google_client_secret: str = "default_google_client_secret"
 
-    # Email settings
+    # إعدادات البريد الإلكتروني
     mail_username: str
     mail_password: str
     mail_from: EmailStr
     mail_port: int
     mail_server: str
 
-    # Comment configuration
+    # إعدادات التعليقات
     COMMENT_EDIT_WINDOW_MINUTES: int = 15
 
-    # Celery and Redis settings
-    CELERY_BROKER_URL: str = REDIS_URL  # Ensure REDIS_URL is set in your environment
-    HUGGINGFACE_API_TOKEN: str = (
-        HUGGINGFACE_API_TOKEN  # Ensure HUGGINGFACE_API_TOKEN is set
-    )
-    REDIS_URL: str = REDIS_URL
-    redis_client = redis.Redis.from_url(REDIS_URL)
+    # إعدادات Celery و Redis
+    # تمت إزالة الاعتماد على متغيرات غير معرفة؛ ستُحمّل القيم من ملف البيئة
+    CELERY_BROKER_URL: str
+    HUGGINGFACE_API_TOKEN: str
+    REDIS_URL: str
 
-    # Social media integrations
+    # تكامل وسائل التواصل الاجتماعي
     facebook_access_token: str
     facebook_app_id: str
     facebook_app_secret: str
@@ -61,19 +58,11 @@ class Settings(BaseSettings):
     twitter_access_token: str
     twitter_access_token_secret: str
 
-    # Additional integrations (commented out for now)
-    # REDDIT_CLIENT_ID: str
-    # REDDIT_CLIENT_SECRET: str
-    # REDDIT_USER_AGENT: str = "YourApp/1.0"
-    # LINKEDIN_CLIENT_ID: str
-    # LINKEDIN_CLIENT_SECRET: str
-    # LINKEDIN_REDIRECT_URI: str
-
-    # Token refresh and language settings
+    # إعدادات تجديد التوكن واللغة
     refresh_secret_key: str
     DEFAULT_LANGUAGE: str = "ar"
 
-    # Firebase configuration
+    # إعدادات Firebase
     firebase_api_key: str
     firebase_auth_domain: str
     firebase_project_id: str
@@ -82,43 +71,46 @@ class Settings(BaseSettings):
     firebase_app_id: str
     firebase_measurement_id: str
 
-    # Notification settings
+    # إعدادات الإشعارات
     NOTIFICATION_RETENTION_DAYS: int = 90
     MAX_BULK_NOTIFICATIONS: int = 1000
     NOTIFICATION_QUEUE_TIMEOUT: int = 30
     NOTIFICATION_BATCH_SIZE: int = 100
     DEFAULT_NOTIFICATION_CHANNEL: str = "in_app"
 
-    # RSA key file paths
+    # مسارات ملفات مفاتيح RSA
     rsa_private_key_path: str
     rsa_public_key_path: str
 
-    # Private attributes to hold RSA key contents
+    # متغيرات خاصة لتخزين محتوى مفاتيح RSA
     _rsa_private_key: str = PrivateAttr()
     _rsa_public_key: str = PrivateAttr()
 
+    # تحميل متغيرات البيئة من ملف .env مع الترميز المناسب
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     def __init__(self, **kwargs):
         """
-        Initialize settings and read RSA keys from files.
+        تهيئة الإعدادات وقراءة مفاتيح RSA من الملفات.
         """
         super().__init__(**kwargs)
         self._rsa_private_key = self._read_key_file(
             self.rsa_private_key_path, "private"
         )
         self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
+        # إنشاء عميل Redis بعد تحميل قيمة REDIS_URL من ملف البيئة
+        self.redis_client = redis.Redis.from_url(self.REDIS_URL)
 
     def _read_key_file(self, filename: str, key_type: str) -> str:
         """
-        Read a key file and return its content as a string.
+        قراءة ملف المفتاح وإرجاع محتواه كنص.
 
-        Parameters:
-            filename (str): Path to the key file.
-            key_type (str): Type of the key ('private' or 'public').
+        المعاملات:
+            filename (str): مسار ملف المفتاح.
+            key_type (str): نوع المفتاح ('private' أو 'public').
 
-        Raises:
-            ValueError: If the file is not found, is empty, or cannot be read.
+        رفع:
+            ValueError: إذا لم يُعثر على الملف أو كان فارغاً أو حدث خطأ في القراءة.
         """
         if not os.path.exists(filename):
             logger.error(f"{key_type.capitalize()} key file not found: {filename}")
@@ -154,21 +146,21 @@ class Settings(BaseSettings):
     @property
     def rsa_private_key(self) -> str:
         """
-        Return the RSA private key content.
+        إرجاع محتوى مفتاح RSA الخاص.
         """
         return self._rsa_private_key
 
     @property
     def rsa_public_key(self) -> str:
         """
-        Return the RSA public key content.
+        إرجاع محتوى مفتاح RSA العام.
         """
         return self._rsa_public_key
 
     @property
     def mail_config(self) -> ConnectionConfig:
         """
-        Generate and return the email connection configuration for FastMail.
+        إنشاء وإرجاع إعدادات الاتصال بالبريد الإلكتروني.
         """
         return ConnectionConfig(
             MAIL_USERNAME=self.mail_username,
@@ -183,5 +175,11 @@ class Settings(BaseSettings):
         )
 
 
-# Instantiate the settings to be used throughout the application
+# تهيئة الإعدادات لاستخدامها في جميع أنحاء التطبيق
 settings = Settings()
+# REDDIT_CLIENT_ID: str
+# REDDIT_CLIENT_SECRET: str
+# REDDIT_USER_AGENT: str = "YourApp/1.0"
+# LINKEDIN_CLIENT_ID: str
+# LINKEDIN_CLIENT_SECRET: str
+# LINKEDIN_REDIRECT_URI: str
