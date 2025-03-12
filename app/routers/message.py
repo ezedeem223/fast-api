@@ -39,12 +39,12 @@ from ..database import get_db
 from ..link_preview import extract_link_preview
 from ..utils import (
     log_user_event,
-    create_notification,
     detect_language,
     get_translated_content,
 )
 from ..analytics import update_conversation_statistics
 from ..ai_chat.amenhotep import AmenhotepAI
+from app.notifications import create_notification
 
 # Constants and directory setup
 AUDIO_DIR = "static/audio_messages"
@@ -816,7 +816,7 @@ async def get_message(
     return message
 
 
-@router.put("/user/read-status", response_model=schemas.User)
+@router.put("/user/read-status", response_model=schemas.UserOut)
 async def update_read_status_visibility(
     user_update: schemas.UserUpdate,
     db: Session = Depends(get_db),

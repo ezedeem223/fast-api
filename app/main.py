@@ -45,7 +45,6 @@ from .routers import (
     hashtag,
     reaction,
     statistics,
-    ip_ban,
     banned_words,
     moderation,
     category_management,
@@ -61,10 +60,15 @@ from .notifications import (
 )  # Added NotificationService
 from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
-from .ip_utils import get_client_ip, is_ip_banned
 from .analytics import model, tokenizer, clean_old_statistics
 from app.routers.search import update_search_suggestions
-from .utils import update_search_vector, spell, update_post_score
+from .utils import (
+    update_search_vector,
+    spell,
+    update_post_score,
+    get_client_ip,
+    is_ip_banned,
+)
 from .i18n import babel, ALL_LANGUAGES, get_locale, translate_text
 from .middleware.language import language_middleware
 from .firebase_config import initialize_firebase
@@ -78,7 +82,7 @@ app = FastAPI(
     description="API for social media platform with comment filtering and sorting",
     version="1.0.0",
 )
-app.state.default_language = settings.DEFAULT_LANGUAGE
+app.state.default_language = settings.default_language
 
 # CORS settings
 origins = [
@@ -123,25 +127,18 @@ app.include_router(session.router)
 app.include_router(hashtag.router)
 app.include_router(reaction.router)
 app.include_router(statistics.router)
-app.include_router(ip_ban.router)
 app.include_router(banned_words.router)  # Assuming banned_words is a valid router
 app.include_router(moderation.router)
 app.include_router(category_management.router)
 app.include_router(social_auth.router)
 app.include_router(amenhotep.router)
-app.include_router(social_posts.router)
+# app.include_router(social_posts.router)
 
 # Add language middleware to all HTTP requests
 app.middleware("http")(language_middleware)
 
 # Initialize WebSocket connection manager
 manager = ConnectionManager()
-
-# Create a single scheduler instance and add all scheduled jobs
-scheduler = BackgroundScheduler()
-scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
-scheduler.add_job(update_all_communities_statistics, "cron", hour=0)  # Defined below
-scheduler.start()
 
 
 # Root endpoint (only one definition to avoid conflicts)
@@ -299,6 +296,13 @@ def update_all_communities_statistics():
             community.router.update_community_statistics(db, community.id)
     finally:
         db.close()
+
+
+# Create a single scheduler instance and add all scheduled jobs
+scheduler = BackgroundScheduler()
+scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
+scheduler.add_job(update_all_communities_statistics, "cron", hour=0)  # Defined below
+scheduler.start()
 
 
 # Shutdown event to gracefully stop the scheduler when the app shuts down

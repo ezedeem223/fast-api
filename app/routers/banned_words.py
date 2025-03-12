@@ -89,7 +89,7 @@ async def add_banned_word(
     return new_banned_word
 
 
-@router.get("/", response_model=schemas.BannedWordListOut)
+@router.get("/", response_model=dict)
 @cache(expire=300)  # Cache results for 5 minutes
 async def get_banned_words(
     db: Session = Depends(get_db),

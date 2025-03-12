@@ -7,34 +7,36 @@ from fastapi.security import OAuth2PasswordBearer
 from .config import settings
 import logging
 from typing import Optional
+from .database import get_db
+from .models import User
 
-# Removed duplicate import from ..utils; using functions from .ip_utils only
-from .ip_utils import get_client_ip, is_ip_banned, detect_ip_evasion
+# استيراد دوال إدارة الـ IP من ملف utils بدلاً من ملف ip_utils
+from .utils import get_client_ip, is_ip_banned, detect_ip_evasion
 
-# Configure logging
+# إعداد logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# OAuth2 scheme configuration for token retrieval
+# إعداد OAuth2 لاسترجاع التوكن
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
-# TokenData model for storing token-related data
+# نموذج TokenData لتخزين بيانات التوكن
 class TokenData(schemas.BaseModel):
     id: Optional[int] = None
 
 
 def create_access_token(data: dict):
     """
-    Create a JWT access token with an expiration time.
+    إنشاء JWT access token مع تحديد وقت انتهاء الصلاحية.
 
-    - Copies input data.
-    - Adds an expiry field using current UTC time plus the configured minutes.
-    - Converts 'user_id' to an integer if present.
-    - Encodes the token using RSA private key.
+    - يتم نسخ البيانات المُدخلة.
+    - يتم إضافة حقل انتهاء الصلاحية باستخدام الوقت الحالي بتوقيت UTC زائد الدقائق المحددة.
+    - إذا كان "user_id" موجوداً، يتم تحويله إلى عدد صحيح.
+    - يتم تشفير التوكن باستخدام المفتاح الخاص RSA.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -59,10 +61,10 @@ def create_access_token(data: dict):
 
 def get_current_session(token: str = Depends(oauth2_scheme)):
     """
-    Extract the current session ID from the token.
+    استخراج session_id الحالي من التوكن.
 
-    - Decodes the token using the secret key.
-    - Returns session_id if present; otherwise, raises an HTTPException.
+    - يتم فك تشفير التوكن باستخدام المفتاح السري.
+    - يُعاد session_id إذا كان موجوداً؛ وإلا يتم رفع HTTPException.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,11 +83,11 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
 
 def verify_access_token(token: str, credentials_exception):
     """
-    Verify the JWT access token.
+    التحقق من صحة JWT access token.
 
-    - Decodes the token using the RSA public key.
-    - Retrieves and validates the user_id.
-    - Returns a TokenData instance with the user_id.
+    - يتم فك تشفير التوكن باستخدام المفتاح العام RSA.
+    - يتم استرجاع والتحقق من صحة user_id.
+    - يُعاد كائن TokenData يحتوي على user_id.
     """
     try:
         logger.debug(f"Token to verify: {token[:20]}...")
@@ -114,20 +116,20 @@ def verify_access_token(token: str, credentials_exception):
 
 
 def get_current_user(
-    token: str = Depends(oauth2.oauth2_scheme),
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(database.get_db),
     request: Request = None,
 ):
     """
-    Retrieve the current user based on the provided JWT token.
+    استرجاع المستخدم الحالي بناءً على التوكن المقدم.
 
-    - Optionally checks the client IP if a request is provided.
-    - Validates token against RSA public key.
-    - Verifies token is not blacklisted.
-    - Checks for possible IP evasion.
-    - Checks if the user is banned.
-    - Updates the user's current token in the database.
-    - Returns the user instance.
+    - إذا توفرت بيانات الطلب، يتم التحقق من عنوان IP الخاص بالعميل.
+    - يتم فك تشفير التوكن باستخدام المفتاح العام RSA.
+    - يتم التحقق من عدم وجود التوكن في القائمة السوداء.
+    - يتم فحص محاولة التحايل باستخدام عناوين IP مختلفة.
+    - يتم التحقق مما إذا كان المستخدم محظوراً.
+    - يتم تحديث التوكن الحالي للمستخدم في قاعدة البيانات.
+    - يُعاد كائن المستخدم.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -157,7 +159,7 @@ def get_current_user(
         if user is None:
             raise credentials_exception
 
-        # Check if the token is blacklisted
+        # التحقق من أن التوكن غير مدرج في القائمة السوداء
         blacklisted_token = (
             db.query(models.TokenBlacklist)
             .filter(models.TokenBlacklist.token == token)
@@ -172,19 +174,19 @@ def get_current_user(
         if request:
             if detect_ip_evasion(db, user.id, client_ip):
                 logger.warning(f"Possible IP evasion detected for user {user.id}")
-                # Additional logic can be added here, e.g.:
-                # - Sending a notification to the admin
-                # - Temporarily blocking the user
-                # - Requesting additional authentication
+                # يمكن إضافة منطق إضافي هنا مثل:
+                # - إرسال إشعار للمسؤول
+                # - حظر المستخدم مؤقتاً
+                # - طلب مصادقة إضافية
 
-        # Check if the user is banned
+        # التحقق مما إذا كان المستخدم محظوراً
         if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User is banned until {user.current_ban_end}",
             )
 
-        # Update the user's current token in the database
+        # تحديث التوكن الحالي للمستخدم في قاعدة البيانات
         user.current_token = token
         db.commit()
 
@@ -197,4 +199,12 @@ def get_current_user(
         )
 
 
-# التكرار في الاستيراد: هناك استيراد مزدوج لنفس الدوال (get_client_ip, is_ip_banned, detect_ip_evasion) من مسارين مختلفين؛ لذلك يجب إزالة التكرار وترك مصدر واحد.
+def get_current_admin(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
+    user = get_current_user(token, db)
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
+        )
+    return user

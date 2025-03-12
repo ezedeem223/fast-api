@@ -14,7 +14,8 @@ from typing import List
 import logging
 
 # Local imports
-from .. import models, database, oauth2
+from .. import models, schemas, oauth2
+from ..database import get_db
 from ..ai_chat.amenhotep import AmenhotepAI
 
 # =====================================================
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/amenhotep", tags=["Amenhotep Chat"])
 async def websocket_endpoint(
     websocket: WebSocket,
     user_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -118,10 +119,10 @@ async def websocket_endpoint(
 # =====================================================
 
 
-@router.get("/chat-history/{user_id}", response_model=List[models.AmenhotepMessage])
+@router.get("/chat-history/{user_id}", response_model=List[schemas.AmenhotepMessageOut])
 async def get_chat_history(
     user_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -153,7 +154,7 @@ async def get_chat_history(
 @router.delete("/clear-history/{user_id}")
 async def clear_chat_history(
     user_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """

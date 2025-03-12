@@ -4,7 +4,8 @@ from sqlalchemy import desc, asc
 from typing import List, Optional
 from datetime import datetime, timedelta
 import emoji
-
+from app import models
+from app.notifications import create_notification
 from ..models import Comment, Post, User
 from .. import schemas, oauth2
 from ..database import get_db
@@ -19,13 +20,13 @@ from ..utils import (
     get_translated_content,
     detect_language,
     update_post_score,
-    create_notification,
 )
 from ..config import settings
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
-EDIT_WINDOW = timedelta(minutes=settings.COMMENT_EDIT_WINDOW_MINUTES)
+# إذا لم يكن هناك حد زمني للتعديل، نترك EDIT_WINDOW فارغاً
+EDIT_WINDOW = None
 
 
 # Utility Functions

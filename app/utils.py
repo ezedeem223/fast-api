@@ -18,10 +18,9 @@ from nltk.corpus import stopwords
 import joblib
 from functools import wraps, lru_cache
 from cachetools import TTLCache
-from .oauth2 import get_current_user
-import requests
-from urllib.parse import urlparse
-from textblob import TextBlob
+
+# تم إزالة الاستيراد التالي لتفادي الاستيراد الدائري:
+# from .oauth2 import get_current_user
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, desc, asc, or_
 from . import models, schemas
@@ -32,8 +31,12 @@ from cryptography.fernet import Fernet
 import time
 from collections import deque
 from datetime import datetime, timezone, date
-import ipaddress
 from typing import List, Optional
+
+# استيراد SpellChecker
+from spellchecker import SpellChecker
+import ipaddress  # إضافة مكتبة ipaddress
+from langdetect import detect, LangDetectException
 
 # Note: translate_text, SortOption, and extract_link_preview should be defined elsewhere.
 # from .some_module import translate_text, extract_link_preview  # Placeholder for external definitions
@@ -45,14 +48,18 @@ from typing import List, Optional
 # ================================
 spell = SpellChecker()
 translation_cache = TTLCache(maxsize=1000, ttl=3600)
+cache = TTLCache(maxsize=100, ttl=60)  # تعريف متغير cache للتخزين المؤقت
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
 
 # Offensive content classifier initialization
-model_name = "microsoft/DialogRPT-offensive"
+# تم استبدال النموذج السابق بنموذج صالح من Hugging Face لاكتشاف المحتوى المسيء
+model_name = "cardiffnlp/twitter-roberta-base-offensive"
 offensive_classifier = pipeline(
-    "text-classification", model=model_name, device=0 if settings.USE_GPU else -1
+    "text-classification",
+    model=model_name,
+    device=0 if getattr(settings, "USE_GPU", False) else -1,
 )
 
 # Password hashing configuration using bcrypt
@@ -72,12 +79,12 @@ sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=token
 # Authentication Utilities
 # ================================
 def hash(password: str) -> str:
-    """Hash the given password using bcrypt."""
+    """تشفير كلمة المرور باستخدام bcrypt."""
     return pwd_context.hash(password)
 
 
 def verify(plain_password: str, hashed_password: str) -> bool:
-    """Verify the plain password against the hashed password."""
+    """التحقق من كلمة المرور العادية مقابل كلمة المرور المشفرة."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -85,20 +92,31 @@ def verify(plain_password: str, hashed_password: str) -> bool:
 # Content Moderation and Validation Functions
 # ================================
 def check_content_against_rules(content: str, rules: List[str]) -> bool:
-    """Check if content violates any given regex-based rules."""
+    """التحقق مما إذا كان المحتوى ينتهك أي من القواعد المعتمدة على التعابير النمطية."""
     for rule in rules:
         if re.search(rule, content, re.IGNORECASE):
             return False
     return True
 
 
+def detect_language(text: str) -> str:
+    """
+    تحدد هذه الدالة لغة النص المُعطى وتعيد رمز اللغة.
+    في حال حدوث خطأ تعيد 'unknown'.
+    """
+    try:
+        return detect(text)
+    except LangDetectException:
+        return "unknown"
+
+
 def train_content_classifier():
     """
-    Train a simple classifier for content moderation.
-    Note: Replace dummy data with real data for production.
+    تدريب مصنف بسيط لتصفية المحتوى.
+    ملاحظة: استبدل البيانات الوهمية ببيانات حقيقية في بيئة الإنتاج.
     """
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
-    y = [0, 1, 0]  # 0: normal content, 1: offensive content
+    y = [0, 1, 0]  # 0: محتوى عادي، 1: محتوى مسيء
 
     vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
     X_vectorized = vectorizer.fit_transform(X)
@@ -106,15 +124,15 @@ def train_content_classifier():
     classifier = MultinomialNB()
     classifier.fit(X_vectorized, y)
 
-    # Save the classifier and vectorizer
+    # حفظ المصنف والمحول النصي
     joblib.dump(classifier, "content_classifier.joblib")
     joblib.dump(vectorizer, "content_vectorizer.joblib")
 
 
 def check_for_profanity(text: str) -> bool:
     """
-    Check if the text contains profanity using better-profanity and a machine learning model.
-    Returns True if profanity is detected.
+    التحقق مما إذا كان النص يحتوي على كلمات مسيئة باستخدام better-profanity ونموذج تعلم آلي.
+    يُعيد True إذا تم اكتشاف كلمات مسيئة.
     """
     if profanity.contains_profanity(text):
         return True
@@ -131,8 +149,8 @@ def check_for_profanity(text: str) -> bool:
 
 def validate_urls(text: str) -> bool:
     """
-    Validate that all URLs in the text are proper URLs.
-    Returns True if all URLs are valid.
+    التحقق من صحة جميع روابط URL الموجودة في النص.
+    يُعيد True إذا كانت جميع الروابط صحيحة.
     """
     words = text.split()
     urls = [word for word in words if word.startswith(("http://", "https://"))]
@@ -140,8 +158,10 @@ def validate_urls(text: str) -> bool:
 
 
 def is_valid_image_url(url: str) -> bool:
-    """Check if the URL points to an image resource."""
+    """التحقق مما إذا كان الرابط يشير إلى مورد صورة."""
     try:
+        import requests
+
         response = requests.head(url)
         return response.headers.get("content-type", "").startswith("image/")
     except:
@@ -149,14 +169,18 @@ def is_valid_image_url(url: str) -> bool:
 
 
 def is_valid_video_url(url: str) -> bool:
-    """Check if the URL belongs to a supported video hosting service."""
+    """التحقق مما إذا كان الرابط يعود إلى خدمة استضافة فيديو مدعومة."""
+    from urllib.parse import urlparse
+
     parsed_url = urlparse(url)
     video_hosts = ["youtube.com", "vimeo.com", "dailymotion.com"]
     return any(host in parsed_url.netloc for host in video_hosts)
 
 
 def analyze_sentiment(text):
-    """Analyze the sentiment of the text using TextBlob."""
+    """تحليل معنويات النص باستخدام TextBlob."""
+    from textblob import TextBlob
+
     analysis = TextBlob(text)
     return analysis.sentiment.polarity
 
@@ -165,7 +189,7 @@ def analyze_sentiment(text):
 # QR Code and File Upload Functions
 # ================================
 def generate_qr_code(data: str) -> str:
-    """Generate a QR code for the given data and return it as a base64-encoded PNG."""
+    """إنشاء رمز QR للبيانات المُعطاة وإرجاعه بصيغة PNG مشفر ب base64."""
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(data)
     qr.make(fit=True)
@@ -176,7 +200,7 @@ def generate_qr_code(data: str) -> str:
 
 
 async def save_upload_file(upload_file: UploadFile) -> str:
-    """Save an uploaded file asynchronously and return its storage path."""
+    """حفظ الملف المرفوع بشكل غير متزامن وإرجاع مسار التخزين."""
     file_location = f"uploads/{upload_file.filename}"
     async with aiofiles.open(file_location, "wb") as out_file:
         content = await upload_file.read()
@@ -188,7 +212,7 @@ async def save_upload_file(upload_file: UploadFile) -> str:
 # Default Categories and Statistics Functions
 # ================================
 def create_default_categories(db: Session):
-    """Create default post categories and their sub-categories if not already present."""
+    """إنشاء الفئات الافتراضية للمنشورات والفئات الفرعية إذا لم تكن موجودة."""
     default_categories = [
         {"name": "عمل", "description": "منشورات متعلقة بفرص العمل"},
         {"name": "هجرة", "description": "معلومات وتجارب عن الهجرة"},
@@ -206,7 +230,7 @@ def create_default_categories(db: Session):
             db.commit()
             db.refresh(new_category)
 
-            # Adding sub-categories
+            # إضافة الفئات الفرعية
             if category["name"] == "عمل":
                 sub_categories = ["عمل في كندا", "عمل في أمريكا", "عمل في أوروبا"]
             elif category["name"] == "هجرة":
@@ -233,7 +257,7 @@ def create_default_categories(db: Session):
 
 
 def update_user_statistics(db: Session, user_id: int, action: str):
-    """Update user statistics based on the performed action (post, comment, like, view)."""
+    """تحديث إحصائيات المستخدم بناءً على الإجراء (منشور، تعليق، إعجاب، مشاهدة)."""
     today = date.today()
     stats = (
         db.query(models.UserStatistics)
@@ -260,10 +284,12 @@ def update_user_statistics(db: Session, user_id: int, action: str):
 
 
 # ================================
-# IP and Ban Management Functions
+# دوال إدارة IP والبن (لم يتم فصلها)
 # ================================
 def get_client_ip(request: Request):
-    """Retrieve the client IP address from the request headers."""
+    """
+    استرجاع عنوان IP الخاص بالعميل من رؤوس الطلب.
+    """
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
@@ -272,8 +298,8 @@ def get_client_ip(request: Request):
 
 def is_ip_banned(db: Session, ip_address: str):
     """
-    Check if an IP address is banned.
-    If the ban has expired, it will be removed.
+    التحقق مما إذا كان عنوان الـ IP محظوراً.
+    إذا انتهت صلاحية الحظر، يتم إزالته.
     """
     ban = db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
     if ban:
@@ -287,8 +313,8 @@ def is_ip_banned(db: Session, ip_address: str):
 
 def detect_ip_evasion(db: Session, user_id: int, current_ip: str):
     """
-    Detect if the user is using different IP addresses (e.g., evasion).
-    Compares the current IP with previously used IPs.
+    الكشف عن استخدام المستخدم لعناوين IP مختلفة (كإجراء للتحايل).
+    يتم مقارنة الـ IP الحالي مع العناوين المستخدمة سابقاً.
     """
     user_ips = (
         db.query(models.UserSession.ip_address)
@@ -306,63 +332,11 @@ def detect_ip_evasion(db: Session, user_id: int, current_ip: str):
     return False
 
 
-def update_banned_words_cache(db: Session):
-    """
-    Update the cache of banned words from the database.
-    This is a simple example; in production, a more robust solution may be needed.
-    """
-    banned_words = db.query(models.BannedWord).all()
-    global BANNED_WORDS_CACHE
-    BANNED_WORDS_CACHE = {word.word: word.severity for word in banned_words}
-
-
-def update_ban_statistics(
-    db: Session, ban_type: str, reason: str, effectiveness: float
-):
-    """
-    Update ban statistics such as total bans, type-specific counts, and effectiveness score.
-    """
-    today = date.today()
-    stats = (
-        db.query(models.BanStatistics)
-        .filter(models.BanStatistics.date == today)
-        .first()
-    )
-    if not stats:
-        stats = models.BanStatistics(date=today)
-        db.add(stats)
-
-    stats.total_bans += 1
-    setattr(stats, f"{ban_type}_bans", getattr(stats, f"{ban_type}_bans") + 1)
-
-    ban_reason = (
-        db.query(models.BanReason).filter(models.BanReason.reason == reason).first()
-    )
-    if ban_reason:
-        ban_reason.count += 1
-        ban_reason.last_used = datetime.now()
-    else:
-        new_reason = models.BanReason(reason=reason)
-        db.add(new_reason)
-
-    stats.effectiveness_score = (
-        stats.effectiveness_score * (stats.total_bans - 1) + effectiveness
-    ) / stats.total_bans
-    db.commit()
-
-
-def log_user_event(db: Session, user_id: int, event_type: str, details: dict = None):
-    """Log a user event into the database."""
-    event = models.UserEvent(user_id=user_id, event_type=event_type, details=details)
-    db.add(event)
-    db.commit()
-
-
 # ================================
 # Hashtag and Repost Functions
 # ================================
 def get_or_create_hashtag(db: Session, hashtag_name: str):
-    """Retrieve an existing hashtag or create a new one."""
+    """استرجاع هاشتاج موجود أو إنشاء جديد."""
     hashtag = (
         db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
     )
@@ -375,7 +349,7 @@ def get_or_create_hashtag(db: Session, hashtag_name: str):
 
 
 def update_repost_statistics(db: Session, post_id: int):
-    """Update statistics related to reposts for a given post."""
+    """تحديث الإحصائيات المتعلقة بإعادة نشر منشور معين."""
     stats = (
         db.query(models.RepostStatistics)
         .filter(models.RepostStatistics.post_id == post_id)
@@ -392,7 +366,7 @@ def update_repost_statistics(db: Session, post_id: int):
 def send_repost_notification(
     db: Session, original_owner_id: int, reposter_id: int, repost_id: int
 ):
-    """Send a notification when a post is reposted."""
+    """إرسال إشعار عند إعادة نشر منشور."""
     original_owner = (
         db.query(models.User).filter(models.User.id == original_owner_id).first()
     )
@@ -411,7 +385,7 @@ def send_repost_notification(
 # Mentions and Offensive Content
 # ================================
 def process_mentions(content: str, db: Session):
-    """Extract and process user mentions in the content."""
+    """استخراج ومعالجة الإشارات (mentions) في المحتوى."""
     mentioned_usernames = re.findall(r"@(\w+)", content)
     mentioned_users = []
     for username in mentioned_usernames:
@@ -423,8 +397,8 @@ def process_mentions(content: str, db: Session):
 
 def is_content_offensive(text: str) -> tuple:
     """
-    Check if the text is offensive using an AI model.
-    Returns a tuple (is_offensive, score).
+    التحقق مما إذا كان النص مسيئاً باستخدام نموذج ذكاء اصطناعي.
+    يُعيد (is_offensive, score) حيث is_offensive هو قيمة منطقية.
     """
     result = offensive_classifier(text)[0]
     is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
@@ -435,14 +409,14 @@ def is_content_offensive(text: str) -> tuple:
 # Encryption Key Functions
 # ================================
 def generate_encryption_key():
-    """Generate a new encryption key using Fernet."""
+    """توليد مفتاح تشفير جديد باستخدام Fernet."""
     return Fernet.generate_key().decode()
 
 
 def update_encryption_key(old_key):
     """
-    Update the encryption key.
-    Note: Add logic for re-encrypting data if necessary.
+    تحديث مفتاح التشفير.
+    ملاحظة: يمكن إضافة منطق لإعادة تشفير البيانات إذا لزم الأمر.
     """
     new_key = Fernet.generate_key()
     old_fernet = Fernet(old_key.encode())
@@ -454,7 +428,7 @@ def update_encryption_key(old_key):
 # Call Quality and Video Adjustment Functions
 # ================================
 class CallQualityBuffer:
-    """A buffer class to store recent call quality scores."""
+    """فئة لتخزين درجات جودة المكالمات في نافذة زمنية محددة."""
 
     def __init__(self, window_size=QUALITY_WINDOW_SIZE):
         self.window_size = window_size
@@ -462,14 +436,14 @@ class CallQualityBuffer:
         self.last_update_time = time.time()
 
     def add_score(self, score):
-        """Add a new quality score to the buffer."""
+        """إضافة درجة جديدة إلى النافذة."""
         self.quality_scores.append(score)
         self.last_update_time = time.time()
 
     def get_average_score(self):
-        """Compute the average quality score."""
+        """حساب متوسط درجات الجودة."""
         if not self.quality_scores:
-            return 100  # Assume excellent quality if no scores recorded
+            return 100  # نفترض جودة ممتازة في حال عدم تسجيل درجات
         return sum(self.quality_scores) / len(self.quality_scores)
 
 
@@ -478,8 +452,8 @@ quality_buffers = {}
 
 def check_call_quality(data, call_id):
     """
-    Calculate call quality based on packet loss, latency, and jitter.
-    Returns the average quality score.
+    حساب جودة المكالمة بناءً على فقدان الحزم والكمون والتذبذب.
+    يُعيد متوسط درجة الجودة.
     """
     packet_loss = data.get("packet_loss", 0)
     latency = data.get("latency", 0)
@@ -492,7 +466,7 @@ def check_call_quality(data, call_id):
 
 
 def should_adjust_video_quality(call_id):
-    """Determine if video quality should be adjusted based on average quality score."""
+    """تحديد ما إذا كان يجب تعديل جودة الفيديو بناءً على متوسط الجودة."""
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         return average_quality < MIN_QUALITY_THRESHOLD
@@ -500,7 +474,7 @@ def should_adjust_video_quality(call_id):
 
 
 def get_recommended_video_quality(call_id):
-    """Recommend video quality level based on average quality score."""
+    """اقتراح مستوى جودة الفيديو بناءً على متوسط درجة الجودة."""
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         if average_quality < 30:
@@ -509,14 +483,14 @@ def get_recommended_video_quality(call_id):
             return "medium"
         else:
             return "high"
-    return "high"  # Default to high quality if no data
+    return "high"  # افتراضي عند عدم وجود بيانات
 
 
 def clean_old_quality_buffers():
-    """Remove call quality buffers that haven't been updated for over 5 minutes."""
+    """إزالة مخازن جودة المكالمات التي لم يتم تحديثها لأكثر من 5 دقائق."""
     current_time = time.time()
     for call_id in list(quality_buffers.keys()):
-        if current_time - quality_buffers[call_id].last_update_time > 300:  # 5 minutes
+        if current_time - quality_buffers[call_id].last_update_time > 300:
             del quality_buffers[call_id]
 
 
@@ -524,7 +498,10 @@ def clean_old_quality_buffers():
 # Search and Spellcheck Functions
 # ================================
 def update_search_vector():
-    """Update the full-text search vector for posts in the database."""
+    """تحديث متجه البحث الكامل للمنشورات في قاعدة البيانات."""
+    from sqlalchemy import create_engine  # تأكد من تعريف engine بشكل صحيح
+
+    engine = create_engine(settings.DATABASE_URL)
     with engine.connect() as conn:
         conn.execute(
             text(
@@ -540,7 +517,7 @@ def update_search_vector():
 
 
 def search_posts(query: str, db: Session):
-    """Search posts by text query using full-text search and media text matching."""
+    """البحث عن المنشورات باستخدام استعلام نصي."""
     search_query = func.plainto_tsquery("english", query)
     return (
         db.query(models.Post)
@@ -555,7 +532,7 @@ def search_posts(query: str, db: Session):
 
 
 def get_spell_suggestions(query: str) -> List[str]:
-    """Generate spell check suggestions for the query."""
+    """توليد اقتراحات إملائية للاستعلام."""
     words = query.split()
     suggestions = []
     for word in words:
@@ -568,16 +545,16 @@ def get_spell_suggestions(query: str) -> List[str]:
 
 def format_spell_suggestions(original_query: str, suggestions: List[str]) -> str:
     """
-    Format spell suggestions if the corrected query differs from the original.
-    Returns a suggestion string if applicable.
+    تنسيق اقتراحات الإملاء في حال اختلف الاستعلام المصحح عن الأصلي.
+    يُعيد نص الاقتراح إذا كان ذلك مناسباً.
     """
     if original_query.lower() != " ".join(suggestions).lower():
         return f"هل تقصد: {' '.join(suggestions)}?"
     return ""
 
 
-def sort_search_results(query, sort_option: "SortOption", db: Session):
-    """Sort search results based on relevance, date, or popularity."""
+def sort_search_results(query, sort_option: str, db: Session):
+    """ترتيب نتائج البحث بناءً على الصلة أو التاريخ أو الشعبية."""
     if sort_option == "RELEVANCE":
         return query.order_by(
             desc(
@@ -601,11 +578,11 @@ def sort_search_results(query, sort_option: "SortOption", db: Session):
 # ================================
 def analyze_user_behavior(user_history, content):
     """
-    Analyze user behavior based on search history and content sentiment.
-    Returns a relevance score.
+    تحليل سلوك المستخدم بناءً على سجل البحث ومعنويات المحتوى.
+    يُعيد درجة صلة.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]  # Limit text to 512 characters
+    result = sentiment_pipeline(content[:512])[0]  # تحديد الطول الأقصى للنص
     sentiment = result["label"]
     score = result["score"]
     relevance_score = sum(
@@ -617,7 +594,7 @@ def analyze_user_behavior(user_history, content):
 
 def calculate_post_score(upvotes, downvotes, comment_count, created_at):
     """
-    Calculate the score of a post based on votes, comment count, and post age.
+    حساب درجة المنشور بناءً على الأصوات وعدد التعليقات وعمر المنشور.
     """
     vote_difference = upvotes - downvotes
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
@@ -626,7 +603,7 @@ def calculate_post_score(upvotes, downvotes, comment_count, created_at):
 
 
 def update_post_score(db: Session, post: models.Post):
-    """Update the score of a post and commit the changes to the database."""
+    """تحديث درجة المنشور وحفظ التغييرات في قاعدة البيانات."""
     upvotes = (
         db.query(models.Vote)
         .filter(models.Vote.post_id == post.id, models.Vote.dir == 1)
@@ -644,7 +621,7 @@ def update_post_score(db: Session, post: models.Post):
 
 
 def update_post_vote_statistics(db: Session, post_id: int):
-    """Update vote statistics for a post."""
+    """تحديث إحصائيات الأصوات لمنشور معين."""
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         return
@@ -678,7 +655,7 @@ def update_post_vote_statistics(db: Session, post_id: int):
 
 
 def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalytics:
-    """Generate vote analytics for a user's posts."""
+    """إنشاء تحليلات للأصوات لمنشورات المستخدم."""
     user_posts = db.query(models.Post).filter(models.Post.owner_id == user_id).all()
     total_posts = len(user_posts)
     total_votes = sum(
@@ -716,11 +693,11 @@ def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalyt
 
 
 def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
-    """Create analytics data for a specific post based on vote statistics."""
+    """إنشاء بيانات تحليلات للأصوات لمنشور معين."""
     stats = post.vote_statistics
     if not stats:
         return None
-    total_votes = stats.total_votes or 1  # Avoid division by zero
+    total_votes = stats.total_votes or 1  # لتفادي القسمة على الصفر
     upvote_percentage = (stats.upvotes / total_votes) * 100
     downvote_percentage = (stats.downvotes / total_votes) * 100
     reaction_counts = {
@@ -746,12 +723,15 @@ def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
 # Admin and Exception Handlers
 # ================================
 def admin_required(func):
-    """Decorator to ensure the current user has admin privileges."""
+    """ديكوريتور للتأكد من أن المستخدم الحالي لديه صلاحيات المسؤول."""
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
+        # استيراد محلي لتفادي الاستيراد الدائري
+        from .oauth2 import get_current_user
+
         current_user = await get_current_user()
-        if not current_user.is_admin:
+        if not getattr(current_user, "is_admin", False):
             raise HTTPException(status_code=403, detail="Admin privileges required")
         return await func(*args, **kwargs)
 
@@ -759,7 +739,7 @@ def admin_required(func):
 
 
 def handle_exceptions(func):
-    """Decorator to handle exceptions and return a standardized error response."""
+    """ديكوريتور للتعامل مع الاستثناءات وإرجاع رسالة خطأ موحدة."""
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -780,23 +760,23 @@ def handle_exceptions(func):
 @lru_cache(maxsize=1000)
 async def cached_translate_text(text: str, source_lang: str, target_lang: str):
     """
-    Translate text using caching.
-    Note: The function 'translate_text' must be implemented elsewhere.
+    ترجمة النص مع استخدام التخزين المؤقت.
+    ملاحظة: يجب تعريف دالة translate_text في وحدة أخرى.
     """
     cache_key = f"{text}:{source_lang}:{target_lang}"
     if cache_key in translation_cache:
         return translation_cache[cache_key]
     translated_text = await translate_text(
         text, source_lang, target_lang
-    )  # External function
+    )  # دالة خارجية
     translation_cache[cache_key] = translated_text
     return translated_text
 
 
 async def get_translated_content(content: str, user: "User", source_lang: str):
     """
-    Return translated content if the user's preferred language differs from the source.
-    Note: The 'User' model should be defined in your project.
+    إعادة المحتوى المترجم إذا كانت لغة المستخدم المفضلة تختلف عن المصدر.
+    ملاحظة: يجب تعريف نموذج User في مشروعك.
     """
     if user.auto_translate and user.preferred_language != source_lang:
         return await cached_translate_text(
@@ -810,12 +790,10 @@ async def get_translated_content(content: str, user: "User", source_lang: str):
 # ================================
 def update_link_preview(db: Session, message_id: int, url: str):
     """
-    Update the link preview for a message.
-    Note: The function 'extract_link_preview' should be defined elsewhere.
+    تحديث معاينة الرابط للرسالة.
+    ملاحظة: يجب تعريف دالة extract_link_preview في وحدة أخرى.
     """
-    link_preview = extract_link_preview(
-        url
-    )  # This function must be implemented in another module
+    link_preview = extract_link_preview(url)  # دالة خارجية
     if link_preview:
         db.query(models.Message).filter(models.Message.id == message_id).update(
             {"link_preview": link_preview}
@@ -823,6 +801,16 @@ def update_link_preview(db: Session, message_id: int, url: str):
         db.commit()
 
 
-# =====================================================================
-# End of merged utils.py
-# =====================================================================
+# ================================
+# User Event Logging Function
+# ================================
+def log_user_event(
+    db: Session, user_id: int, event: str, metadata: Optional[dict] = None
+):
+    """
+    تسجل هذه الدالة أحداث المستخدمين في النظام.
+    في هذا التطبيق البسيط نقوم بطباعة الحدث في وحدة التحكم.
+    يمكنك تعديلها لتخزين الأحداث في قاعدة البيانات إذا كان لديك نموذج مناسب.
+    """
+    log_message = f"User Event - User: {user_id}, Event: {event}, Metadata: {metadata}"
+    print(log_message)

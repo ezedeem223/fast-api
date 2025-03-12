@@ -131,7 +131,7 @@ def get_sticker_pack(pack_id: int, db: Session = Depends(get_db)):
     return pack
 
 
-@router.get("/", response_model=List[schemas.StickerOut])
+@router.get("/", response_model=List[schemas.Sticker])
 def get_stickers(db: Session = Depends(get_db)):
     """
     Retrieve a list of all stickers.

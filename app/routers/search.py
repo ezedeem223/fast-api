@@ -7,7 +7,6 @@ import json
 
 from .. import models, database, schemas, oauth2
 from ..database import get_db
-from ..config import redis_client
 from ..utils import (
     search_posts,
     get_spell_suggestions,
@@ -46,7 +45,9 @@ async def search(
     Returns a SearchResponse with results, spell suggestion, and search suggestions.
     """
     cache_key = f"search:{search_params.query}:{search_params.sort_by}"
-    cached_result = redis_client.get(cache_key)
+    cached_result = database.settings.redis_client.get(
+        cache_key
+    )  # assuming redis_client exists in settings
     if cached_result:
         return json.loads(cached_result)
 
@@ -73,7 +74,9 @@ async def search(
     }
 
     if results:
-        redis_client.setex(cache_key, 3600, json.dumps(search_response))
+        database.settings.redis_client.setex(
+            cache_key, 3600, json.dumps(search_response)
+        )
 
     return search_response
 
@@ -164,7 +167,7 @@ async def autocomplete(
     - Orders by frequency and caches results for 5 minutes.
     """
     cache_key = f"autocomplete:{query}"
-    cached_result = redis_client.get(cache_key)
+    cached_result = database.settings.redis_client.get(cache_key)
     if cached_result:
         return json.loads(cached_result)
 
@@ -177,7 +180,9 @@ async def autocomplete(
     )
 
     result = [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
-    redis_client.setex(cache_key, 300, json.dumps([s.dict() for s in result]))
+    database.settings.redis_client.setex(
+        cache_key, 300, json.dumps([s.dict() for s in result])
+    )
 
     return result
 
@@ -316,3 +321,22 @@ def update_search_statistics(db: Session, user_id: int, query: str):
         db.add(new_stat)
 
     db.commit()
+
+
+def update_search_suggestions(db: Session):
+    """
+    Update search suggestions based on popular search queries.
+
+    This function retrieves the top search suggestions (ordered by frequency)
+    and returns them as a list of SearchSuggestionOut models.
+
+    Returns:
+        List[schemas.SearchSuggestionOut]: List of search suggestions.
+    """
+    suggestions = (
+        db.query(models.SearchSuggestion)
+        .order_by(models.SearchSuggestion.frequency.desc())
+        .limit(10)
+        .all()
+    )
+    return [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]

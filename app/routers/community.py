@@ -1,9 +1,3 @@
-"""
-Community Router Module
-This module provides endpoints for managing communities, including creation, retrieval, updating,
-membership management, content management, analytics, data export, and notification handling.
-"""
-
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
@@ -33,7 +27,6 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from ..utils import (
     log_user_event,
-    create_notification,
     get_translated_content,
     check_content_against_rules,
     check_for_profanity,
@@ -45,6 +38,7 @@ from ..utils import (
     update_post_score,
 )
 from ..config import settings
+from app.notifications import create_notification
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/communities", tags=["Communities"])
@@ -825,7 +819,7 @@ async def get_community_analytics(
 async def update_member_role(
     community_id: int,
     user_id: int,
-    role_update: schemas.CommunityMemberRoleUpdate,
+    role_update: schemas.CommunityMemberUpdate,  # تم التعديل هنا من CommunityMemberRoleUpdate إلى CommunityMemberUpdate
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
@@ -835,7 +829,7 @@ async def update_member_role(
     Parameters:
       - community_id: ID of the community.
       - user_id: ID of the member to update.
-      - role_update: CommunityMemberRoleUpdate schema with the new role.
+      - role_update: CommunityMemberUpdate schema with the new role.
       - db: Database session.
       - current_user: The current authenticated user.
 
@@ -1155,7 +1149,9 @@ class CommunityNotificationHandler:
     def __init__(self, db: Session, background_tasks: BackgroundTasks):
         self.db = db
         self.background_tasks = background_tasks
-        self.notification_service = NotificationService(db, background_tasks)
+        self.notification_service = (
+            create_notification  # Assuming create_notification handles notifications
+        )
 
     async def handle_new_member(self, community: models.Community, member: models.User):
         """
@@ -1167,26 +1163,21 @@ class CommunityNotificationHandler:
             if m.role in [models.CommunityRole.ADMIN, models.CommunityRole.OWNER]
         ]
         for admin in admins:
-            await self.notification_service.create_notification(
-                user_id=admin.user_id,
-                content=f"{member.username} has joined community {community.name}",
-                notification_type="new_member",
-                priority=models.NotificationPriority.LOW,
-                category=models.NotificationCategory.COMMUNITY,
-                link=f"/community/{community.id}/members",
-                metadata={"community_id": community.id, "member_id": member.id},
+            await self.notification_service(
+                self.db,
+                admin.user_id,
+                f"{member.username} has joined community {community.name}",
+                f"/community/{community.id}/members",
+                "new_member",
+                None,
             )
-        await self.notification_service.create_notification(
-            user_id=member.id,
-            content=f"Welcome to community {community.name}!",
-            notification_type="welcome",
-            priority=models.NotificationPriority.HIGH,
-            category=models.NotificationCategory.COMMUNITY,
-            link=f"/community/{community.id}",
-            metadata={
-                "community_id": community.id,
-                "rules_count": len(community.rules),
-            },
+        await self.notification_service(
+            self.db,
+            member.id,
+            f"Welcome to community {community.name}!",
+            f"/community/{community.id}",
+            "welcome",
+            None,
         )
 
     async def handle_content_violation(
@@ -1206,20 +1197,13 @@ class CommunityNotificationHandler:
         ]
         content_type = "post" if isinstance(content, models.Post) else "comment"
         for admin in admins:
-            await self.notification_service.create_notification(
-                user_id=admin.user_id,
-                content=f"{content_type.capitalize()} in community {community.name} has been flagged. Violation: {violation_type}",
-                notification_type="content_violation",
-                priority=models.NotificationPriority.HIGH,
-                category=models.NotificationCategory.MODERATION,
-                link=f"/moderation/content/{content.id}",
-                metadata={
-                    "community_id": community.id,
-                    "content_id": content.id,
-                    "content_type": content_type,
-                    "violation_type": violation_type,
-                    "reporter_id": reporter.id,
-                },
+            await self.notification_service(
+                self.db,
+                admin.user_id,
+                f"{content_type.capitalize()} in community {community.name} has been flagged. Violation: {violation_type}",
+                f"/moderation/content/{content.id}",
+                "content_violation",
+                None,
             )
 
     async def handle_role_change(
@@ -1232,19 +1216,13 @@ class CommunityNotificationHandler:
         """
         Handle notifications for a role change within the community.
         """
-        await self.notification_service.create_notification(
-            user_id=member.user_id,
-            content=f"Your role in community {community.name} has been changed from {old_role} to {member.role}",
-            notification_type="role_change",
-            priority=models.NotificationPriority.HIGH,
-            category=models.NotificationCategory.COMMUNITY,
-            link=f"/community/{community.id}",
-            metadata={
-                "community_id": community.id,
-                "old_role": old_role,
-                "new_role": member.role,
-                "changed_by": changed_by.id,
-            },
+        await self.notification_service(
+            self.db,
+            member.user_id,
+            f"Your role in community {community.name} has been changed from {old_role} to {member.role}",
+            f"/community/{community.id}",
+            "role_change",
+            None,
         )
 
     async def handle_community_achievement(
@@ -1254,20 +1232,15 @@ class CommunityNotificationHandler:
         Handle notifications for community achievements.
         """
         for member in community.members:
-            await self.notification_service.create_notification(
-                user_id=member.user_id,
-                content=self._get_achievement_message(
+            await self.notification_service(
+                self.db,
+                member.user_id,
+                self._get_achievement_message(
                     achievement_type, achievement_data, community.name
                 ),
-                notification_type="community_achievement",
-                priority=models.NotificationPriority.MEDIUM,
-                category=models.NotificationCategory.ACHIEVEMENT,
-                link=f"/community/{community.id}/achievements",
-                metadata={
-                    "community_id": community.id,
-                    "achievement_type": achievement_type,
-                    **achievement_data,
-                },
+                f"/community/{community.id}/achievements",
+                "community_achievement",
+                None,
             )
 
     def _get_achievement_message(

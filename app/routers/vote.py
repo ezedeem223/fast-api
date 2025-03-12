@@ -8,8 +8,8 @@ from ..utils import (
     update_post_score,
     update_post_vote_statistics,
     get_user_vote_analytics,
-    create_notification,
 )
+from app.notifications import create_notification
 
 router = APIRouter(prefix="/vote", tags=["Vote"])
 

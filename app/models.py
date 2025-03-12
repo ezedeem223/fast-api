@@ -27,9 +27,10 @@ import enum
 from datetime import date, timedelta
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy.ext.declarative import declarative_base
 
-Base = declarative_base()  # Declarative base for all models
+# from sqlalchemy.ext.declarative import declarative_base
+
+# Base = declarative_base()  # Declarative base for all models
 
 # -------------------------
 # Association Tables
@@ -508,7 +509,8 @@ class SocialMediaPost(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     status = Column(SQLAlchemyEnum(PostStatus), default=PostStatus.DRAFT)
     error_message = Column(Text, nullable=True)
-    metadata = Column(JSONB, default={})
+    # تم تغيير اسم العمود من "metadata" إلى "post_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    post_metadata = Column(JSONB, default={})
     engagement_stats = Column(JSONB, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
@@ -839,7 +841,8 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    metadata = Column(JSONB, default={})
+    # تم تغيير اسم العمود من "metadata" إلى "notification_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    notification_metadata = Column(JSONB, default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -915,7 +918,8 @@ class NotificationDeliveryAttempt(Base):
     error_message = Column(String, nullable=True)
     delivery_channel = Column(String, nullable=False)
     response_time = Column(Float)  # In seconds
-    metadata = Column(JSONB, default={})
+    # تم تغيير اسم العمود من "metadata" إلى "attempt_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    attempt_metadata = Column(JSONB, default={})
 
     notification = relationship("Notification", back_populates="delivery_attempts_rel")
 

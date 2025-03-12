@@ -42,26 +42,26 @@ oauth.register(
 )
 
 # Register Reddit OAuth client
-oauth.register(
-    name="reddit",
-    client_id=settings.REDDIT_CLIENT_ID,
-    client_secret=settings.REDDIT_CLIENT_SECRET,
-    authorize_url="https://www.reddit.com/api/v1/authorize",
-    access_token_url="https://www.reddit.com/api/v1/access_token",
-    api_base_url="https://oauth.reddit.com/api/v1/",
-    client_kwargs={"scope": "submit identity"},
-)
+# oauth.register(
+#     name="reddit",
+#     client_id=settings.REDDIT_CLIENT_ID,
+#     client_secret=settings.REDDIT_CLIENT_SECRET,
+#     authorize_url="https://www.reddit.com/api/v1/authorize",
+#     access_token_url="https://www.reddit.com/api/v1/access_token",
+#     api_base_url="https://oauth.reddit.com/api/v1/",
+#     client_kwargs={"scope": "submit identity"},
+# )
 
 # Register LinkedIn OAuth client
-oauth.register(
-    name="linkedin",
-    client_id=settings.LINKEDIN_CLIENT_ID,
-    client_secret=settings.LINKEDIN_CLIENT_SECRET,
-    authorize_url="https://www.linkedin.com/oauth/v2/authorization",
-    access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    api_base_url="https://api.linkedin.com/v2/",
-    client_kwargs={"scope": "w_member_social r_liteprofile r_emailaddress"},
-)
+# oauth.register(
+#     name="linkedin",
+#     client_id=settings.LINKEDIN_CLIENT_ID,
+#     client_secret=settings.LINKEDIN_CLIENT_SECRET,
+#     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
+#     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
+#     api_base_url="https://api.linkedin.com/v2/",
+#     client_kwargs={"scope": "w_member_social r_liteprofile r_emailaddress"},
+# )
 
 
 @router.get("/login/facebook")
@@ -161,14 +161,13 @@ async def auth_twitter(request: Request, db: Session = Depends(get_db)):
     access_token = oauth2.create_access_token(data={"user_id": user.id})
     return {"access_token": access_token, "token_type": "bearer"}
 
-
-@router.get("/connect/{platform}")
-async def connect_social_account(
-    platform: schemas.SocialMediaType,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
+    # @router.get("/connect/{platform}")
+    # async def connect_social_account(
+    #     platform: schemas.SocialMediaType,
+    #     request: Request,
+    #     db: Session = Depends(get_db),
+    #     current_user: models.User = Depends(oauth2.get_current_user),
+    # ):
     """
     Connect a social media account (Reddit or LinkedIn) to the current user.
 
@@ -181,18 +180,18 @@ async def connect_social_account(
     Returns:
         A redirect response to the respective platform's OAuth authorization URL.
     """
-    if platform == schemas.SocialMediaType.REDDIT:
-        return await oauth.reddit.authorize_redirect(
-            request, f"{settings.BASE_URL}/social/callback/reddit"
-        )
-    elif platform == schemas.SocialMediaType.LINKEDIN:
-        return await oauth.linkedin.authorize_redirect(
-            request, f"{settings.BASE_URL}/social/callback/linkedin"
-        )
-    else:
-        raise HTTPException(
-            status_code=400, detail="Unsupported platform for connection"
-        )
+    # if platform == schemas.SocialMediaType.REDDIT:
+    #     return await oauth.reddit.authorize_redirect(
+    #         request, f"{settings.BASE_URL}/social/callback/reddit"
+    #     )
+    # elif platform == schemas.SocialMediaType.LINKEDIN:
+    #     return await oauth.linkedin.authorize_redirect(
+    #         request, f"{settings.BASE_URL}/social/callback/linkedin"
+    #     )
+    # else:
+    #     raise HTTPException(
+    #         status_code=400, detail="Unsupported platform for connection"
+    #     )
 
 
 @router.get("/callback/{platform}")

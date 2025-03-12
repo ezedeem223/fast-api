@@ -53,6 +53,29 @@ class ReactionCount(BaseModel):
     count: int
 
 
+class EmailChange(BaseModel):
+    new_email: EmailStr
+
+
+class SecurityQuestionsSet(BaseModel):
+    question1: str
+    answer1: str
+    question2: str
+    answer2: str
+    question3: str
+    answer3: str
+
+
+class SecurityQuestionAnswer(BaseModel):
+    question: str
+    answer: str
+
+
+class FollowingListOut(BaseModel):
+    following: List["UserOut"]
+    total_count: int
+
+
 # ================================================================
 # Post Vote and Analytics Models
 # ================================================================
@@ -120,6 +143,13 @@ class Hashtag(HashtagBase):
     followers_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# نموذج إحصائيات الهاشتاج
+class HashtagStatistics(BaseModel):
+    post_count: int
+    follower_count: int
+    engagement_rate: float
 
 
 # ================================================================
@@ -252,6 +282,14 @@ class BlockAppealOut(BaseModel):
     created_at: datetime
     reviewed_at: Optional[datetime] = None
     reviewer_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BlockStatistics(BaseModel):
+    total_blocks: int
+    active_blocks: int
+    expired_blocks: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1045,7 +1083,6 @@ class NotificationWithLogs(BaseModel):
     retry_count: int
     status: Any  # Could be defined as NotificationStatus enum
     last_retry: Optional[datetime] = None
-    # Inherit fields from NotificationOut in actual implementation
 
 
 class NotificationOut(BaseModel):
@@ -1358,6 +1395,48 @@ class CommunityRuleOut(CommunityRuleBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ================================================================
+# Community Analytics Models
+# ================================================================
+class CommunityOverviewAnalytics(BaseModel):
+    total_members: int
+    active_members: int
+    total_posts: int
+    total_comments: int
+
+
+class CommunityActivityAnalytics(BaseModel):
+    date: str
+    posts: int
+    comments: int
+    active_users: int
+
+
+class CommunityEngagementAnalytics(BaseModel):
+    avg_likes_per_post: float
+    avg_comments_per_post: float
+    total_shares: int
+
+
+class CommunityContentAnalysis(BaseModel):
+    type: str
+    count: int
+    avg_engagement: float
+
+
+class CommunityGrowthAnalytics(BaseModel):
+    date: str
+    members: int
+
+
+class CommunityAnalytics(BaseModel):
+    overview: CommunityOverviewAnalytics
+    activity: List[CommunityActivityAnalytics]
+    engagement: CommunityEngagementAnalytics
+    content_analysis: List[CommunityContentAnalysis]
+    growth: List[CommunityGrowthAnalytics]
 
 
 class EncryptedSessionCreate(BaseModel):

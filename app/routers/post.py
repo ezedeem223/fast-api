@@ -883,7 +883,7 @@ def repost(
     return new_post
 
 
-@router.get("/post/{post_id}/repost-stats", response_model=schemas.RepostStatsOut)
+@router.get("/post/{post_id}/repost-stats", response_model=schemas.RepostStatisticsOut)
 def get_repost_statistics(
     post_id: int,
     db: Session = Depends(get_db),

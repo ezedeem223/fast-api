@@ -26,13 +26,18 @@ from ..analytics import (
     get_recent_searches,
     generate_search_trends_chart,
 )
-from ..utils import cache
+
+# استبدال استيراد cache من utils بالاستيراد من cachetools
+from cachetools import cached, TTLCache
 
 # =====================================================
 # =============== Global Variables ====================
 # =====================================================
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 templates = Jinja2Templates(directory="app/templates")
+
+# تعريف كائن التخزين المؤقت للإدارة بمهلة انتهاء 5 دقائق (300 ثانية)
+admin_cache = TTLCache(maxsize=100, ttl=300)
 
 # =====================================================
 # =================== Endpoints =======================
@@ -83,7 +88,7 @@ async def get_current_admin(
 # General Statistics Endpoint
 # -----------------------------------------------------
 @router.get("/stats")
-@cache(expire=300)  # Cache for 5 minutes
+@cached(admin_cache)  # Cache for 5 minutes
 async def get_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -164,7 +169,7 @@ async def update_user_role(
 # Reports Overview Endpoint
 # -----------------------------------------------------
 @router.get("/reports/overview")
-@cache(expire=300)
+@cached(admin_cache)
 async def get_reports_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -195,7 +200,7 @@ async def get_reports_overview(
 # Communities Overview Endpoint
 # -----------------------------------------------------
 @router.get("/communities/overview")
-@cache(expire=300)
+@cached(admin_cache)
 async def get_communities_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -267,7 +272,7 @@ async def problematic_users(
 # Ban Statistics Endpoints
 # -----------------------------------------------------
 @router.get("/ban-statistics")
-@cache(expire=300)
+@cached(admin_cache)
 async def ban_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -285,7 +290,7 @@ async def ban_statistics(
 
 
 @router.get("/ban-overview", response_model=schemas.BanStatisticsOverview)
-@cache(expire=300)
+@cached(admin_cache)
 async def get_ban_statistics_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -354,7 +359,7 @@ async def get_common_ban_reasons(
 
 
 @router.get("/ban-effectiveness-trend", response_model=List[schemas.EffectivenessTrend])
-@cache(expire=300)
+@cached(admin_cache)
 async def get_ban_effectiveness_trend(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -382,7 +387,7 @@ async def get_ban_effectiveness_trend(
 
 
 @router.get("/ban-type-distribution", response_model=schemas.BanTypeDistribution)
-@cache(expire=300)
+@cached(admin_cache)
 async def get_ban_type_distribution(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),

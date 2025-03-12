@@ -2,27 +2,38 @@ from fastapi import Request
 from fastapi_babel import Babel
 from deep_translator import GoogleTranslator
 from fastapi_cache.decorator import cache
+from types import SimpleNamespace
 
-babel = Babel()
+# تهيئة Babel مع تمرير جميع الإعدادات المطلوبة
+babel = Babel(
+    configs=SimpleNamespace(
+        BABEL_DEFAULT_LOCALE="ar", BABEL_DEFAULT_TIMEZONE="UTC", BABEL_DOMAIN="messages"
+    )
+)
 
-# Dictionary of supported languages by Google Translator
-ALL_LANGUAGES = GoogleTranslator.get_supported_languages(as_dict=True)
+# إنشاء كائن من GoogleTranslator لاستدعاء الدالة get_supported_languages
+ALL_LANGUAGES = GoogleTranslator(source="auto", target="en").get_supported_languages(
+    as_dict=True
+)
 
 
-@babel.localeselector
 def get_locale(request: Request):
     """
-    Determine the locale from the 'Accept-Language' header.
-    If the language is supported, return it; otherwise, use the app's default language.
+    تحديد اللغة المطلوبة من خلال رأس 'Accept-Language'.
+    إذا كانت اللغة مدعومة تُعاد؛ وإلا يتم استخدام اللغة الافتراضية المخزنة في حالة التطبيق.
     """
     lang = request.headers.get("Accept-Language", "").split(",")[0].strip()
     return lang if lang in ALL_LANGUAGES else request.app.state.default_language
 
 
+# تعيين دالة تحديد اللغة يدويًا في كائن Babel
+babel.locale_selector = get_locale
+
+
 def translate_text(text: str, source_lang: str, target_lang: str) -> str:
     """
-    Translate text from the source language to the target language.
-    Returns the original text if the source and target languages are the same or if translation fails.
+    ترجمة النص من اللغة المصدر إلى اللغة الهدف.
+    تُعاد النص الأصلي إذا كانت اللغتين متطابقتين أو في حال فشل الترجمة.
     """
     if source_lang == target_lang:
         return text
@@ -35,18 +46,18 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
 
 def detect_language(text: str) -> str:
     """
-    Detect the language of the given text using `deep-translator`.
-    Returns 'ar' as the default if detection fails.
+    الكشف عن لغة النص باستخدام deep-translator.
+    تُعاد 'ar' كلغة افتراضية في حال فشل الكشف.
     """
     try:
-        return GoogleTranslator().detect(text)
+        return GoogleTranslator(source="auto", target="en").detect(text)
     except Exception:
         return "ar"
 
 
 @cache(expire=3600)
-async def cached_translate_text(text: str, source_lang: str, target_lang: str) -> str:
+async def get_translated_content(text: str, source_lang: str, target_lang: str) -> str:
     """
-    Asynchronously translate text with caching for 1 hour.
+    ترجمة النص بشكل غير متزامن مع تخزين مؤقت لمدة ساعة.
     """
     return translate_text(text, source_lang, target_lang)

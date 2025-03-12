@@ -7,7 +7,8 @@ from .. import models, schemas, oauth2
 from ..database import get_db
 from ..notifications import send_email_notification
 from ..cache import cache
-from ..utils import log_user_event, create_notification
+from ..utils import log_user_event
+from app.notifications import create_notification
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
 

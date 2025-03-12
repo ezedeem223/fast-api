@@ -16,16 +16,16 @@ async def get_current_moderator(
     current_user: models.User = Depends(oauth2.get_current_user),
 ) -> models.User:
     """
-    Verify that the current user has moderator privileges.
+    التحقق من أن المستخدم الحالي لديه صلاحيات المشرف.
 
     Parameters:
-        current_user (models.User): The currently authenticated user.
+        current_user (models.User): المستخدم الحالي.
 
     Returns:
-        models.User: The user if they have moderator privileges.
+        models.User: المستخدم إذا كانت لديه صلاحيات المشرف.
 
     Raises:
-        HTTPException: If the user is not a moderator.
+        HTTPException: في حال عدم توفر صلاحيات المشرف.
     """
     if not current_user.is_moderator:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -43,21 +43,21 @@ async def get_community_reports(
     status_filter: Optional[str] = None,
 ):
     """
-    Retrieve reports for a specific community.
+    استرجاع التقارير الخاصة بمجتمع معين.
 
     Parameters:
-        community_id (int): The ID of the community.
-        db (Session): Database session.
-        current_moderator (models.User): The current moderator.
-        status_filter (Optional[str]): Filter reports by status (optional).
+        community_id (int): رقم تعريف المجتمع.
+        db (Session): جلسة قاعدة البيانات.
+        current_moderator (models.User): المشرف الحالي.
+        status_filter (Optional[str]): فلتر الحالة إن وجد.
 
     Returns:
-        List[schemas.ReportOut]: List of reports for the community.
+        List[schemas.ReportOut]: قائمة التقارير.
 
     Raises:
-        HTTPException: If the moderator is not authorized for the community.
+        HTTPException: في حال عدم توفر صلاحيات للوصول للمجتمع.
     """
-    # Verify moderator's role in the community
+    # التحقق من صلاحية المشرف في المجتمع
     moderator_role = (
         db.query(models.CommunityMember)
         .filter(
@@ -91,31 +91,30 @@ async def update_report(
     current_moderator: models.User = Depends(get_current_moderator),
 ):
     """
-    Update a report's status and resolution notes.
+    تحديث حالة التقرير والملاحظات الخاصة بحله.
 
     Parameters:
-        report_id (int): The ID of the report to update.
-        report_update (schemas.ReportUpdate): The update data.
-        db (Session): Database session.
-        current_moderator (models.User): The current moderator.
+        report_id (int): رقم تعريف التقرير.
+        report_update (schemas.ReportUpdate): بيانات التحديث.
+        db (Session): جلسة قاعدة البيانات.
+        current_moderator (models.User): المشرف الحالي.
 
     Returns:
-        schemas.ReportOut: The updated report.
+        schemas.ReportOut: التقرير المحدث.
 
     Raises:
-        HTTPException: If the report or associated post is not found,
-                       or if the moderator is not authorized for the community.
+        HTTPException: إذا لم يتم العثور على التقرير أو المنشور المرتبط أو صلاحيات الوصول غير كافية.
     """
     report = db.query(models.Report).filter(models.Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Verify associated post exists
+    # التحقق من وجود المنشور المرتبط
     post = db.query(models.Post).filter(models.Post.id == report.post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Associated post not found")
 
-    # Check moderator's role in the community of the post
+    # التحقق من صلاحية المشرف في المجتمع الخاص بالمنشور
     moderator_role = (
         db.query(models.CommunityMember)
         .filter(
@@ -133,7 +132,7 @@ async def update_report(
     report.status = report_update.status
     report.resolution_notes = report_update.resolution_notes
     report.reviewed_by = current_moderator.id
-    report.reviewed_at = db.func.now()  # Update the reviewed_at timestamp
+    report.reviewed_at = db.func.now()  # تحديث توقيت المراجعة
 
     db.commit()
     db.refresh(report)
@@ -152,18 +151,18 @@ async def get_community_members(
     current_moderator: models.User = Depends(get_current_moderator),
 ):
     """
-    Retrieve community members for a given community.
+    استرجاع أعضاء المجتمع لمجتمع معين.
 
     Parameters:
-        community_id (int): The ID of the community.
-        db (Session): Database session.
-        current_moderator (models.User): The current moderator.
+        community_id (int): رقم تعريف المجتمع.
+        db (Session): جلسة قاعدة البيانات.
+        current_moderator (models.User): المشرف الحالي.
 
     Returns:
-        List[schemas.CommunityMemberOut]: List of community members.
+        List[schemas.CommunityMemberOut]: قائمة أعضاء المجتمع.
 
     Raises:
-        HTTPException: If the moderator is not authorized for the community.
+        HTTPException: إذا لم يكن المشرف مخولاً للوصول للمجتمع.
     """
     moderator_role = (
         db.query(models.CommunityMember)
@@ -193,27 +192,27 @@ async def get_community_members(
 async def update_member_role(
     community_id: int,
     user_id: int,
-    role_update: schemas.CommunityMemberRoleUpdate,
+    role_update: schemas.CommunityMemberUpdate,  # تم استبدال CommunityMemberRoleUpdate بـ CommunityMemberUpdate
     db: Session = Depends(get_db),
     current_moderator: models.User = Depends(get_current_moderator),
 ):
     """
-    Update a community member's role.
+    تحديث دور عضو في المجتمع.
 
     Parameters:
-        community_id (int): The ID of the community.
-        user_id (int): The ID of the member whose role is to be updated.
-        role_update (schemas.CommunityMemberRoleUpdate): The new role data.
-        db (Session): Database session.
-        current_moderator (models.User): The current moderator.
+        community_id (int): رقم تعريف المجتمع.
+        user_id (int): رقم تعريف العضو الذي سيتم تحديث دوره.
+        role_update (schemas.CommunityMemberUpdate): بيانات الدور الجديد.
+        db (Session): جلسة قاعدة البيانات.
+        current_moderator (models.User): المشرف الحالي.
 
     Returns:
-        schemas.CommunityMemberOut: The updated community member record.
+        schemas.CommunityMemberOut: السجل المحدث للعضو.
 
     Raises:
-        HTTPException: If the moderator is not authorized to change roles or if the member is not found.
+        HTTPException: في حال عدم توفر الصلاحيات أو عدم العثور على العضو.
     """
-    # Only an admin can change roles in a community.
+    # فقط المسؤول (Admin) يمكنه تغيير الأدوار في المجتمع.
     moderator_role = (
         db.query(models.CommunityMember)
         .filter(
@@ -242,8 +241,8 @@ async def update_member_role(
         )
 
     member.role = role_update.role
-    member.updated_at = db.func.now()  # Optionally update the last updated timestamp
-    member.updated_by = current_moderator.id  # Track who made the update
+    member.updated_at = db.func.now()  # تحديث توقيت التعديل
+    member.updated_by = current_moderator.id  # تتبع من قام بالتعديل
 
     db.commit()
     db.refresh(member)
