@@ -1,6 +1,15 @@
-# ================================
-# Import statements and dependencies
-# ================================
+"""
+File: utils.py
+Description: A comprehensive utility module that provides functions for authentication,
+content moderation, file uploads, search, analytics, translation, and more.
+Note: External functions such as 'translate_text' must be implemented in their respective modules.
+It is recommended to refactor this file in the future into smaller modules according to the
+Single Responsibility Principle.
+"""
+
+# ============================================
+# Imports and Dependencies
+# ============================================
 from passlib.context import CryptContext
 import re
 import qrcode
@@ -18,9 +27,6 @@ from nltk.corpus import stopwords
 import joblib
 from functools import wraps, lru_cache
 from cachetools import TTLCache
-
-# تم إزالة الاستيراد التالي لتفادي الاستيراد الدائري:
-# from .oauth2 import get_current_user
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, desc, asc, or_
 from . import models, schemas
@@ -33,28 +39,34 @@ from collections import deque
 from datetime import datetime, timezone, date
 from typing import List, Optional
 
-# استيراد SpellChecker
+# SpellChecker and language detection
 from spellchecker import SpellChecker
-import ipaddress  # إضافة مكتبة ipaddress
+import ipaddress
 from langdetect import detect, LangDetectException
 
-# Note: translate_text, SortOption, and extract_link_preview should be defined elsewhere.
-# from .some_module import translate_text, extract_link_preview  # Placeholder for external definitions
-# from .schemas import SortOption  # Assuming SortOption is defined in schemas
-# from .models import User  # Assuming a User model exists
+# Import external function for link preview extraction
+from .link_preview import extract_link_preview
 
-# ================================
-# Global variables and constants
-# ================================
+# Attempt to import 'translate_text' from an external module.
+try:
+    from .translation import translate_text
+except ImportError:
+    # Placeholder implementation; should be replaced with a proper implementation.
+    async def translate_text(text: str, source_lang: str, target_lang: str):
+        raise NotImplementedError("translate_text function is not implemented.")
+
+
+# ============================================
+# Global Variables and Constants
+# ============================================
 spell = SpellChecker()
 translation_cache = TTLCache(maxsize=1000, ttl=3600)
-cache = TTLCache(maxsize=100, ttl=60)  # تعريف متغير cache للتخزين المؤقت
+cache = TTLCache(maxsize=100, ttl=60)  # Cache for temporary storage
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
 
-# Offensive content classifier initialization
-# تم استبدال النموذج السابق بنموذج صالح من Hugging Face لاكتشاف المحتوى المسيء
+# Offensive content classifier initialization using Hugging Face model
 model_name = "cardiffnlp/twitter-roberta-base-offensive"
 offensive_classifier = pipeline(
     "text-classification",
@@ -75,24 +87,30 @@ model = AutoModelForSequenceClassification.from_pretrained(
 sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 
 
-# ================================
+# ============================================
 # Authentication Utilities
-# ================================
+# ============================================
 def hash(password: str) -> str:
-    """تشفير كلمة المرور باستخدام bcrypt."""
+    """
+    Encrypts the password using bcrypt.
+    """
     return pwd_context.hash(password)
 
 
 def verify(plain_password: str, hashed_password: str) -> bool:
-    """التحقق من كلمة المرور العادية مقابل كلمة المرور المشفرة."""
+    """
+    Verifies a plain password against its hashed version.
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# ================================
+# ============================================
 # Content Moderation and Validation Functions
-# ================================
+# ============================================
 def check_content_against_rules(content: str, rules: List[str]) -> bool:
-    """التحقق مما إذا كان المحتوى ينتهك أي من القواعد المعتمدة على التعابير النمطية."""
+    """
+    Checks if the content violates any of the regex-based rules.
+    """
     for rule in rules:
         if re.search(rule, content, re.IGNORECASE):
             return False
@@ -101,8 +119,8 @@ def check_content_against_rules(content: str, rules: List[str]) -> bool:
 
 def detect_language(text: str) -> str:
     """
-    تحدد هذه الدالة لغة النص المُعطى وتعيد رمز اللغة.
-    في حال حدوث خطأ تعيد 'unknown'.
+    Detects the language of the given text.
+    Returns 'unknown' if detection fails.
     """
     try:
         return detect(text)
@@ -112,11 +130,11 @@ def detect_language(text: str) -> str:
 
 def train_content_classifier():
     """
-    تدريب مصنف بسيط لتصفية المحتوى.
-    ملاحظة: استبدل البيانات الوهمية ببيانات حقيقية في بيئة الإنتاج.
+    Trains a simple content classifier using dummy data.
+    Note: Replace dummy data with real data in production.
     """
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
-    y = [0, 1, 0]  # 0: محتوى عادي، 1: محتوى مسيء
+    y = [0, 1, 0]  # 0: Normal content, 1: Offensive content
 
     vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
     X_vectorized = vectorizer.fit_transform(X)
@@ -124,15 +142,15 @@ def train_content_classifier():
     classifier = MultinomialNB()
     classifier.fit(X_vectorized, y)
 
-    # حفظ المصنف والمحول النصي
+    # Save the classifier and the vectorizer for later use
     joblib.dump(classifier, "content_classifier.joblib")
     joblib.dump(vectorizer, "content_vectorizer.joblib")
 
 
 def check_for_profanity(text: str) -> bool:
     """
-    التحقق مما إذا كان النص يحتوي على كلمات مسيئة باستخدام better-profanity ونموذج تعلم آلي.
-    يُعيد True إذا تم اكتشاف كلمات مسيئة.
+    Checks if the text contains offensive words using better-profanity and a machine learning model.
+    Returns True if offensive content is detected.
     """
     if profanity.contains_profanity(text):
         return True
@@ -149,8 +167,8 @@ def check_for_profanity(text: str) -> bool:
 
 def validate_urls(text: str) -> bool:
     """
-    التحقق من صحة جميع روابط URL الموجودة في النص.
-    يُعيد True إذا كانت جميع الروابط صحيحة.
+    Validates all URLs present in the text.
+    Returns True if all URLs are valid.
     """
     words = text.split()
     urls = [word for word in words if word.startswith(("http://", "https://"))]
@@ -158,18 +176,22 @@ def validate_urls(text: str) -> bool:
 
 
 def is_valid_image_url(url: str) -> bool:
-    """التحقق مما إذا كان الرابط يشير إلى مورد صورة."""
+    """
+    Checks if the URL points to an image resource.
+    """
     try:
         import requests
 
         response = requests.head(url)
         return response.headers.get("content-type", "").startswith("image/")
-    except:
+    except Exception:
         return False
 
 
 def is_valid_video_url(url: str) -> bool:
-    """التحقق مما إذا كان الرابط يعود إلى خدمة استضافة فيديو مدعومة."""
+    """
+    Checks if the URL belongs to a supported video hosting service.
+    """
     from urllib.parse import urlparse
 
     parsed_url = urlparse(url)
@@ -177,19 +199,24 @@ def is_valid_video_url(url: str) -> bool:
     return any(host in parsed_url.netloc for host in video_hosts)
 
 
-def analyze_sentiment(text):
-    """تحليل معنويات النص باستخدام TextBlob."""
+def analyze_sentiment(text: str) -> float:
+    """
+    Analyzes the sentiment of the text using TextBlob.
+    Returns the polarity score.
+    """
     from textblob import TextBlob
 
     analysis = TextBlob(text)
     return analysis.sentiment.polarity
 
 
-# ================================
+# ============================================
 # QR Code and File Upload Functions
-# ================================
+# ============================================
 def generate_qr_code(data: str) -> str:
-    """إنشاء رمز QR للبيانات المُعطاة وإرجاعه بصيغة PNG مشفر ب base64."""
+    """
+    Generates a QR code for the given data and returns it as a base64-encoded PNG string.
+    """
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(data)
     qr.make(fit=True)
@@ -200,7 +227,9 @@ def generate_qr_code(data: str) -> str:
 
 
 async def save_upload_file(upload_file: UploadFile) -> str:
-    """حفظ الملف المرفوع بشكل غير متزامن وإرجاع مسار التخزين."""
+    """
+    Asynchronously saves an uploaded file and returns its storage path.
+    """
     file_location = f"uploads/{upload_file.filename}"
     async with aiofiles.open(file_location, "wb") as out_file:
         content = await upload_file.read()
@@ -208,15 +237,20 @@ async def save_upload_file(upload_file: UploadFile) -> str:
     return file_location
 
 
-# ================================
+# ============================================
 # Default Categories and Statistics Functions
-# ================================
+# ============================================
 def create_default_categories(db: Session):
-    """إنشاء الفئات الافتراضية للمنشورات والفئات الفرعية إذا لم تكن موجودة."""
+    """
+    Creates default post categories and subcategories if they do not already exist.
+    """
     default_categories = [
-        {"name": "عمل", "description": "منشورات متعلقة بفرص العمل"},
-        {"name": "هجرة", "description": "معلومات وتجارب عن الهجرة"},
-        {"name": "لجوء", "description": "منشورات حول عملية اللجوء"},
+        {"name": "Work", "description": "Posts related to job opportunities"},
+        {
+            "name": "Migration",
+            "description": "Information and experiences about migration",
+        },
+        {"name": "Asylum", "description": "Posts regarding asylum procedures"},
     ]
     for category in default_categories:
         db_category = (
@@ -230,17 +264,21 @@ def create_default_categories(db: Session):
             db.commit()
             db.refresh(new_category)
 
-            # إضافة الفئات الفرعية
-            if category["name"] == "عمل":
-                sub_categories = ["عمل في كندا", "عمل في أمريكا", "عمل في أوروبا"]
-            elif category["name"] == "هجرة":
+            # Adding subcategories based on category
+            if category["name"] == "Work":
+                sub_categories = ["Work in Canada", "Work in USA", "Work in Europe"]
+            elif category["name"] == "Migration":
                 sub_categories = [
-                    "هجرة إلى كندا",
-                    "هجرة إلى أمريكا",
-                    "هجرة إلى أستراليا",
+                    "Migration to Canada",
+                    "Migration to USA",
+                    "Migration to Australia",
                 ]
-            elif category["name"] == "لجوء":
-                sub_categories = ["لجوء في أوروبا", "لجوء في كندا", "لجوء في أمريكا"]
+            elif category["name"] == "Asylum":
+                sub_categories = [
+                    "Asylum in Europe",
+                    "Asylum in Canada",
+                    "Asylum in USA",
+                ]
 
             for sub_cat in sub_categories:
                 db_sub_category = (
@@ -257,7 +295,9 @@ def create_default_categories(db: Session):
 
 
 def update_user_statistics(db: Session, user_id: int, action: str):
-    """تحديث إحصائيات المستخدم بناءً على الإجراء (منشور، تعليق، إعجاب، مشاهدة)."""
+    """
+    Updates user statistics in the database based on the action performed (post, comment, like, view).
+    """
     today = date.today()
     stats = (
         db.query(models.UserStatistics)
@@ -283,12 +323,12 @@ def update_user_statistics(db: Session, user_id: int, action: str):
     db.commit()
 
 
-# ================================
-# دوال إدارة IP والبن (لم يتم فصلها)
-# ================================
-def get_client_ip(request: Request):
+# ============================================
+# IP Management and Ban Functions
+# ============================================
+def get_client_ip(request: Request) -> str:
     """
-    استرجاع عنوان IP الخاص بالعميل من رؤوس الطلب.
+    Retrieves the client's IP address from the request headers.
     """
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
@@ -296,10 +336,10 @@ def get_client_ip(request: Request):
     return request.client.host
 
 
-def is_ip_banned(db: Session, ip_address: str):
+def is_ip_banned(db: Session, ip_address: str) -> bool:
     """
-    التحقق مما إذا كان عنوان الـ IP محظوراً.
-    إذا انتهت صلاحية الحظر، يتم إزالته.
+    Checks if the given IP address is banned.
+    If the ban has expired, it removes the ban.
     """
     ban = db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
     if ban:
@@ -311,10 +351,10 @@ def is_ip_banned(db: Session, ip_address: str):
     return False
 
 
-def detect_ip_evasion(db: Session, user_id: int, current_ip: str):
+def detect_ip_evasion(db: Session, user_id: int, current_ip: str) -> bool:
     """
-    الكشف عن استخدام المستخدم لعناوين IP مختلفة (كإجراء للتحايل).
-    يتم مقارنة الـ IP الحالي مع العناوين المستخدمة سابقاً.
+    Detects if a user is using multiple IP addresses as an evasion tactic.
+    Compares the current IP with the user's previous session IPs.
     """
     user_ips = (
         db.query(models.UserSession.ip_address)
@@ -332,11 +372,13 @@ def detect_ip_evasion(db: Session, user_id: int, current_ip: str):
     return False
 
 
-# ================================
+# ============================================
 # Hashtag and Repost Functions
-# ================================
+# ============================================
 def get_or_create_hashtag(db: Session, hashtag_name: str):
-    """استرجاع هاشتاج موجود أو إنشاء جديد."""
+    """
+    Retrieves an existing hashtag or creates a new one.
+    """
     hashtag = (
         db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
     )
@@ -349,7 +391,9 @@ def get_or_create_hashtag(db: Session, hashtag_name: str):
 
 
 def update_repost_statistics(db: Session, post_id: int):
-    """تحديث الإحصائيات المتعلقة بإعادة نشر منشور معين."""
+    """
+    Updates repost statistics for a specific post.
+    """
     stats = (
         db.query(models.RepostStatistics)
         .filter(models.RepostStatistics.post_id == post_id)
@@ -366,7 +410,9 @@ def update_repost_statistics(db: Session, post_id: int):
 def send_repost_notification(
     db: Session, original_owner_id: int, reposter_id: int, repost_id: int
 ):
-    """إرسال إشعار عند إعادة نشر منشور."""
+    """
+    Sends a notification when a post is reposted.
+    """
     original_owner = (
         db.query(models.User).filter(models.User.id == original_owner_id).first()
     )
@@ -381,11 +427,13 @@ def send_repost_notification(
     db.commit()
 
 
-# ================================
-# Mentions and Offensive Content
-# ================================
+# ============================================
+# Mentions and Offensive Content Functions
+# ============================================
 def process_mentions(content: str, db: Session):
-    """استخراج ومعالجة الإشارات (mentions) في المحتوى."""
+    """
+    Extracts and processes user mentions from the content.
+    """
     mentioned_usernames = re.findall(r"@(\w+)", content)
     mentioned_users = []
     for username in mentioned_usernames:
@@ -397,26 +445,29 @@ def process_mentions(content: str, db: Session):
 
 def is_content_offensive(text: str) -> tuple:
     """
-    التحقق مما إذا كان النص مسيئاً باستخدام نموذج ذكاء اصطناعي.
-    يُعيد (is_offensive, score) حيث is_offensive هو قيمة منطقية.
+    Determines if the text is offensive using an AI model.
+    Returns a tuple (is_offensive, score) where is_offensive is a boolean.
     """
     result = offensive_classifier(text)[0]
     is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
     return is_offensive, result["score"]
 
 
-# ================================
+# ============================================
 # Encryption Key Functions
-# ================================
-def generate_encryption_key():
-    """توليد مفتاح تشفير جديد باستخدام Fernet."""
+# ============================================
+def generate_encryption_key() -> str:
+    """
+    Generates a new encryption key using Fernet.
+    """
     return Fernet.generate_key().decode()
 
 
-def update_encryption_key(old_key):
+def update_encryption_key(old_key: str) -> str:
     """
-    تحديث مفتاح التشفير.
-    ملاحظة: يمكن إضافة منطق لإعادة تشفير البيانات إذا لزم الأمر.
+    Updates the encryption key.
+    Note: Add logic for re-encrypting data if necessary.
+    Returns the new key.
     """
     new_key = Fernet.generate_key()
     old_fernet = Fernet(old_key.encode())
@@ -424,36 +475,42 @@ def update_encryption_key(old_key):
     return new_key.decode()
 
 
-# ================================
+# ============================================
 # Call Quality and Video Adjustment Functions
-# ================================
+# ============================================
 class CallQualityBuffer:
-    """فئة لتخزين درجات جودة المكالمات في نافذة زمنية محددة."""
+    """
+    A class to store call quality scores within a specified time window.
+    """
 
     def __init__(self, window_size=QUALITY_WINDOW_SIZE):
         self.window_size = window_size
         self.quality_scores = deque(maxlen=window_size)
         self.last_update_time = time.time()
 
-    def add_score(self, score):
-        """إضافة درجة جديدة إلى النافذة."""
+    def add_score(self, score: float):
+        """
+        Adds a new score to the quality buffer.
+        """
         self.quality_scores.append(score)
         self.last_update_time = time.time()
 
-    def get_average_score(self):
-        """حساب متوسط درجات الجودة."""
+    def get_average_score(self) -> float:
+        """
+        Computes the average quality score.
+        """
         if not self.quality_scores:
-            return 100  # نفترض جودة ممتازة في حال عدم تسجيل درجات
+            return 100.0  # Assume excellent quality if no scores are recorded
         return sum(self.quality_scores) / len(self.quality_scores)
 
 
 quality_buffers = {}
 
 
-def check_call_quality(data, call_id):
+def check_call_quality(data: dict, call_id: str) -> float:
     """
-    حساب جودة المكالمة بناءً على فقدان الحزم والكمون والتذبذب.
-    يُعيد متوسط درجة الجودة.
+    Calculates the call quality score based on packet loss, latency, and jitter.
+    Returns the average quality score.
     """
     packet_loss = data.get("packet_loss", 0)
     latency = data.get("latency", 0)
@@ -465,16 +522,20 @@ def check_call_quality(data, call_id):
     return quality_buffers[call_id].get_average_score()
 
 
-def should_adjust_video_quality(call_id):
-    """تحديد ما إذا كان يجب تعديل جودة الفيديو بناءً على متوسط الجودة."""
+def should_adjust_video_quality(call_id: str) -> bool:
+    """
+    Determines if video quality should be adjusted based on the average score.
+    """
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         return average_quality < MIN_QUALITY_THRESHOLD
     return False
 
 
-def get_recommended_video_quality(call_id):
-    """اقتراح مستوى جودة الفيديو بناءً على متوسط درجة الجودة."""
+def get_recommended_video_quality(call_id: str) -> str:
+    """
+    Recommends the video quality level based on the average quality score.
+    """
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         if average_quality < 30:
@@ -483,23 +544,28 @@ def get_recommended_video_quality(call_id):
             return "medium"
         else:
             return "high"
-    return "high"  # افتراضي عند عدم وجود بيانات
+    return "high"  # Default quality if no data is available
 
 
 def clean_old_quality_buffers():
-    """إزالة مخازن جودة المكالمات التي لم يتم تحديثها لأكثر من 5 دقائق."""
+    """
+    Removes call quality buffers that have not been updated for more than 5 minutes.
+    """
     current_time = time.time()
     for call_id in list(quality_buffers.keys()):
         if current_time - quality_buffers[call_id].last_update_time > 300:
             del quality_buffers[call_id]
 
 
-# ================================
+# ============================================
 # Search and Spellcheck Functions
-# ================================
+# ============================================
 def update_search_vector():
-    """تحديث متجه البحث الكامل للمنشورات في قاعدة البيانات."""
-    from sqlalchemy import create_engine  # تأكد من تعريف engine بشكل صحيح
+    """
+    Updates the full-text search vector for posts in the database.
+    Note: Ensure the database engine is correctly configured.
+    """
+    from sqlalchemy import create_engine
 
     engine = create_engine(settings.DATABASE_URL)
     with engine.connect() as conn:
@@ -517,7 +583,9 @@ def update_search_vector():
 
 
 def search_posts(query: str, db: Session):
-    """البحث عن المنشورات باستخدام استعلام نصي."""
+    """
+    Searches for posts matching the given query using full-text search.
+    """
     search_query = func.plainto_tsquery("english", query)
     return (
         db.query(models.Post)
@@ -532,7 +600,9 @@ def search_posts(query: str, db: Session):
 
 
 def get_spell_suggestions(query: str) -> List[str]:
-    """توليد اقتراحات إملائية للاستعلام."""
+    """
+    Generates spelling suggestions for the given query.
+    """
     words = query.split()
     suggestions = []
     for word in words:
@@ -545,16 +615,17 @@ def get_spell_suggestions(query: str) -> List[str]:
 
 def format_spell_suggestions(original_query: str, suggestions: List[str]) -> str:
     """
-    تنسيق اقتراحات الإملاء في حال اختلف الاستعلام المصحح عن الأصلي.
-    يُعيد نص الاقتراح إذا كان ذلك مناسباً.
+    Formats the spelling suggestions if the corrected query differs from the original.
     """
     if original_query.lower() != " ".join(suggestions).lower():
-        return f"هل تقصد: {' '.join(suggestions)}?"
+        return f"Did you mean: {' '.join(suggestions)}?"
     return ""
 
 
 def sort_search_results(query, sort_option: str, db: Session):
-    """ترتيب نتائج البحث بناءً على الصلة أو التاريخ أو الشعبية."""
+    """
+    Sorts search results based on relevance, date, or popularity.
+    """
     if sort_option == "RELEVANCE":
         return query.order_by(
             desc(
@@ -573,16 +644,16 @@ def sort_search_results(query, sort_option: str, db: Session):
         return query
 
 
-# ================================
+# ============================================
 # User Behavior and Post Scoring Functions
-# ================================
-def analyze_user_behavior(user_history, content):
+# ============================================
+def analyze_user_behavior(user_history, content: str) -> float:
     """
-    تحليل سلوك المستخدم بناءً على سجل البحث ومعنويات المحتوى.
-    يُعيد درجة صلة.
+    Analyzes user behavior based on search history and the sentiment of the content.
+    Returns a relevance score.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]  # تحديد الطول الأقصى للنص
+    result = sentiment_pipeline(content[:512])[0]  # Limit text length for analysis
     sentiment = result["label"]
     score = result["score"]
     relevance_score = sum(
@@ -592,9 +663,11 @@ def analyze_user_behavior(user_history, content):
     return relevance_score
 
 
-def calculate_post_score(upvotes, downvotes, comment_count, created_at):
+def calculate_post_score(
+    upvotes: int, downvotes: int, comment_count: int, created_at: datetime
+) -> float:
     """
-    حساب درجة المنشور بناءً على الأصوات وعدد التعليقات وعمر المنشور.
+    Calculates the score of a post based on vote difference, comment count, and post age.
     """
     vote_difference = upvotes - downvotes
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
@@ -603,7 +676,9 @@ def calculate_post_score(upvotes, downvotes, comment_count, created_at):
 
 
 def update_post_score(db: Session, post: models.Post):
-    """تحديث درجة المنشور وحفظ التغييرات في قاعدة البيانات."""
+    """
+    Updates the post's score and commits the changes to the database.
+    """
     upvotes = (
         db.query(models.Vote)
         .filter(models.Vote.post_id == post.id, models.Vote.dir == 1)
@@ -621,7 +696,9 @@ def update_post_score(db: Session, post: models.Post):
 
 
 def update_post_vote_statistics(db: Session, post_id: int):
-    """تحديث إحصائيات الأصوات لمنشور معين."""
+    """
+    Updates the vote statistics for a specific post.
+    """
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         return
@@ -655,7 +732,9 @@ def update_post_vote_statistics(db: Session, post_id: int):
 
 
 def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalytics:
-    """إنشاء تحليلات للأصوات لمنشورات المستخدم."""
+    """
+    Generates vote analytics for a user's posts.
+    """
     user_posts = db.query(models.Post).filter(models.Post.owner_id == user_id).all()
     total_posts = len(user_posts)
     total_votes = sum(
@@ -692,12 +771,16 @@ def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalyt
     )
 
 
-def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
-    """إنشاء بيانات تحليلات للأصوات لمنشور معين."""
+def create_post_vote_analytics(
+    post: models.Post,
+) -> Optional[schemas.PostVoteAnalytics]:
+    """
+    Creates vote analytics data for a specific post.
+    """
     stats = post.vote_statistics
     if not stats:
         return None
-    total_votes = stats.total_votes or 1  # لتفادي القسمة على الصفر
+    total_votes = stats.total_votes or 1  # Avoid division by zero
     upvote_percentage = (stats.upvotes / total_votes) * 100
     downvote_percentage = (stats.downvotes / total_votes) * 100
     reaction_counts = {
@@ -719,15 +802,17 @@ def create_post_vote_analytics(post: models.Post) -> schemas.PostVoteAnalytics:
     )
 
 
-# ================================
+# ============================================
 # Admin and Exception Handlers
-# ================================
+# ============================================
 def admin_required(func):
-    """ديكوريتور للتأكد من أن المستخدم الحالي لديه صلاحيات المسؤول."""
+    """
+    Decorator to ensure that the current user has admin privileges.
+    """
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        # استيراد محلي لتفادي الاستيراد الدائري
+        # Local import to avoid circular dependency
         from .oauth2 import get_current_user
 
         current_user = await get_current_user()
@@ -739,7 +824,9 @@ def admin_required(func):
 
 
 def handle_exceptions(func):
-    """ديكوريتور للتعامل مع الاستثناءات وإرجاع رسالة خطأ موحدة."""
+    """
+    Decorator for handling exceptions and returning a standardized error message.
+    """
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -754,29 +841,26 @@ def handle_exceptions(func):
     return wrapper
 
 
-# ================================
+# ============================================
 # Translation Utilities
-# ================================
+# ============================================
 @lru_cache(maxsize=1000)
 async def cached_translate_text(text: str, source_lang: str, target_lang: str):
     """
-    ترجمة النص مع استخدام التخزين المؤقت.
-    ملاحظة: يجب تعريف دالة translate_text في وحدة أخرى.
+    Translates text using caching.
+    Note: The 'translate_text' function must be implemented externally.
     """
     cache_key = f"{text}:{source_lang}:{target_lang}"
     if cache_key in translation_cache:
         return translation_cache[cache_key]
-    translated_text = await translate_text(
-        text, source_lang, target_lang
-    )  # دالة خارجية
+    translated_text = await translate_text(text, source_lang, target_lang)
     translation_cache[cache_key] = translated_text
     return translated_text
 
 
 async def get_translated_content(content: str, user: "User", source_lang: str):
     """
-    إعادة المحتوى المترجم إذا كانت لغة المستخدم المفضلة تختلف عن المصدر.
-    ملاحظة: يجب تعريف نموذج User في مشروعك.
+    Returns the translated content if the user's preferred language differs from the source language.
     """
     if user.auto_translate and user.preferred_language != source_lang:
         return await cached_translate_text(
@@ -785,15 +869,15 @@ async def get_translated_content(content: str, user: "User", source_lang: str):
     return content
 
 
-# ================================
+# ============================================
 # Link Preview Update Function
-# ================================
+# ============================================
 def update_link_preview(db: Session, message_id: int, url: str):
     """
-    تحديث معاينة الرابط للرسالة.
-    ملاحظة: يجب تعريف دالة extract_link_preview في وحدة أخرى.
+    Updates the link preview for a message in the database.
+    Note: Uses the external 'extract_link_preview' function.
     """
-    link_preview = extract_link_preview(url)  # دالة خارجية
+    link_preview = extract_link_preview(url)
     if link_preview:
         db.query(models.Message).filter(models.Message.id == message_id).update(
             {"link_preview": link_preview}
@@ -801,16 +885,14 @@ def update_link_preview(db: Session, message_id: int, url: str):
         db.commit()
 
 
-# ================================
+# ============================================
 # User Event Logging Function
-# ================================
+# ============================================
 def log_user_event(
     db: Session, user_id: int, event: str, metadata: Optional[dict] = None
 ):
     """
-    تسجل هذه الدالة أحداث المستخدمين في النظام.
-    في هذا التطبيق البسيط نقوم بطباعة الحدث في وحدة التحكم.
-    يمكنك تعديلها لتخزين الأحداث في قاعدة البيانات إذا كان لديك نموذج مناسب.
+    Logs user events. Currently prints the event; can be modified to store the events in the database.
     """
     log_message = f"User Event - User: {user_id}, Event: {event}, Metadata: {metadata}"
     print(log_message)

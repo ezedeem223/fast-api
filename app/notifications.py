@@ -1,3 +1,13 @@
+"""
+File: notifications.py
+Description: This module handles the creation, scheduling, batching, and delivery of notifications
+via email, push, and real-time (WebSocket). It also includes support for bulk notifications,
+analytics, and retry mechanisms.
+"""
+
+# ============================================
+# Imports and Dependencies
+# ============================================
 from fastapi import BackgroundTasks, WebSocket, HTTPException
 from fastapi_mail import MessageSchema
 from pydantic import EmailStr
@@ -28,36 +38,87 @@ from .models import (
 )
 import uuid
 
+# ============================================
+# Logger Configuration
+# ============================================
 logger = logging.getLogger(__name__)
 
-# Notification caches for performance
+# ============================================
+# Caches for Notifications
+# ============================================
 notification_cache = TTLCache(maxsize=1000, ttl=300)
 delivery_status_cache = TTLCache(maxsize=5000, ttl=3600)
 priority_notification_cache = TTLCache(maxsize=500, ttl=60)  # For urgent notifications
 
 
-# تعريف دالة send_email_notification لإرسال البريد الإلكتروني باستخدام fm
-async def send_email_notification(message: MessageSchema) -> None:
+# ============================================
+# Common Helper Functions
+# ============================================
+def get_model_by_id(db: Session, model, id) -> Optional[Any]:
     """
-    ترسل رسالة بريد إلكتروني باستخدام الكائن fm.
+    Retrieves a model instance by its id.
     """
     try:
-        await fm.send_message(message)
-        logger.info("Email notification sent successfully")
+        return db.query(model).filter(model.id == id).first()
     except Exception as e:
-        logger.error(f"Error sending email notification: {e}")
-        raise
+        logger.error(f"Error fetching {model.__name__} with id {id}: {e}")
+        return None
 
 
+def get_or_create(db: Session, model, defaults: dict = None, **kwargs) -> Any:
+    """
+    Retrieves a model instance matching the given kwargs or creates a new one with defaults.
+    """
+    instance = db.query(model).filter_by(**kwargs).first()
+    if instance:
+        return instance
+    params = kwargs.copy()
+    if defaults:
+        params.update(defaults)
+    instance = model(**params)
+    db.add(instance)
+    db.commit()
+    db.refresh(instance)
+    return instance
+
+
+def handle_async_errors(func):
+    """
+    Decorator for async functions to log errors and re-raise them.
+    """
+
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}")
+            raise
+
+    return wrapper
+
+
+# ============================================
+# Email Notification Function
+# ============================================
+@handle_async_errors
+async def send_email_notification(message: MessageSchema) -> None:
+    """
+    Sends an email notification using the fastapi_mail instance (fm).
+
+    Raises an exception if sending fails.
+    """
+    await fm.send_message(message)
+    logger.info("Email notification sent successfully")
+
+
+# ============================================
+# Schedule Email Notification
+# ============================================
 def schedule_email_notification(notification_id: int, delay: int = 60):
     """
-    جدولة إرسال إشعار عبر البريد الإلكتروني بعد تأخير محدد.
+    Schedules an email notification to be sent after a specified delay (in seconds).
 
-    يتم جدولة المهمة باستخدام asyncio.create_task.
-
-    المعاملات:
-      - notification_id: رقم تعريف الإشعار.
-      - delay: مدة التأخير (بالثواني) قبل الإرسال (افتراضي 60 ثانية).
+    Uses asyncio.create_task to schedule the task.
     """
     logger.info(
         f"Scheduled email notification {notification_id} to be sent in {delay} seconds."
@@ -67,13 +128,11 @@ def schedule_email_notification(notification_id: int, delay: int = 60):
         await asyncio.sleep(delay)
         db_session = next(get_db())
         try:
-            notification = db_session.query(models.Notification).get(notification_id)
+            notification = get_model_by_id(
+                db_session, models.Notification, notification_id
+            )
             if notification:
-                user = (
-                    db_session.query(models.User)
-                    .filter(models.User.id == notification.user_id)
-                    .first()
-                )
+                user = get_model_by_id(db_session, models.User, notification.user_id)
                 if user and user.email:
                     message = MessageSchema(
                         subject=f"Notification: {notification.notification_type.replace('_',' ').title()}",
@@ -93,6 +152,9 @@ def schedule_email_notification(notification_id: int, delay: int = 60):
     asyncio.create_task(task())
 
 
+# ============================================
+# Notification Batch Processor
+# ============================================
 class NotificationBatcher:
     """Batch processor for notifications."""
 
@@ -104,6 +166,9 @@ class NotificationBatcher:
         self._last_flush = datetime.now(timezone.utc)
 
     async def add(self, notification: dict) -> None:
+        """
+        Adds a notification to the batch and flushes if batch size or wait time is reached.
+        """
         async with self._lock:
             self.batch.append(notification)
             if (
@@ -114,18 +179,22 @@ class NotificationBatcher:
                 await self.flush()
 
     async def flush(self) -> None:
+        """
+        Flushes the current batch by processing it.
+        """
         async with self._lock:
             if not self.batch:
                 return
             try:
-                # Process the current batch
                 await self._process_batch(self.batch)
             finally:
                 self.batch = []
                 self._last_flush = datetime.now(timezone.utc)
 
     async def _process_batch(self, notifications: List[dict]) -> None:
-        # Group notifications by channel
+        """
+        Processes the batch by grouping notifications by channel and sending them.
+        """
         email_notifications = []
         push_notifications = []
         in_app_notifications = []
@@ -146,7 +215,9 @@ class NotificationBatcher:
         await asyncio.gather(*tasks)
 
     async def _send_batch_emails(self, notifications: List[dict]) -> None:
-        # Group messages by recipient email
+        """
+        Sends a batch of email notifications grouped by recipient.
+        """
         email_groups = {}
         for notif in notifications:
             email = notif["recipient"]
@@ -162,6 +233,9 @@ class NotificationBatcher:
 
     @staticmethod
     def _format_batch_email(notifications: List[dict]) -> str:
+        """
+        Formats the batch email body.
+        """
         return "\n".join(
             [
                 f"<div><h3>{n['title']}</h3><p>{n['content']}</p></div>"
@@ -170,32 +244,33 @@ class NotificationBatcher:
         )
 
 
+# ============================================
+# Notification Delivery Manager
+# ============================================
 class NotificationDeliveryManager:
     """Manages delivery of notifications with retry support."""
 
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
         self.background_tasks = background_tasks
-        self.max_retries = 5  # Increase retry attempts
-        self.retry_delays = [
-            300,
-            600,
-            1200,
-            2400,
-            4800,
-        ]  # Increasing delays (in seconds)
+        self.max_retries = 5
+        self.retry_delays = [300, 600, 1200, 2400, 4800]  # Delays in seconds
         self.error_tracking = {}
         self.batcher = NotificationBatcher()
 
     async def deliver_notification(self, notification: models.Notification) -> bool:
-        """Deliver notification with retry and tracking."""
+        """
+        Delivers a notification with retry support and tracks the delivery status.
+        """
         try:
             delivery_key = f"delivery_{notification.id}"
             if delivery_key in delivery_status_cache:
                 return delivery_status_cache[delivery_key]
             user_prefs = self._get_user_preferences(notification.user_id)
-            # Prepare content based on user preferences
-            content = await self._prepare_notification_content(notification, user_prefs)
+            # Use unified language processing
+            content = await self._process_language(
+                notification.content, notification.language, user_prefs
+            )
             delivery_tasks = []
             if user_prefs.email_notifications:
                 delivery_tasks.append(
@@ -229,26 +304,32 @@ class NotificationDeliveryManager:
                 await self._handle_final_failure(notification, error_details)
             return False
 
-    async def _prepare_notification_content(
+    async def _process_language(
         self,
-        notification: models.Notification,
+        content: str,
+        current_language: str,
         user_prefs: models.NotificationPreferences,
     ) -> str:
-        """Prepare notification content with translation support."""
-        content = notification.content
+        """
+        Unifies language processing for notifications.
+        If auto_translate is enabled and the user's preferred language differs from the current language,
+        translates the content.
+        """
         if (
             user_prefs.auto_translate
-            and user_prefs.preferred_language != notification.language
+            and user_prefs.preferred_language != current_language
         ):
-            content = await get_translated_content(
-                content, user_prefs.preferred_language, notification.language
+            return await get_translated_content(
+                content, user_prefs.preferred_language, current_language
             )
         return content
 
     async def _update_delivery_status(
         self, notification: models.Notification, success: bool, results: List[Any]
     ) -> None:
-        """Update notification delivery status."""
+        """
+        Updates the delivery status of a notification in the database.
+        """
         status_val = (
             models.NotificationStatus.DELIVERED
             if success
@@ -265,7 +346,9 @@ class NotificationDeliveryManager:
         self.db.commit()
 
     def _get_user_preferences(self, user_id: int) -> models.NotificationPreferences:
-        """Retrieve user notification preferences with caching."""
+        """
+        Retrieves user notification preferences, using caching if available.
+        """
         cache_key = f"user_prefs_{user_id}"
         if cache_key in notification_cache:
             return notification_cache[cache_key]
@@ -285,7 +368,9 @@ class NotificationDeliveryManager:
     async def _send_email_notification(
         self, notification: models.Notification, content: str
     ) -> None:
-        """Send notification via email."""
+        """
+        Sends an email notification.
+        """
         try:
             user = (
                 self.db.query(models.User)
@@ -308,12 +393,13 @@ class NotificationDeliveryManager:
             logger.info(f"Email sent to {user.email}")
         except Exception as e:
             logger.error(f"Error sending email notification: {str(e)}")
-            raise
 
     async def _send_push_notification(
         self, notification: models.Notification, content: str
     ) -> None:
-        """Send push notification."""
+        """
+        Sends a push notification.
+        """
         try:
             user_devices = (
                 self.db.query(models.UserDevice)
@@ -347,7 +433,9 @@ class NotificationDeliveryManager:
     async def _send_realtime_notification(
         self, notification: models.Notification, content: str
     ) -> None:
-        """Send realtime notification via WebSocket."""
+        """
+        Sends a real-time notification via WebSocket.
+        """
         try:
             message = {
                 "type": "notification",
@@ -367,7 +455,9 @@ class NotificationDeliveryManager:
             logger.error(f"Error sending realtime notification: {str(e)}")
 
     async def _schedule_retry(self, notification: models.Notification) -> None:
-        """Schedule a retry for a failed notification."""
+        """
+        Schedules a retry for a failed notification.
+        """
         retry_delay = self.retry_delays[notification.retry_count]
         notification.retry_count += 1
         notification.status = models.NotificationStatus.RETRYING
@@ -381,13 +471,11 @@ class NotificationDeliveryManager:
             )
 
     async def retry_delivery(self, notification_id: int, delay: int) -> None:
-        """Retry delivering a notification after a delay."""
+        """
+        Retries delivering a notification after a specified delay.
+        """
         await asyncio.sleep(delay)
-        notification = (
-            self.db.query(models.Notification)
-            .filter(models.Notification.id == notification_id)
-            .first()
-        )
+        notification = get_model_by_id(self.db, models.Notification, notification_id)
         if (
             not notification
             or notification.status != models.NotificationStatus.RETRYING
@@ -404,13 +492,17 @@ class NotificationDeliveryManager:
     async def _handle_final_failure(
         self, notification: models.Notification, error_details: dict
     ) -> None:
-        """Handle final failure after all retries have been exhausted."""
+        """
+        Handles final failure after all retries have been exhausted.
+        """
         notification.status = models.NotificationStatus.FAILED
         notification.failure_reason = json.dumps(error_details)
         self.db.commit()
 
     def _create_email_template(self, notification: models.Notification) -> str:
-        """Create an email template for the notification."""
+        """
+        Creates an HTML email template for the notification.
+        """
         return f"""
         <html>
             <head>
@@ -435,7 +527,9 @@ class NotificationDeliveryManager:
         """
 
     def _schedule_delivery(self, notification: models.Notification):
-        """Schedule the delivery of a notification."""
+        """
+        Schedules the delivery of a notification.
+        """
         if self.background_tasks:
             self.background_tasks.add_task(
                 deliver_scheduled_notification,
@@ -447,20 +541,31 @@ class NotificationDeliveryManager:
             )
 
 
+# ============================================
+# WebSocket Connection Manager
+# ============================================
 class ConnectionManager:
-    """Manage WebSocket connections."""
+    """
+    Manages WebSocket connections for real-time notifications.
+    """
 
     def __init__(self):
         self.active_connections: Dict[int, List[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, user_id: int):
+        """
+        Accepts and stores a WebSocket connection for a user.
+        """
         await websocket.accept()
         async with self._lock:
             self.active_connections.setdefault(user_id, []).append(websocket)
             logger.info(f"WebSocket connected for user {user_id}")
 
     async def disconnect(self, websocket: WebSocket, user_id: int):
+        """
+        Removes a WebSocket connection for a user.
+        """
         async with self._lock:
             if (
                 user_id in self.active_connections
@@ -472,6 +577,9 @@ class ConnectionManager:
                 logger.info(f"WebSocket disconnected for user {user_id}")
 
     async def send_personal_message(self, message: dict, user_id: int):
+        """
+        Sends a JSON message to a specific user's active WebSocket connections.
+        """
         if user_id in self.active_connections:
             broken_connections = []
             for connection in self.active_connections[user_id]:
@@ -487,6 +595,9 @@ class ConnectionManager:
                             self.active_connections[user_id].remove(connection)
 
     async def broadcast(self, message: dict):
+        """
+        Broadcasts a message to all connected users.
+        """
         for user_id in list(self.active_connections.keys()):
             await self.send_personal_message(message, user_id)
 
@@ -494,18 +605,19 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# ============================================
+# Notification Service
+# ============================================
 class NotificationService:
-    """Service to handle creation and delivery of notifications."""
+    """
+    Service to handle creation and delivery of notifications.
+    """
 
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
         self.background_tasks = background_tasks
         self.max_retries = 3
         self.retry_delay = 300
-        self.email_service = None
-        self.push_service = None
-        self.websocket_manager = None
-        self.analytics_service = None
 
     async def create_notification(
         self,
@@ -519,21 +631,16 @@ class NotificationService:
         metadata: Optional[dict] = None,
         scheduled_for: Optional[datetime] = None,
     ) -> Optional[models.Notification]:
-        """Create a new notification with smart processing."""
+        """
+        Creates a new notification with smart processing based on user preferences.
+        """
         try:
             user_prefs = self._get_user_preferences(user_id)
             if not self._should_send_notification(user_prefs, category):
                 logger.info(f"Notification skipped for user {user_id} per preferences")
                 return None
             detected_lang = detect_language(content)
-            if (
-                user_prefs
-                and user_prefs.auto_translate
-                and user_prefs.preferred_language != detected_lang
-            ):
-                content = await get_translated_content(
-                    content, user_prefs.preferred_language, detected_lang
-                )
+            content = await self._process_language(content, detected_lang, user_prefs)
             group = self._find_or_create_group(notification_type, user_id, related_id)
             new_notification = models.Notification(
                 user_id=user_id,
@@ -563,21 +670,26 @@ class NotificationService:
             raise
 
     async def deliver_notification(self, notification: models.Notification):
-        """Deliver notification with tracking of retries."""
+        """
+        Delivers a notification to the user based on their preferences.
+        """
         try:
             user_prefs = self._get_user_preferences(notification.user_id)
+            content = await self._process_language(
+                notification.content, notification.language, user_prefs
+            )
             delivery_tasks = []
             if user_prefs.email_notifications:
                 delivery_tasks.append(
-                    self._send_email_notification(notification, notification.content)
+                    self._send_email_notification(notification, content)
                 )
             if user_prefs.push_notifications:
                 delivery_tasks.append(
-                    self._send_push_notification(notification, notification.content)
+                    self._send_push_notification(notification, content)
                 )
             if user_prefs.in_app_notifications:
                 delivery_tasks.append(
-                    self._send_realtime_notification(notification, notification.content)
+                    self._send_realtime_notification(notification, content)
                 )
             results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
             success = all(not isinstance(r, Exception) for r in results)
@@ -607,91 +719,28 @@ class NotificationService:
             self.db.commit()
             raise
 
-    async def _send_email_notification(
-        self, notification: models.Notification, content: str
-    ) -> None:
-        """Send email notification."""
-        try:
-            user = (
-                self.db.query(models.User)
-                .filter(models.User.id == notification.user_id)
-                .first()
+    async def _process_language(
+        self,
+        content: str,
+        current_language: str,
+        user_prefs: models.NotificationPreferences,
+    ) -> str:
+        """
+        Unifies language processing for notifications.
+        """
+        if (
+            user_prefs.auto_translate
+            and user_prefs.preferred_language != current_language
+        ):
+            return await get_translated_content(
+                content, user_prefs.preferred_language, current_language
             )
-            if not user or not user.email:
-                logger.warning(f"No email for user {notification.user_id}")
-                return
-            message = MessageSchema(
-                subject=f"New {notification.notification_type.replace('_', ' ').title()}",
-                recipients=[user.email],
-                body=self._create_email_template(notification),
-                subtype="html",
-            )
-            if self.background_tasks:
-                self.background_tasks.add_task(send_email_notification, message)
-            else:
-                await send_email_notification(message)
-            logger.info(f"Email sent to {user.email}")
-        except Exception as e:
-            logger.error(f"Error sending email notification: {str(e)}")
-
-    async def _send_push_notification(
-        self, notification: models.Notification, content: str
-    ) -> None:
-        """Send push notification."""
-        try:
-            user_devices = (
-                self.db.query(models.UserDevice)
-                .filter(
-                    models.UserDevice.user_id == notification.user_id,
-                    models.UserDevice.is_active == True,
-                )
-                .all()
-            )
-            if not user_devices:
-                logger.info(f"No active devices for user {notification.user_id}")
-                return
-            tokens = [device.fcm_token for device in user_devices]
-            response = send_multicast_notification(
-                tokens=tokens,
-                title=notification.notification_type.replace("_", " ").title(),
-                body=content,
-                data={
-                    "notification_id": str(notification.id),
-                    "type": notification.notification_type,
-                    "link": notification.link or "",
-                    "priority": notification.priority.value,
-                    "category": notification.category.value,
-                },
-            )
-            if response and hasattr(response, "success_count"):
-                logger.info(f"Push sent to {response.success_count} devices")
-        except Exception as e:
-            logger.error(f"Error sending push notification: {str(e)}")
-
-    async def _send_realtime_notification(
-        self, notification: models.Notification, content: str
-    ) -> None:
-        """Send realtime notification via WebSocket."""
-        try:
-            message = {
-                "type": "notification",
-                "data": {
-                    "id": notification.id,
-                    "content": notification.content,
-                    "notification_type": notification.notification_type,
-                    "priority": notification.priority.value,
-                    "category": notification.category.value,
-                    "link": notification.link,
-                    "created_at": notification.created_at.isoformat(),
-                    "metadata": notification.metadata,
-                },
-            }
-            await manager.send_personal_message(message, notification.user_id)
-        except Exception as e:
-            logger.error(f"Error sending realtime notification: {str(e)}")
+        return content
 
     def _get_user_preferences(self, user_id: int) -> models.NotificationPreferences:
-        """Retrieve user notification preferences."""
+        """
+        Retrieves user notification preferences.
+        """
         prefs = (
             self.db.query(models.NotificationPreferences)
             .filter(models.NotificationPreferences.user_id == user_id)
@@ -709,7 +758,9 @@ class NotificationService:
         prefs: models.NotificationPreferences,
         category: models.NotificationCategory,
     ) -> bool:
-        """Determine if notification should be sent based on preferences."""
+        """
+        Determines if a notification should be sent based on user preferences.
+        """
         if not prefs:
             return True
         current_time = datetime.now().time()
@@ -726,7 +777,9 @@ class NotificationService:
     def _find_or_create_group(
         self, notification_type: str, user_id: int, related_id: Optional[int] = None
     ) -> Optional[models.NotificationGroup]:
-        """Find an existing notification group or create a new one."""
+        """
+        Finds an existing notification group or creates a new one.
+        """
         if notification_type not in {
             "post_like",
             "post_comment",
@@ -766,33 +819,10 @@ class NotificationService:
             self.db.rollback()
             return None
 
-    def _create_email_template(self, notification: models.Notification) -> str:
-        """Create an email template for the notification."""
-        return f"""
-        <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
-                    .notification-container {{ padding: 20px; background-color: #f5f5f5; border-radius: 5px; margin: 20px auto; max-width: 600px; }}
-                    .notification-title {{ color: #333; margin-bottom: 15px; }}
-                    .notification-content {{ color: #666; margin-bottom: 20px; }}
-                    .notification-link {{ display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 3px; }}
-                    .notification-footer {{ margin-top: 20px; font-size: 0.9em; color: #999; }}
-                </style>
-            </head>
-            <body>
-                <div class="notification-container">
-                    <h2 class="notification-title">{notification.notification_type.replace('_', ' ').title()}</h2>
-                    <div class="notification-content">{notification.content}</div>
-                    {f'<a href="{notification.link}" class="notification-link">View Details</a>' if notification.link else ''}
-                    <div class="notification-footer">This notification was sent from {settings.SITE_NAME}</div>
-                </div>
-            </body>
-        </html>
-        """
-
     def _schedule_delivery(self, notification: models.Notification):
-        """Schedule the delivery of a notification."""
+        """
+        Schedules the delivery of a notification.
+        """
         if self.background_tasks:
             self.background_tasks.add_task(
                 deliver_scheduled_notification,
@@ -804,121 +834,83 @@ class NotificationService:
             )
 
 
-class NotificationManager:
-    """Central manager integrating notification components."""
+# ============================================
+# WebSocket Connection Manager
+# ============================================
+class ConnectionManager:
+    """
+    Manages WebSocket connections for real-time notifications.
+    """
 
-    def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
-        self.db = db
-        self.background_tasks = background_tasks
-        self.notification_service = NotificationService(db, background_tasks)
+    def __init__(self):
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+        self._lock = asyncio.Lock()
 
-    async def handle_post_action(self, post_id: int, action_type: str, actor_id: int):
-        """Handle notifications related to posts."""
-        post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
-        if not post:
-            return
-        notifications = []
-        if action_type == "comment":
-            notifications.append(
-                {
-                    "user_id": post.owner_id,
-                    "content": "Someone commented on your post",
-                    "type": "post_comment",
-                    "link": f"/post/{post_id}",
-                }
-            )
-        elif action_type == "new_post":
-            followers = (
-                self.db.query(models.Follow)
-                .filter(models.Follow.followed_id == actor_id)
-                .all()
-            )
-            for follower in followers:
-                notifications.append(
-                    {
-                        "user_id": follower.follower_id,
-                        "content": f"{post.owner.username} posted a new update",
-                        "type": "new_post",
-                        "link": f"/post/{post_id}",
-                    }
-                )
-        for notification in notifications:
-            await self.notification_service.create_notification(
-                user_id=notification["user_id"],
-                content=notification["content"],
-                notification_type=notification["type"],
-                link=notification["link"],
-            )
+    async def connect(self, websocket: WebSocket, user_id: int):
+        """
+        Accepts and stores a WebSocket connection for a user.
+        """
+        await websocket.accept()
+        async with self._lock:
+            self.active_connections.setdefault(user_id, []).append(websocket)
+            logger.info(f"WebSocket connected for user {user_id}")
 
-    async def handle_message_action(self, message_id: int, action_type: str):
-        """Handle notifications related to messages."""
-        message = (
-            self.db.query(models.Message)
-            .filter(models.Message.id == message_id)
-            .first()
-        )
-        if not message:
-            return
-        if action_type == "new_message":
-            await self.notification_service.create_notification(
-                user_id=message.receiver_id,
-                content=f"New message from {message.sender.username}",
-                notification_type="new_message",
-                link=f"/messages/{message.sender_id}",
-            )
+    async def disconnect(self, websocket: WebSocket, user_id: int):
+        """
+        Removes a WebSocket connection for a user.
+        """
+        async with self._lock:
+            if (
+                user_id in self.active_connections
+                and websocket in self.active_connections[user_id]
+            ):
+                self.active_connections[user_id].remove(websocket)
+                if not self.active_connections[user_id]:
+                    del self.active_connections[user_id]
+                logger.info(f"WebSocket disconnected for user {user_id}")
 
-    async def handle_community_action(
-        self, community_id: int, action_type: str, actor_id: int
-    ):
-        """Handle notifications related to communities."""
-        community = (
-            self.db.query(models.Community)
-            .filter(models.Community.id == community_id)
-            .first()
-        )
-        if not community:
-            return
-        if action_type == "new_post":
-            members = (
-                self.db.query(models.CommunityMember)
-                .filter(models.CommunityMember.community_id == community_id)
-                .all()
-            )
-            for member in members:
-                if member.user_id != actor_id:
-                    await self.notification_service.create_notification(
-                        user_id=member.user_id,
-                        content=f"New post in community {community.name}",
-                        notification_type="community_post",
-                        link=f"/community/{community_id}",
-                    )
+    async def send_personal_message(self, message: dict, user_id: int):
+        """
+        Sends a JSON message to a specific user's active WebSocket connections.
+        """
+        if user_id in self.active_connections:
+            broken_connections = []
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logger.error(f"Error sending message to user {user_id}: {str(e)}")
+                    broken_connections.append(connection)
+            if broken_connections:
+                async with self._lock:
+                    for connection in broken_connections:
+                        if connection in self.active_connections[user_id]:
+                            self.active_connections[user_id].remove(connection)
 
-    async def handle_message_action(self, message_id: int, action_type: str):
-        """Handle notifications related to messages."""
-        message = (
-            self.db.query(models.Message)
-            .filter(models.Message.id == message_id)
-            .first()
-        )
-        if not message:
-            return
-        if action_type == "new_message":
-            await self.notification_service.create_notification(
-                user_id=message.receiver_id,
-                content=f"New message from {message.sender.username}",
-                notification_type="new_message",
-                link=f"/messages/{message.sender_id}",
-            )
+    async def broadcast(self, message: dict):
+        """
+        Broadcasts a message to all connected users.
+        """
+        for user_id in list(self.active_connections.keys()):
+            await self.send_personal_message(message, user_id)
 
 
+manager = ConnectionManager()
+
+
+# ============================================
+# Notification Analytics Service
+# ============================================
 class NotificationAnalyticsService:
-    """Notification analytics and statistics."""
+    """Provides notification analytics and statistics."""
 
     def __init__(self, db: Session):
         self.db = db
 
     def get_delivery_stats(self, user_id: Optional[int] = None):
-        """Get delivery statistics for notifications."""
+        """
+        Retrieves delivery statistics for notifications.
+        """
         query = self.db.query(models.NotificationDeliveryLog)
         if user_id:
             query = query.join(models.Notification).filter(
@@ -937,7 +929,9 @@ class NotificationAnalyticsService:
         }
 
     def get_user_engagement(self, user_id: int, days: int = 30):
-        """Analyze user engagement with notifications."""
+        """
+        Analyzes user engagement with notifications over a given period.
+        """
         cutoff_date = datetime.now() - timedelta(days=days)
         notifications = (
             self.db.query(models.Notification)
@@ -960,6 +954,9 @@ class NotificationAnalyticsService:
         }
 
 
+# ============================================
+# Notification Retry Handler
+# ============================================
 class NotificationRetryHandler:
     """Handles retrying of failed notifications."""
 
@@ -969,12 +966,10 @@ class NotificationRetryHandler:
         self.retry_delays = [300, 600, 1800]  # 5 mins, 10 mins, 30 mins
 
     async def handle_failed_notification(self, notification_id: int):
-        """Process a failed notification for retry."""
-        notification = (
-            self.db.query(models.Notification)
-            .filter(models.Notification.id == notification_id)
-            .first()
-        )
+        """
+        Processes a failed notification for retry.
+        """
+        notification = get_model_by_id(self.db, models.Notification, notification_id)
         if not notification:
             return
         if notification.retry_count >= self.max_retries:
@@ -992,13 +987,11 @@ class NotificationRetryHandler:
             )
 
     async def retry_notification(self, notification_id: int, delay: int) -> None:
-        """Retry sending the notification after delay."""
+        """
+        Retries sending the notification after a specified delay.
+        """
         await asyncio.sleep(delay)
-        notification = (
-            self.db.query(models.Notification)
-            .filter(models.Notification.id == notification_id)
-            .first()
-        )
+        notification = get_model_by_id(self.db, models.Notification, notification_id)
         if not notification or notification.status != "retrying":
             return
         notification_service = NotificationService(self.db)
@@ -1007,7 +1000,9 @@ class NotificationRetryHandler:
         self.db.commit()
 
 
-# Additional handlers for comments and messages
+# ============================================
+# Additional Handlers for Comments and Messages
+# ============================================
 class CommentNotificationHandler:
     """Handles notifications for comments."""
 
@@ -1017,7 +1012,9 @@ class CommentNotificationHandler:
         self.notification_service = NotificationService(db, background_tasks)
 
     async def handle_new_comment(self, comment: models.Comment, post: models.Post):
-        """Handle new comment notifications."""
+        """
+        Sends notifications when a new comment is added.
+        """
         if comment.owner_id != post.owner_id:
             await self.notification_service.create_notification(
                 user_id=post.owner_id,
@@ -1028,11 +1025,7 @@ class CommentNotificationHandler:
                 link=f"/post/{post.id}#comment-{comment.id}",
             )
         if comment.parent_id:
-            parent_comment = (
-                self.db.query(models.Comment)
-                .filter(models.Comment.id == comment.parent_id)
-                .first()
-            )
+            parent_comment = get_model_by_id(self.db, models.Comment, comment.parent_id)
             if parent_comment and parent_comment.owner_id != comment.owner_id:
                 await self.notification_service.create_notification(
                     user_id=parent_comment.owner_id,
@@ -1053,7 +1046,9 @@ class MessageNotificationHandler:
         self.notification_service = NotificationService(db, background_tasks)
 
     async def handle_new_message(self, message: models.Message):
-        """Handle new message notifications."""
+        """
+        Sends a notification for a new message.
+        """
         user_prefs = (
             self.db.query(models.NotificationPreferences)
             .filter(models.NotificationPreferences.user_id == message.receiver_id)
@@ -1076,84 +1071,84 @@ class MessageNotificationHandler:
             )
 
 
-# Helper functions
+# ============================================
+# Helper Functions
+# ============================================
+@handle_async_errors
 async def send_real_time_notification(user_id: int, message: Union[str, dict]):
-    """Send a real-time notification."""
-    try:
-        if isinstance(message, str):
-            message = {"message": message, "type": "simple_notification"}
-        await manager.send_personal_message(message, user_id)
-        logger.info(f"Real-time notification sent to user {user_id}")
-    except Exception as e:
-        logger.error(f"Error in real-time notification to user {user_id}: {str(e)}")
-        raise
+    """
+    Sends a real-time notification to a user via WebSocket.
+    """
+    if isinstance(message, str):
+        message = {"message": message, "type": "simple_notification"}
+    await manager.send_personal_message(message, user_id)
+    logger.info(f"Real-time notification sent to user {user_id}")
 
 
+@handle_async_errors
 async def send_mention_notification(to: str, mentioner: str, post_id: int):
-    """Send a mention notification."""
-    try:
-        subject = f"You've been mentioned by {mentioner}"
-        body = f"""
-        <div style="font-family: Arial, sans-serif;">
-            <h2>New Mention</h2>
-            <p>{mentioner} mentioned you in a post.</p>
-            <a href="/post/{post_id}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 3px;">
-                View Post
-            </a>
-        </div>
-        """
-        message = MessageSchema(
-            subject=subject, recipients=[to], body=body, subtype="html"
-        )
-        await send_email_notification(message)
-        logger.info(f"Mention notification sent to {to}")
-    except Exception as e:
-        logger.error(f"Error sending mention notification: {str(e)}")
-        raise
+    """
+    Sends a mention notification via email.
+    """
+    subject = f"You've been mentioned by {mentioner}"
+    body = f"""
+    <div style="font-family: Arial, sans-serif;">
+        <h2>New Mention</h2>
+        <p>{mentioner} mentioned you in a post.</p>
+        <a href="/post/{post_id}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 3px;">
+            View Post
+        </a>
+    </div>
+    """
+    message = MessageSchema(subject=subject, recipients=[to], body=body, subtype="html")
+    await send_email_notification(message)
+    logger.info(f"Mention notification sent to {to}")
 
 
+@handle_async_errors
 async def send_login_notification(email: str, ip_address: str, user_agent: str):
-    """Send a login notification."""
-    try:
-        subject = "New Login to Your Account"
-        body = f"""
-        <div style="font-family: Arial, sans-serif;">
-            <h2>New Login Detected</h2>
-            <p>New login detected with details:</p>
-            <ul>
-                <li><strong>IP Address:</strong> {ip_address}</li>
-                <li><strong>Device:</strong> {user_agent}</li>
-                <li><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</li>
-            </ul>
-            <p>If this wasn't you, secure your account:</p>
-            <ol>
-                <li>Change password</li>
-                <li>Enable 2FA</li>
-                <li>Review activity</li>
-            </ol>
-            <a href="/security/account" style="display: inline-block; padding: 10px 20px; background-color: #dc3545; color: white; text-decoration: none; border-radius: 3px;">
-                Secure Account
-            </a>
-        </div>
-        """
-        message = MessageSchema(
-            subject=subject, recipients=[email], body=body, subtype="html"
-        )
-        await send_email_notification(message)
-        logger.info(f"Login notification sent to {email}")
-    except Exception as e:
-        logger.error(f"Error sending login notification: {str(e)}")
-        raise
+    """
+    Sends a login notification email with details of the login event.
+    """
+    subject = "New Login to Your Account"
+    body = f"""
+    <div style="font-family: Arial, sans-serif;">
+        <h2>New Login Detected</h2>
+        <p>New login detected with details:</p>
+        <ul>
+            <li><strong>IP Address:</strong> {ip_address}</li>
+            <li><strong>Device:</strong> {user_agent}</li>
+            <li><strong>Time:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</li>
+        </ul>
+        <p>If this wasn't you, secure your account:</p>
+        <ol>
+            <li>Change password</li>
+            <li>Enable 2FA</li>
+            <li>Review activity</li>
+        </ol>
+        <a href="/security/account" style="display: inline-block; padding: 10px 20px; background-color: #dc3545; color: white; text-decoration: none; border-radius: 3px;">
+            Secure Account
+        </a>
+    </div>
+    """
+    message = MessageSchema(
+        subject=subject, recipients=[email], body=body, subtype="html"
+    )
+    await send_email_notification(message)
+    logger.info(f"Login notification sent to {email}")
 
 
+@handle_async_errors
 async def deliver_scheduled_notification(
     notification_id: int, scheduled_time: datetime
 ):
-    """Deliver a scheduled notification."""
+    """
+    Delivers a scheduled notification.
+    """
     try:
         db = next(get_db())
         notification_service = NotificationService(db)
-        notification = db.query(models.Notification).get(notification_id)
+        notification = get_model_by_id(db, models.Notification, notification_id)
         if not notification:
             logger.error(f"Scheduled notification {notification_id} not found")
             return
@@ -1168,6 +1163,7 @@ async def deliver_scheduled_notification(
         db.close()
 
 
+@handle_async_errors
 async def send_bulk_notifications(
     user_ids: List[int],
     content: str,
@@ -1175,31 +1171,29 @@ async def send_bulk_notifications(
     db: Session,
     background_tasks: BackgroundTasks,
 ):
-    """Send bulk notifications to multiple users."""
-    try:
-        notification_service = NotificationService(db, background_tasks)
-        tasks = []
-        for user_id in user_ids:
-            tasks.append(
-                notification_service.create_notification(
-                    user_id=user_id,
-                    content=content,
-                    notification_type=notification_type,
-                )
+    """
+    Sends bulk notifications to multiple users.
+    """
+    notification_service = NotificationService(db, background_tasks)
+    tasks = []
+    for user_id in user_ids:
+        tasks.append(
+            notification_service.create_notification(
+                user_id=user_id,
+                content=content,
+                notification_type=notification_type,
             )
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        success_count = sum(1 for r in results if not isinstance(r, Exception))
-        logger.info(
-            f"Bulk notifications: {success_count} successful out of {len(user_ids)}"
         )
-        return {
-            "total": len(user_ids),
-            "successful": success_count,
-            "failed": len(user_ids) - success_count,
-        }
-    except Exception as e:
-        logger.error(f"Error sending bulk notifications: {str(e)}")
-        raise
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    success_count = sum(1 for r in results if not isinstance(r, Exception))
+    logger.info(
+        f"Bulk notifications: {success_count} successful out of {len(user_ids)}"
+    )
+    return {
+        "total": len(user_ids),
+        "successful": success_count,
+        "failed": len(user_ids) - success_count,
+    }
 
 
 def create_notification(
@@ -1210,7 +1204,9 @@ def create_notification(
     notification_type: str,
     related_id: Optional[int] = None,
 ):
-    """Create a notification synchronously."""
+    """
+    Synchronously creates a notification.
+    """
     try:
         new_notification = models.Notification(
             user_id=user_id,

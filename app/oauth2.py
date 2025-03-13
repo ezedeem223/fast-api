@@ -1,3 +1,12 @@
+"""
+File: oauth2.py
+Description: This module handles JWT token creation, verification, and retrieval of the current user and admin.
+It integrates with IP management utilities for enhanced security and performs proper error handling and logging.
+"""
+
+# ============================================
+# Imports and Dependencies
+# ============================================
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from . import schemas, database, models
@@ -10,33 +19,42 @@ from typing import Optional
 from .database import get_db
 from .models import User
 
-# استيراد دوال إدارة الـ IP من ملف utils بدلاً من ملف ip_utils
+# Import IP management functions from utils
 from .utils import get_client_ip, is_ip_banned, detect_ip_evasion
 
-# إعداد logging
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# إعداد OAuth2 لاسترجاع التوكن
+# Configure OAuth2 to retrieve the token from the "login" endpoint
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
-# نموذج TokenData لتخزين بيانات التوكن
+# ============================================
+# Token Data Model
+# ============================================
 class TokenData(schemas.BaseModel):
+    """
+    Schema to store token data.
+    """
+
     id: Optional[int] = None
 
 
+# ============================================
+# Token Creation Function
+# ============================================
 def create_access_token(data: dict):
     """
-    إنشاء JWT access token مع تحديد وقت انتهاء الصلاحية.
+    Creates a JWT access token with an expiration time.
 
-    - يتم نسخ البيانات المُدخلة.
-    - يتم إضافة حقل انتهاء الصلاحية باستخدام الوقت الحالي بتوقيت UTC زائد الدقائق المحددة.
-    - إذا كان "user_id" موجوداً، يتم تحويله إلى عدد صحيح.
-    - يتم تشفير التوكن باستخدام المفتاح الخاص RSA.
+    - Copies the input data.
+    - Adds an expiration field using the current UTC time plus the specified minutes.
+    - If 'user_id' is present, converts it to an integer.
+    - Encodes the token using the RSA private key.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -59,12 +77,15 @@ def create_access_token(data: dict):
         raise
 
 
+# ============================================
+# Current Session Retrieval Function
+# ============================================
 def get_current_session(token: str = Depends(oauth2_scheme)):
     """
-    استخراج session_id الحالي من التوكن.
+    Extracts the current session_id from the token.
 
-    - يتم فك تشفير التوكن باستخدام المفتاح السري.
-    - يُعاد session_id إذا كان موجوداً؛ وإلا يتم رفع HTTPException.
+    - Decodes the token using the secret key.
+    - Returns the session_id if present; otherwise, raises HTTPException.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,13 +102,16 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
 
 
+# ============================================
+# Token Verification Function
+# ============================================
 def verify_access_token(token: str, credentials_exception):
     """
-    التحقق من صحة JWT access token.
+    Verifies the JWT access token.
 
-    - يتم فك تشفير التوكن باستخدام المفتاح العام RSA.
-    - يتم استرجاع والتحقق من صحة user_id.
-    - يُعاد كائن TokenData يحتوي على user_id.
+    - Decodes the token using the RSA public key.
+    - Retrieves and validates the user_id.
+    - Returns a TokenData object containing the user_id.
     """
     try:
         logger.debug(f"Token to verify: {token[:20]}...")
@@ -115,21 +139,24 @@ def verify_access_token(token: str, credentials_exception):
         raise credentials_exception
 
 
+# ============================================
+# Current User Retrieval Function
+# ============================================
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(database.get_db),
     request: Request = None,
 ):
     """
-    استرجاع المستخدم الحالي بناءً على التوكن المقدم.
+    Retrieves the current user based on the provided token.
 
-    - إذا توفرت بيانات الطلب، يتم التحقق من عنوان IP الخاص بالعميل.
-    - يتم فك تشفير التوكن باستخدام المفتاح العام RSA.
-    - يتم التحقق من عدم وجود التوكن في القائمة السوداء.
-    - يتم فحص محاولة التحايل باستخدام عناوين IP مختلفة.
-    - يتم التحقق مما إذا كان المستخدم محظوراً.
-    - يتم تحديث التوكن الحالي للمستخدم في قاعدة البيانات.
-    - يُعاد كائن المستخدم.
+    - If the request is provided, checks the client's IP address.
+    - Decodes the token using the RSA public key.
+    - Verifies that the token is not blacklisted.
+    - Checks for IP evasion attempts.
+    - Ensures that the user is not banned.
+    - Updates the user's current token in the database.
+    - Returns the User object.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,7 +186,7 @@ def get_current_user(
         if user is None:
             raise credentials_exception
 
-        # التحقق من أن التوكن غير مدرج في القائمة السوداء
+        # Check if the token is blacklisted
         blacklisted_token = (
             db.query(models.TokenBlacklist)
             .filter(models.TokenBlacklist.token == token)
@@ -174,19 +201,19 @@ def get_current_user(
         if request:
             if detect_ip_evasion(db, user.id, client_ip):
                 logger.warning(f"Possible IP evasion detected for user {user.id}")
-                # يمكن إضافة منطق إضافي هنا مثل:
-                # - إرسال إشعار للمسؤول
-                # - حظر المستخدم مؤقتاً
-                # - طلب مصادقة إضافية
+                # Additional logic can be added here, e.g.:
+                # - Sending an alert to the administrator
+                # - Temporarily banning the user
+                # - Requesting additional authentication
 
-        # التحقق مما إذا كان المستخدم محظوراً
+        # Check if the user is banned
         if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User is banned until {user.current_ban_end}",
             )
 
-        # تحديث التوكن الحالي للمستخدم في قاعدة البيانات
+        # Update the user's current token in the database
         user.current_token = token
         db.commit()
 
@@ -199,9 +226,19 @@ def get_current_user(
         )
 
 
+# ============================================
+# Admin User Retrieval Function
+# ============================================
 def get_current_admin(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> User:
+    """
+    Retrieves the current admin user.
+
+    - Retrieves the current user.
+    - Checks if the user's role is 'admin'.
+    - Raises HTTPException if the user does not have admin privileges.
+    """
     user = get_current_user(token, db)
     if user.role != "admin":
         raise HTTPException(

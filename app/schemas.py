@@ -1,3 +1,11 @@
+"""
+File: schemas.py
+Description: This module defines Pydantic schemas for the social media project.
+It covers various domains including reactions, votes, posts, comments, notifications,
+users, communities, search, and more. The file is organized into sections with clear
+English comments to enhance readability and maintainability.
+"""
+
 # ================================================================
 # Imports
 # ================================================================
@@ -15,11 +23,11 @@ from datetime import datetime, date, timedelta, time
 from typing import Optional, List, Dict, Tuple, Union, Any, ForwardRef
 from enum import Enum
 
+
 # ================================================================
 # Reactions and Vote Models
+# This section defines schemas related to reactions on posts and vote statistics.
 # ================================================================
-
-
 class ReactionType(str, Enum):
     LIKE = "like"
     LOVE = "love"
@@ -53,6 +61,10 @@ class ReactionCount(BaseModel):
     count: int
 
 
+# ================================================================
+# User Email and Security Questions Schemas
+# Schemas related to email changes and security questions settings.
+# ================================================================
 class EmailChange(BaseModel):
     new_email: EmailStr
 
@@ -71,6 +83,10 @@ class SecurityQuestionAnswer(BaseModel):
     answer: str
 
 
+# ================================================================
+# Following and User Listing Schemas
+# Schemas to represent following lists and user-related information.
+# ================================================================
 class FollowingListOut(BaseModel):
     following: List["UserOut"]
     total_count: int
@@ -78,9 +94,8 @@ class FollowingListOut(BaseModel):
 
 # ================================================================
 # Post Vote and Analytics Models
+# This section includes models for storing and calculating post vote statistics.
 # ================================================================
-
-
 class PostVoteStatisticsBase(BaseModel):
     total_votes: int
     upvotes: int
@@ -127,9 +142,8 @@ class UserVoteAnalytics(BaseModel):
 
 # ================================================================
 # Hashtag Models
+# Schemas for creating and representing hashtags and their statistics.
 # ================================================================
-
-
 class HashtagBase(BaseModel):
     name: str
 
@@ -145,7 +159,7 @@ class Hashtag(HashtagBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# نموذج إحصائيات الهاشتاج
+# Hashtag statistics model
 class HashtagStatistics(BaseModel):
     post_count: int
     follower_count: int
@@ -154,9 +168,8 @@ class HashtagStatistics(BaseModel):
 
 # ================================================================
 # Search and Sorting Models
+# Schemas used for search parameters and sorting options.
 # ================================================================
-
-
 class SortOption(str, Enum):
     DATE = "date"
     USERNAME = "username"
@@ -184,9 +197,8 @@ class UserFollowersSettings(BaseModel):
 
 # ================================================================
 # Screen Share and Appeal Models
+# Schemas related to screen sharing sessions and appeal processes.
 # ================================================================
-
-
 class VerificationStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -230,9 +242,8 @@ class ScreenShareSessionOut(BaseModel):
 
 # ================================================================
 # Ban, Block, and Appeal Models
+# Schemas for managing banned words, block appeals, and IP bans.
 # ================================================================
-
-
 class AppealStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -364,9 +375,8 @@ class AdvancedSearchQuery(BaseModel):
 
 # ================================================================
 # Message and Notification Related Models
+# Schemas for messages, notifications, and related attachments.
 # ================================================================
-
-
 class MessageType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
@@ -495,9 +505,8 @@ class BlockedUserOut(BaseModel):
 
 # ================================================================
 # Business and Comment Statistics Models
+# Schemas for business verification and comment statistics.
 # ================================================================
-
-
 class BusinessVerificationUpdate(BaseModel):
     id_document: Any  # Expected to be an UploadFile (from fastapi)
     passport: Any
@@ -540,9 +549,8 @@ class CommentStatistics(BaseModel):
 
 # ================================================================
 # Privacy and User Profile Models
+# Schemas for updating user privacy settings and profiles.
 # ================================================================
-
-
 class PrivacyLevel(str, Enum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -604,9 +612,8 @@ class UserAnalytics(BaseModel):
 
 # ================================================================
 # Search and Ticket Models
+# Schemas for handling search statistics and support tickets.
 # ================================================================
-
-
 class SearchStatOut(BaseModel):
     query: str
     count: int
@@ -648,9 +655,8 @@ class Ticket(BaseModel):
 
 # ================================================================
 # Warning and Ban Models for Users
+# Schemas for user warnings and bans.
 # ================================================================
-
-
 class WarningCreate(BaseModel):
     reason: str
 
@@ -680,9 +686,8 @@ class UserBanOut(BaseModel):
 
 # ================================================================
 # Base Models for Users, Posts, Comments, and Reports
+# Core schemas for users, posts, comments, and report functionalities.
 # ================================================================
-
-
 class UserBase(BaseModel):
     email: EmailStr
     interests: Optional[List[str]] = None
@@ -732,9 +737,8 @@ class UserPublicKeyUpdate(BaseModel):
 
 # ================================================================
 # Message Attachment and Messaging Models
+# Schemas for messages, attachments, and conversation details.
 # ================================================================
-
-
 class MessageAttachmentBase(BaseModel):
     file_url: str
     file_type: str
@@ -811,9 +815,8 @@ class SearchStatistics(SearchStatisticsBase):
 
 # ================================================================
 # Article, Community, and Reel Models (Content Models)
+# Schemas for articles, communities, and reels content.
 # ================================================================
-
-
 class ArticleBase(BaseModel):
     title: str
     content: str
@@ -862,7 +865,6 @@ class RepostSettings(BaseModel):
 
 # Model for creating reposts (extends PostCreate later)
 class RepostCreate(BaseModel):
-    # This will be merged with PostCreate in the Post Models section
     repost_settings: Optional[RepostSettings] = None
 
 
@@ -936,10 +938,8 @@ class AmenhotepSessionSummary(BaseModel):
 
 # ================================================================
 # Social Media and Account Models
+# Schemas for social account integration and social posts.
 # ================================================================
-
-
-# Enum for supported social media platforms
 class SocialMediaType(str, Enum):
     REDDIT = "reddit"
     LINKEDIN = "linkedin"
@@ -1013,7 +1013,10 @@ class EngagementStats(BaseModel):
     likes: Optional[int]
 
 
-# Notification models
+# ================================================================
+# Notification Models
+# Schemas for creating and managing notifications.
+# ================================================================
 class NotificationBase(BaseModel):
     content: str
     notification_type: str
@@ -1115,9 +1118,8 @@ class UserSettingsUpdate(BaseModel):
 
 # ================================================================
 # User Models
+# Schemas for user creation, update, and output.
 # ================================================================
-
-
 class UserCreate(UserBase):
     password: str
     email: EmailStr
@@ -1181,9 +1183,8 @@ class SessionKeyUpdate(BaseModel):
 
 # ================================================================
 # Token Models
+# Schemas for handling JWT tokens.
 # ================================================================
-
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -1195,9 +1196,8 @@ class TokenData(BaseModel):
 
 # ================================================================
 # Vote Models
+# Schemas for voting on posts.
 # ================================================================
-
-
 class Vote(BaseModel):
     post_id: int
     dir: conint(le=1)
@@ -1218,8 +1218,8 @@ class VotersListOut(BaseModel):
 
 # ================================================================
 # Community Models
+# Schemas for community creation, update, and details.
 # ================================================================
-
 CommunityOutRef = ForwardRef("CommunityOut")
 
 
@@ -1399,6 +1399,7 @@ class CommunityRuleOut(CommunityRuleBase):
 
 # ================================================================
 # Community Analytics Models
+# Schemas for analyzing community performance and engagement.
 # ================================================================
 class CommunityOverviewAnalytics(BaseModel):
     total_members: int
@@ -1461,9 +1462,8 @@ class EncryptedSessionUpdate(BaseModel):
 
 # ================================================================
 # Post Models
+# Schemas for creating, updating, and representing posts.
 # ================================================================
-
-
 class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = []
@@ -1540,9 +1540,8 @@ class PollResults(BaseModel):
 
 # ================================================================
 # Comment Models
+# Schemas for creating, editing, and representing comments.
 # ================================================================
-
-
 class CommentCreate(CommentBase):
     content: str
     post_id: int
@@ -1608,9 +1607,8 @@ class Comment(CommentBase):
 
 # ================================================================
 # Report Models
+# Schemas for creating and reviewing reports on content.
 # ================================================================
-
-
 class Report(ReportBase):
     id: int
     created_at: datetime
@@ -1648,9 +1646,8 @@ class ReportOut(ReportBase):
 
 # ================================================================
 # Message Models
+# Schemas for message creation, update, and conversation details.
 # ================================================================
-
-
 class MessageCreate(MessageBase):
     receiver_id: int
     encrypted_content: str  # Encrypted content instead of plain text
@@ -1732,9 +1729,8 @@ class LinkPreview(BaseModel):
 
 # ================================================================
 # Community Member and Role Models
+# Schemas for managing community memberships and roles.
 # ================================================================
-
-
 class CommunityRole(str, Enum):
     OWNER = "owner"
     ADMIN = "admin"
@@ -1765,9 +1761,8 @@ class CommunityMemberOut(CommunityMemberBase):
 
 # ================================================================
 # Article Models
+# Schemas for creating and representing articles.
 # ================================================================
-
-
 class ArticleCreate(ArticleBase):
     community_id: int
 
@@ -1790,9 +1785,8 @@ class ArticleOut(Article):
 
 # ================================================================
 # Reel Models
+# Schemas for creating and representing reels.
 # ================================================================
-
-
 class ReelCreate(ReelBase):
     community_id: int
 
@@ -1815,9 +1809,8 @@ class ReelOut(Reel):
 
 # ================================================================
 # Community Invitation Models
+# Schemas for handling community invitations.
 # ================================================================
-
-
 class CommunityInvitationBase(BaseModel):
     community_id: int
     invitee_id: int
@@ -1843,9 +1836,8 @@ class CommunityInvitationOut(BaseModel):
 
 # ================================================================
 # 2FA Models
+# Schemas for two-factor authentication processes.
 # ================================================================
-
-
 class Enable2FAResponse(BaseModel):
     otp_secret: str
 
@@ -1860,9 +1852,8 @@ class Verify2FAResponse(BaseModel):
 
 # ================================================================
 # Additional User Session and Authentication Models
+# Schemas for managing user sessions and authentication tokens.
 # ================================================================
-
-
 class UserRole(str, Enum):
     ADMIN = "admin"
     MODERATOR = "moderator"
@@ -1920,9 +1911,8 @@ class PostSearch(BaseModel):
 
 # ================================================================
 # Sticker Models
+# Schemas for creating and managing stickers and sticker packs.
 # ================================================================
-
-
 class StickerPackBase(BaseModel):
     name: str
 
@@ -1996,6 +1986,7 @@ class StickerReport(StickerReportBase):
 
 # ================================================================
 # Resolve Forward References
+# This section ensures that forward references are updated.
 # ================================================================
 Message.update_forward_refs()
 CommunityOut.model_rebuild()
@@ -2008,6 +1999,7 @@ CommunityInvitationOut.model_rebuild()
 
 # ================================================================
 # Example Instance for Testing
+# This block is for testing schema instantiation.
 # ================================================================
 if __name__ == "__main__":
     try:

@@ -1,3 +1,10 @@
+"""
+models.py - Enhanced version with detailed English comments.
+This file contains the SQLAlchemy models for the social media platform.
+It includes definitions for users, posts, comments, notifications, and more,
+along with association tables to manage many-to-many relationships.
+"""
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -28,13 +35,10 @@ from datetime import date, timedelta
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy import Enum as SQLAlchemyEnum
 
-# from sqlalchemy.ext.declarative import declarative_base
-
-# Base = declarative_base()  # Declarative base for all models
-
 # -------------------------
 # Association Tables
 # -------------------------
+# These tables are used to model many-to-many relationships.
 
 # Table for linking posts and mentioned users
 post_mentions = Table(
@@ -79,6 +83,7 @@ post_hashtags = Table(
 # -------------------------
 # Enum Classes Definitions
 # -------------------------
+# These enumerations define constant values used in various models.
 
 
 class UserType(str, enum.Enum):
@@ -231,9 +236,14 @@ class NotificationType(str, enum.Enum):
 # -------------------------
 # Models Definitions
 # -------------------------
+# Below are the SQLAlchemy models for different entities in the application.
 
 
 class BlockAppeal(Base):
+    """
+    Model for block appeals by users.
+    """
+
     __tablename__ = "block_appeals"
     id = Column(Integer, primary_key=True, index=True)
     block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"))
@@ -244,20 +254,28 @@ class BlockAppeal(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    # Relationship: Links the appeal with the block and involved users.
+    # Relationships linking the appeal to the block and users involved.
     block = relationship("Block", back_populates="appeals")
     user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
     reviewer = relationship("User", foreign_keys=[reviewer_id])
 
 
 class Hashtag(Base):
+    """
+    Model for hashtags used in posts.
+    """
+
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    # 'followers' relationship is established via association table.
+    # Followers relationship is established via the association table.
 
 
 class Reaction(Base):
+    """
+    Model for reactions on posts or comments.
+    """
+
     __tablename__ = "reactions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
@@ -282,6 +300,10 @@ class Reaction(Base):
 
 
 class User(Base):
+    """
+    Model for application users.
+    """
+
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, nullable=False)
     email = Column(String, nullable=False, unique=True)
@@ -364,7 +386,7 @@ class User(Base):
     suspension_end_date = Column(DateTime, nullable=True)
     language = Column(String, nullable=False, default="en")
 
-    # Relationships linking User to various entities
+    # Relationships linking User to various entities.
     token_blacklist = relationship("TokenBlacklist", back_populates="user")
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -480,6 +502,10 @@ class User(Base):
 
 
 class SocialMediaAccount(Base):
+    """
+    Model representing a user's social media account details.
+    """
+
     __tablename__ = "social_media_accounts"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -492,12 +518,16 @@ class SocialMediaAccount(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationship: Links account to its owner and associated posts.
+    # Relationship linking account to its owner and associated posts.
     user = relationship("User", back_populates="social_accounts")
     posts = relationship("SocialMediaPost", back_populates="account")
 
 
 class SocialMediaPost(Base):
+    """
+    Model for social media posts shared via linked social accounts.
+    """
+
     __tablename__ = "social_media_posts"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -509,18 +539,22 @@ class SocialMediaPost(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     status = Column(SQLAlchemyEnum(PostStatus), default=PostStatus.DRAFT)
     error_message = Column(Text, nullable=True)
-    # تم تغيير اسم العمود من "metadata" إلى "post_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    # Renamed column to avoid conflict with reserved keyword.
     post_metadata = Column(JSONB, default={})
     engagement_stats = Column(JSONB, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Relationship: Links social post to its owner and account.
+    # Relationships linking social post to its owner and account.
     user = relationship("User", back_populates="social_posts")
     account = relationship("SocialMediaAccount", back_populates="posts")
 
 
 class UserActivity(Base):
+    """
+    Model for tracking user activities (e.g., login, post, comment).
+    """
+
     __tablename__ = "user_activities"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -535,6 +569,10 @@ User.activities = relationship("UserActivity", back_populates="user")
 
 
 class CommunityCategory(Base):
+    """
+    Model for community categories.
+    """
+
     __tablename__ = "community_categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
@@ -544,6 +582,10 @@ class CommunityCategory(Base):
 
 
 class UserEvent(Base):
+    """
+    Model for logging events related to users.
+    """
+
     __tablename__ = "user_events"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -558,6 +600,10 @@ User.events = relationship("UserEvent", back_populates="user")
 
 
 class UserWarning(Base):
+    """
+    Model for user warnings.
+    """
+
     __tablename__ = "user_warnings"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -566,6 +612,10 @@ class UserWarning(Base):
 
 
 class UserBan(Base):
+    """
+    Model for user bans.
+    """
+
     __tablename__ = "user_bans"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -575,6 +625,10 @@ class UserBan(Base):
 
 
 class IPBan(Base):
+    """
+    Model for IP bans.
+    """
+
     __tablename__ = "ip_bans"
     id = Column(Integer, primary_key=True, index=True)
     ip_address = Column(String, unique=True, index=True, nullable=False)
@@ -590,6 +644,10 @@ User.ip_bans_created = relationship("IPBan", back_populates="created_by_user")
 
 
 class BannedWord(Base):
+    """
+    Model for banned words in content.
+    """
+
     __tablename__ = "banned_words"
     id = Column(Integer, primary_key=True, index=True)
     word = Column(String, unique=True, nullable=False)
@@ -604,6 +662,10 @@ User.banned_words_created = relationship("BannedWord", back_populates="created_b
 
 
 class BanStatistics(Base):
+    """
+    Model for storing ban statistics per day.
+    """
+
     __tablename__ = "ban_statistics"
     id = Column(Integer, primary_key=True, index=True)
     date = Column(Date, nullable=False)
@@ -616,6 +678,10 @@ class BanStatistics(Base):
 
 
 class BanReason(Base):
+    """
+    Model to track reasons for bans and their usage count.
+    """
+
     __tablename__ = "ban_reasons"
     id = Column(Integer, primary_key=True, index=True)
     reason = Column(String, nullable=False)
@@ -624,6 +690,10 @@ class BanReason(Base):
 
 
 class Post(Base):
+    """
+    Model for posts created by users.
+    """
+
     __tablename__ = "posts"
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
@@ -681,7 +751,7 @@ class Post(Base):
         Index("idx_title_user", "title", "owner_id"),
     )
 
-    # Relationships linking post to other entities
+    # Relationships linking post to other entities.
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -716,6 +786,10 @@ class Post(Base):
 
 
 class NotificationPreferences(Base):
+    """
+    Model for storing user notification preferences.
+    """
+
     __tablename__ = "notification_preferences"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -740,6 +814,10 @@ User.notification_preferences = relationship(
 
 
 class NotificationGroup(Base):
+    """
+    Model for grouping similar notifications.
+    """
+
     __tablename__ = "notification_groups"
     id = Column(Integer, primary_key=True, index=True)
     group_type = Column(String, nullable=False)  # e.g., comment_thread, post_likes
@@ -752,6 +830,10 @@ class NotificationGroup(Base):
 
 
 class TokenBlacklist(Base):
+    """
+    Model for blacklisted tokens (for logout or security purposes).
+    """
+
     __tablename__ = "token_blacklist"
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, index=True)
@@ -762,6 +844,10 @@ class TokenBlacklist(Base):
 
 
 class PostVoteStatistics(Base):
+    """
+    Model to track vote statistics for a post.
+    """
+
     __tablename__ = "post_vote_statistics"
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"))
@@ -782,6 +868,10 @@ class PostVoteStatistics(Base):
 
 
 class RepostStatistics(Base):
+    """
+    Model to track repost statistics for a post.
+    """
+
     __tablename__ = "repost_statistics"
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id"))
@@ -795,6 +885,10 @@ class RepostStatistics(Base):
 
 
 class PollOption(Base):
+    """
+    Model representing an option in a poll.
+    """
+
     __tablename__ = "poll_options"
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id"))
@@ -804,6 +898,10 @@ class PollOption(Base):
 
 
 class Poll(Base):
+    """
+    Model for polls attached to posts.
+    """
+
     __tablename__ = "polls"
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("posts.id"), unique=True)
@@ -812,6 +910,10 @@ class Poll(Base):
 
 
 class PollVote(Base):
+    """
+    Model for votes in polls.
+    """
+
     __tablename__ = "poll_votes"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -826,6 +928,10 @@ User.poll_votes = relationship("PollVote", back_populates="user")
 
 
 class Notification(Base):
+    """
+    Model for notifications sent to users.
+    """
+
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -841,7 +947,7 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    # تم تغيير اسم العمود من "metadata" إلى "notification_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    # Renamed column to avoid reserved keyword conflict.
     notification_metadata = Column(JSONB, default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -907,6 +1013,10 @@ class Notification(Base):
 
 
 class NotificationDeliveryAttempt(Base):
+    """
+    Model for logging individual notification delivery attempts.
+    """
+
     __tablename__ = "notification_delivery_attempts"
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
@@ -918,7 +1028,7 @@ class NotificationDeliveryAttempt(Base):
     error_message = Column(String, nullable=True)
     delivery_channel = Column(String, nullable=False)
     response_time = Column(Float)  # In seconds
-    # تم تغيير اسم العمود من "metadata" إلى "attempt_metadata" لتجنب التعارض مع الكلمة المحجوزة.
+    # Renamed column to avoid reserved keyword conflict.
     attempt_metadata = Column(JSONB, default={})
 
     notification = relationship("Notification", back_populates="delivery_attempts_rel")
@@ -931,6 +1041,10 @@ class NotificationDeliveryAttempt(Base):
 
 
 class NotificationAnalytics(Base):
+    """
+    Model for analytics data of notifications.
+    """
+
     __tablename__ = "notification_analytics"
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
@@ -953,6 +1067,10 @@ class NotificationAnalytics(Base):
 
 
 class NotificationDeliveryLog(Base):
+    """
+    Model for logging notification delivery details.
+    """
+
     __tablename__ = "notification_delivery_logs"
     id = Column(Integer, primary_key=True, index=True)
     notification_id = Column(
@@ -967,6 +1085,10 @@ class NotificationDeliveryLog(Base):
 
 
 class Comment(Base):
+    """
+    Model for comments on posts.
+    """
+
     __tablename__ = "comments"
     id = Column(Integer, primary_key=True, nullable=False)
     content = Column(String, nullable=False)
@@ -1027,6 +1149,10 @@ class Comment(Base):
 
 
 class AmenhotepMessage(Base):
+    """
+    Model for Amenhotep chat messages (AI chat functionality).
+    """
+
     __tablename__ = "amenhotep_messages"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1041,6 +1167,10 @@ User.amenhotep_messages = relationship("AmenhotepMessage", back_populates="user"
 
 
 class AmenhotepChatAnalytics(Base):
+    """
+    Model for analytics of Amenhotep AI chat sessions.
+    """
+
     __tablename__ = "amenhotep_chat_analytics"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1055,6 +1185,10 @@ class AmenhotepChatAnalytics(Base):
 
 
 class PostCategory(Base):
+    """
+    Model for categorizing posts.
+    """
+
     __tablename__ = "post_categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
@@ -1070,6 +1204,10 @@ class PostCategory(Base):
 
 
 class CommentEditHistory(Base):
+    """
+    Model to store the edit history of comments.
+    """
+
     __tablename__ = "comment_edit_history"
     id = Column(Integer, primary_key=True, nullable=False)
     comment_id = Column(
@@ -1085,6 +1223,10 @@ class CommentEditHistory(Base):
 
 
 class BusinessTransaction(Base):
+    """
+    Model for business transactions between users.
+    """
+
     __tablename__ = "business_transactions"
     id = Column(Integer, primary_key=True, index=True)
     business_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1099,6 +1241,10 @@ class BusinessTransaction(Base):
 
 
 class UserSession(Base):
+    """
+    Model for user login sessions.
+    """
+
     __tablename__ = "user_sessions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1114,6 +1260,10 @@ class UserSession(Base):
 
 
 class Vote(Base):
+    """
+    Model for votes on posts.
+    """
+
     __tablename__ = "votes"
     user_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -1127,6 +1277,10 @@ class Vote(Base):
 
 
 class Report(Base):
+    """
+    Model for reporting inappropriate content.
+    """
+
     __tablename__ = "reports"
     id = Column(Integer, primary_key=True, nullable=False)
     report_reason = Column(String, nullable=False)
@@ -1160,6 +1314,10 @@ class Report(Base):
 
 
 class Follow(Base):
+    """
+    Model for follow relationships between users.
+    """
+
     __tablename__ = "follows"
     follower_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -1181,6 +1339,10 @@ class Follow(Base):
 
 
 class Message(Base):
+    """
+    Model for messages between users.
+    """
+
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1239,6 +1401,10 @@ class Message(Base):
 
 
 class EncryptedSession(Base):
+    """
+    Model for encrypted messaging sessions between users.
+    """
+
     __tablename__ = "encrypted_sessions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -1257,6 +1423,10 @@ class EncryptedSession(Base):
 
 
 class EncryptedCall(Base):
+    """
+    Model for encrypted calls between users.
+    """
+
     __tablename__ = "encrypted_calls"
     id = Column(Integer, primary_key=True, index=True)
     caller_id = Column(Integer, ForeignKey("users.id"))
@@ -1278,6 +1448,10 @@ class EncryptedCall(Base):
 
 
 class Community(Base):
+    """
+    Model for communities/groups.
+    """
+
     __tablename__ = "communities"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
@@ -1287,7 +1461,6 @@ class Community(Base):
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
-    # Using CommunityCategory for categorization; removed duplicate definition.
     category_id = Column(Integer, ForeignKey("community_categories.id"), nullable=True)
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
@@ -1322,6 +1495,10 @@ class Community(Base):
 
 
 class Category(Base):
+    """
+    Model for content categories (alternative grouping).
+    """
+
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
@@ -1331,6 +1508,10 @@ class Category(Base):
 
 
 class SearchSuggestion(Base):
+    """
+    Model for search suggestions based on popular terms.
+    """
+
     __tablename__ = "search_suggestions"
     id = Column(Integer, primary_key=True, index=True)
     term = Column(String, unique=True, index=True)
@@ -1339,6 +1520,10 @@ class SearchSuggestion(Base):
 
 
 class SearchStatistics(Base):
+    """
+    Model for tracking search queries.
+    """
+
     __tablename__ = "search_statistics"
     id = Column(Integer, primary_key=True, index=True)
     query = Column(String, index=True)
@@ -1352,6 +1537,10 @@ class SearchStatistics(Base):
 
 
 class Tag(Base):
+    """
+    Model for tags associated with communities.
+    """
+
     __tablename__ = "tags"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
@@ -1362,6 +1551,10 @@ class Tag(Base):
 
 
 class CommunityMember(Base):
+    """
+    Model for membership of users in communities.
+    """
+
     __tablename__ = "community_members"
     __table_args__ = {"extend_existing": True}
     community_id = Column(
@@ -1385,6 +1578,10 @@ class CommunityMember(Base):
 
 
 class CommunityStatistics(Base):
+    """
+    Model for daily statistics of a community.
+    """
+
     __tablename__ = "community_statistics"
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(
@@ -1405,6 +1602,10 @@ class CommunityStatistics(Base):
 
 
 class CommunityRule(Base):
+    """
+    Model for rules governing a community.
+    """
+
     __tablename__ = "community_rules"
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(
@@ -1425,6 +1626,10 @@ class CommunityRule(Base):
 
 
 class CommunityInvitation(Base):
+    """
+    Model for community invitations.
+    """
+
     __tablename__ = "community_invitations"
     id = Column(Integer, primary_key=True, index=True)
     community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"))
@@ -1443,6 +1648,10 @@ class CommunityInvitation(Base):
 
 
 class Reel(Base):
+    """
+    Model for reels (short videos).
+    """
+
     __tablename__ = "reels"
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
@@ -1463,6 +1672,10 @@ class Reel(Base):
 
 
 class Article(Base):
+    """
+    Model for articles shared within communities.
+    """
+
     __tablename__ = "articles"
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
@@ -1482,6 +1695,10 @@ class Article(Base):
 
 
 class Block(Base):
+    """
+    Model for user blocks.
+    """
+
     __tablename__ = "blocks"
     blocker_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
@@ -1505,6 +1722,10 @@ class Block(Base):
 
 
 class BlockLog(Base):
+    """
+    Model for logging block actions.
+    """
+
     __tablename__ = "block_logs"
     id = Column(Integer, primary_key=True, index=True)
     blocker_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1523,6 +1744,10 @@ class BlockLog(Base):
 
 
 class UserStatistics(Base):
+    """
+    Model for daily user statistics.
+    """
+
     __tablename__ = "user_statistics"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1536,6 +1761,10 @@ class UserStatistics(Base):
 
 
 class SupportTicket(Base):
+    """
+    Model for support tickets submitted by users.
+    """
+
     __tablename__ = "support_tickets"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1555,6 +1784,10 @@ class SupportTicket(Base):
 
 
 class TicketResponse(Base):
+    """
+    Model for responses to support tickets.
+    """
+
     __tablename__ = "ticket_responses"
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"))
@@ -1567,6 +1800,10 @@ class TicketResponse(Base):
 
 
 class StickerPack(Base):
+    """
+    Model for sticker packs created by users.
+    """
+
     __tablename__ = "sticker_packs"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
@@ -1578,6 +1815,10 @@ class StickerPack(Base):
 
 
 class Sticker(Base):
+    """
+    Model for individual stickers.
+    """
+
     __tablename__ = "stickers"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
@@ -1594,12 +1835,20 @@ class Sticker(Base):
 
 
 class StickerCategory(Base):
+    """
+    Model for categories of stickers.
+    """
+
     __tablename__ = "sticker_categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
 
 
 class StickerReport(Base):
+    """
+    Model for reporting stickers.
+    """
+
     __tablename__ = "sticker_reports"
     id = Column(Integer, primary_key=True, index=True)
     sticker_id = Column(Integer, ForeignKey("stickers.id"))
@@ -1612,6 +1861,10 @@ class StickerReport(Base):
 
 
 class Call(Base):
+    """
+    Model for voice/video calls.
+    """
+
     __tablename__ = "calls"
     id = Column(Integer, primary_key=True, index=True)
     caller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -1636,6 +1889,10 @@ class Call(Base):
 
 
 class ScreenShareSession(Base):
+    """
+    Model for screen sharing sessions during calls.
+    """
+
     __tablename__ = "screen_share_sessions"
     id = Column(Integer, primary_key=True, index=True)
     call_id = Column(Integer, ForeignKey("calls.id", ondelete="CASCADE"))
@@ -1653,6 +1910,10 @@ class ScreenShareSession(Base):
 
 
 class MessageAttachment(Base):
+    """
+    Model for attachments in messages.
+    """
+
     __tablename__ = "message_attachments"
     id = Column(Integer, primary_key=True, index=True)
     message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"))
@@ -1664,6 +1925,10 @@ class MessageAttachment(Base):
 
 
 class ConversationStatistics(Base):
+    """
+    Model for statistics of conversations.
+    """
+
     __tablename__ = "conversation_statistics"
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(String, index=True)
