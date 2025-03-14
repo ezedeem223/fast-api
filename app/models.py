@@ -559,7 +559,12 @@ class User(Base):
         "Call", foreign_keys="[Call.receiver_id]", back_populates="receiver"
     )
     screen_shares = relationship("ScreenShareSession", back_populates="sharer")
-    encrypted_sessions = relationship("EncryptedSession", back_populates="user")
+    # تم التعديل هنا بإضافة foreign_keys لتحديد العمود الصحيح في جدول الجلسات المشفرة.
+    encrypted_sessions = relationship(
+        "EncryptedSession",
+        back_populates="user",
+        foreign_keys="[EncryptedSession.user_id]",
+    )
     votes = relationship("Vote", back_populates="user")
     followed_hashtags = relationship(
         "Hashtag", secondary=user_hashtag_follows, back_populates="followers"
