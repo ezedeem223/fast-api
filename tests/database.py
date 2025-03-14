@@ -1,12 +1,12 @@
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.config import settings
 from app.database import get_db, Base
 
-# إعداد URL للاتصال بقاعدة البيانات
+# إعداد URL للاتصال بقاعدة بيانات الاختبار
 SQLALCHEMY_DATABASE_URL = (
     f"postgresql://{settings.database_username}:"
     f"{settings.database_password}@"
@@ -15,37 +15,27 @@ SQLALCHEMY_DATABASE_URL = (
     f"{settings.database_name}_test"
 )
 
-# إنشاء محرك الاتصال بقاعدة البيانات
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# إنشاء محرك الاتصال بقاعدة بيانات الاختبار
+engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
 
 # تكوين الجلسة المحلية
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# نقوم بإنشاء جميع الجداول مرة واحدة عند بدء تشغيل الاختبارات
+Base.metadata.create_all(bind=engine)
 
-@pytest.fixture(
-    scope="function"
-)  # تغيير النطاق إلى "function" لضمان تنظيف القاعدة بين الاختبارات
+
+# Fixture لإنشاء جلسة اختبار جديدة لكل اختبار
+@pytest.fixture(scope="function")
 def session():
-    # إعادة بناء قاعدة البيانات للاختبارات
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    # قبل كل اختبار: (يمكن استخدام TRUNCATE لتفريغ البيانات بين الاختبارات)
+    with engine.connect() as connection:
+        # تفريغ جميع الجداول مع إعادة تعيين الهوية
+        table_names = ", ".join([tbl.name for tbl in Base.metadata.sorted_tables])
+        connection.execute(text(f"TRUNCATE {table_names} RESTART IDENTITY CASCADE"))
+        connection.commit()
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-@pytest.fixture(
-    scope="function"
-)  # تغيير النطاق إلى "function" لضمان عدم تداخل الاختبارات
-def client(session):
-    # تجاوز دالة get_db لرجوع الجلسة الاختبارية
-    def override_get_db():
-        try:
-            yield session
-        finally:
-            session.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)

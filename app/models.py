@@ -1339,6 +1339,7 @@ class CommentEditHistory(Base):
 
     __tablename__ = "comment_edit_history"
     id = Column(Integer, primary_key=True, nullable=False)
+    # تعديل هنا لإضافة use_alter=True واسم القيد لتفادي مشاكل drop_all
     comment_id = Column(
         Integer,
         ForeignKey(
