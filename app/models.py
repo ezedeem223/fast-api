@@ -334,13 +334,19 @@ class BlockAppeal(Base):
 
 class Hashtag(Base):
     """
-    Model for hashtags used in posts.
+    نموذج للهاشتاجات المستخدمة في المشاركات.
     """
 
     __tablename__ = "hashtags"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    # Followers relationship is established via the association table.
+
+    # علاقة المتابعين للمشاركات عبر جدول العلاقة (association table)
+    followers = relationship(
+        "User",
+        secondary=user_hashtag_follows,  # تأكد من تعريف جدول العلاقة بشكل صحيح
+        back_populates="followed_hashtags",
+    )
 
 
 class Reaction(Base):
