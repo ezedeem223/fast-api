@@ -797,7 +797,7 @@ class BanReason(Base):
 
 class Post(Base):
     """
-    Model for posts created by users.
+    نموذج للمشاركات التي ينشئها المستخدمون.
     """
 
     __tablename__ = "posts"
@@ -868,7 +868,7 @@ class Post(Base):
         Index("idx_title_user", "title", "owner_id"),
     )
 
-    # Relationships linking post to other entities.
+    # العلاقات مع الكيانات الأخرى.
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
@@ -876,7 +876,10 @@ class Post(Base):
     comments = relationship(
         "Comment", back_populates="post", cascade="all, delete-orphan"
     )
-    community = relationship("Community", back_populates="posts")
+    # تعديل علاقة المجتمع لتحديد المفتاح الأجنبي الصحيح (community_id)
+    community = relationship(
+        "Community", back_populates="posts", foreign_keys=[community_id]
+    )
     reports = relationship(
         "Report", back_populates="post", cascade="all, delete-orphan"
     )
