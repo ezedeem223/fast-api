@@ -935,12 +935,12 @@ User.notification_preferences = relationship(
 
 class NotificationGroup(Base):
     """
-    Model for grouping similar notifications.
+    نموذج لتجميع الإشعارات المتشابهة.
     """
 
     __tablename__ = "notification_groups"
     id = Column(Integer, primary_key=True, index=True)
-    group_type = Column(String, nullable=False)  # e.g., comment_thread, post_likes
+    group_type = Column(String, nullable=False)  # مثل: comment_thread, post_likes
     last_updated = Column(DateTime(timezone=True), server_default=func.now())
     count = Column(Integer, default=1)
     sample_notification_id = Column(
@@ -954,7 +954,9 @@ class NotificationGroup(Base):
     )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    notifications = relationship("Notification", back_populates="group")
+    notifications = relationship(
+        "Notification", back_populates="group", foreign_keys="[Notification.group_id]"
+    )
 
 
 class TokenBlacklist(Base):
@@ -1057,7 +1059,7 @@ User.poll_votes = relationship("PollVote", back_populates="user")
 
 class Notification(Base):
     """
-    Model for notifications sent to users.
+    نموذج للإشعارات المرسلة للمستخدمين.
     """
 
     __tablename__ = "notifications"
@@ -1075,7 +1077,6 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    # Renamed column to avoid reserved keyword conflict.
     notification_metadata = Column(JSONB, default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1089,22 +1090,24 @@ class Notification(Base):
     interaction_count = Column(Integer, default=0)
     custom_data = Column(JSONB, default={})
     device_info = Column(JSONB, nullable=True)
-    notification_channel = Column(
-        String, default="in_app"
-    )  # Options: in_app, email, push
+    notification_channel = Column(String, default="in_app")
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
     delivery_tracking = Column(JSONB, default={})
-    retry_strategy = Column(String, nullable=True)  # Options: exponential, linear, etc.
+    retry_strategy = Column(
+        String, nullable=True
+    )  # خيارات مثل "exponential" أو "linear"
     max_retries = Column(Integer, default=3)
     current_retry_count = Column(Integer, default=0)
     last_retry_timestamp = Column(DateTime(timezone=True), nullable=True)
 
-    # Relationships linking notification with its user and delivery logs/attempts.
+    # العلاقات
     user = relationship("User", back_populates="notifications")
-    group = relationship("NotificationGroup", back_populates="notifications")
+    group = relationship(
+        "NotificationGroup", back_populates="notifications", foreign_keys=[group_id]
+    )
     analytics = relationship(
         "NotificationAnalytics", back_populates="notification", uselist=False
     )
@@ -1122,7 +1125,7 @@ class Notification(Base):
     )
 
     def should_retry(self) -> bool:
-        """Check if the notification should be retried"""
+        """يتحقق مما إذا كان يجب إعادة محاولة الإشعار"""
         if self.status != NotificationStatus.FAILED:
             return False
         if self.current_retry_count >= self.max_retries:
@@ -1134,10 +1137,10 @@ class Notification(Base):
         return True
 
     def get_next_retry_delay(self) -> int:
-        """Calculate delay before the next retry attempt"""
+        """يحسب التأخير قبل المحاولة التالية للإعادة"""
         if self.retry_strategy == "exponential":
-            return 300 * (2**self.current_retry_count)  # 5 minutes * 2^retry_count
-        return 300  # Default delay of 5 minutes
+            return 300 * (2**self.current_retry_count)  # تأخير يبدأ بخمس دقائق ويتضاعف
+        return 300  # تأخير افتراضي 5 دقائق
 
 
 class NotificationDeliveryAttempt(Base):
