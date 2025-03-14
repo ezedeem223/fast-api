@@ -1,13 +1,15 @@
 import os
 import logging
-from dotenv import load_dotenv
 from typing import ClassVar
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr, PrivateAttr, Extra
 from fastapi_mail import ConnectionConfig, FastMail
 import redis
+from fastapi_mail import FastMail  # للتذكير نستخدمه لاحقًا
 
-# تحميل ملف .env
+# تحميل ملف .env (مفيد للتطوير محلياً)
+from dotenv import load_dotenv
+
 load_dotenv()
 
 # إزالة المتغيرات البيئية غير المطلوبة لتفادي أخطاء التحقق
@@ -32,78 +34,65 @@ class Settings(BaseSettings):
     AI_TEMPERATURE: float = 0.7
 
     # إعدادات قاعدة البيانات
-    database_hostname: str = os.getenv("DATABASE_HOSTNAME")
-    database_port: str = os.getenv("DATABASE_PORT")
-    database_password: str = os.getenv("DATABASE_PASSWORD")
-    database_name: str = os.getenv("DATABASE_NAME")
-    database_username: str = os.getenv("DATABASE_USERNAME")
+    DATABASE_HOSTNAME: str
+    DATABASE_PORT: int
+    DATABASE_PASSWORD: str
+    DATABASE_NAME: str
+    DATABASE_USERNAME: str
 
     # إعدادات الأمان
-    secret_key: str = os.getenv("SECRET_KEY")
-    algorithm: str = os.getenv("ALGORITHM")
-    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
     # إعدادات خدمات الجهات الخارجية
-    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "default_google_client_id")
-    google_client_secret: str = os.getenv(
-        "GOOGLE_CLIENT_SECRET", "default_google_client_secret"
-    )
-    # REDDIT_CLIENT_ID: str = os.getenv("REDDIT_CLIENT_ID", "default_reddit_client_id")
-    # REDDIT_CLIENT_SECRET: str = os.getenv("REDDIT_CLIENT_SECRET", "default_reddit_client_secret")
+    GOOGLE_CLIENT_ID: str = "your_google_client_id"
+    GOOGLE_CLIENT_SECRET: str = "your_google_client_secret"
+    FACEBOOK_ACCESS_TOKEN: str
+    FACEBOOK_APP_ID: str
+    FACEBOOK_APP_SECRET: str
 
     # إعدادات البريد الإلكتروني
-    mail_username: str = os.getenv("MAIL_USERNAME")
-    mail_password: str = os.getenv("MAIL_PASSWORD")
-    mail_from: EmailStr = os.getenv("MAIL_FROM")
-    mail_port: int = int(os.getenv("MAIL_PORT", 587))
-    mail_server: str = os.getenv("MAIL_SERVER")
+    MAIL_USERNAME: EmailStr
+    MAIL_PASSWORD: str
+    MAIL_FROM: EmailStr
+    MAIL_PORT: int = 587
+    MAIL_SERVER: str
 
-    # إعدادات وسائل التواصل الاجتماعي
-    facebook_access_token: str = os.getenv("FACEBOOK_ACCESS_TOKEN")
-    facebook_app_id: str = os.getenv("FACEBOOK_APP_ID")
-    facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET")
-    twitter_api_key: str = os.getenv("TWITTER_API_KEY")
-    twitter_api_secret: str = os.getenv("TWITTER_API_SECRET")
-    twitter_access_token: str = os.getenv("TWITTER_ACCESS_TOKEN")
-    twitter_access_token_secret: str = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    # إعدادات وسائل التواصل الاجتماعي (تويتر)
+    TWITTER_API_KEY: str
+    TWITTER_API_SECRET: str
+    TWITTER_ACCESS_TOKEN: str
+    TWITTER_ACCESS_TOKEN_SECRET: str
 
-    # المتغيرات الإضافية
-    huggingface_api_token: str = os.getenv("HUGGINGFACE_API_TOKEN")
-    refresh_secret_key: str = os.getenv("REFRESH_SECRET_KEY")
-    default_language: str = os.getenv("DEFAULT_LANGUAGE", "ar")
+    # إعدادات إضافية
+    HUGGINGFACE_API_TOKEN: str
+    REFRESH_SECRET_KEY: str
+    DEFAULT_LANGUAGE: str = "ar"
 
     # إعدادات Firebase
-    firebase_api_key: str = os.getenv("FIREBASE_API_KEY")
-    firebase_auth_domain: str = os.getenv("FIREBASE_AUTH_DOMAIN")
-    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID")
-    firebase_storage_bucket: str = os.getenv("FIREBASE_STORAGE_BUCKET")
-    firebase_messaging_sender_id: str = os.getenv("FIREBASE_MESSAGING_SENDER_ID")
-    firebase_app_id: str = os.getenv("FIREBASE_APP_ID")
-    firebase_measurement_id: str = os.getenv("FIREBASE_MEASUREMENT_ID")
+    FIREBASE_API_KEY: str
+    FIREBASE_AUTH_DOMAIN: str
+    FIREBASE_PROJECT_ID: str
+    FIREBASE_STORAGE_BUCKET: str
+    FIREBASE_MESSAGING_SENDER_ID: str
+    FIREBASE_APP_ID: str
+    FIREBASE_MEASUREMENT_ID: str
 
-    # إعدادات الإشعارات
-    NOTIFICATION_RETENTION_DAYS: int = 90
-    MAX_BULK_NOTIFICATIONS: int = 1000
-    NOTIFICATION_QUEUE_TIMEOUT: int = 30
-    NOTIFICATION_BATCH_SIZE: int = 100
-    DEFAULT_NOTIFICATION_CHANNEL: str = "in_app"
-
-    # إعدادات مفتاح RSA
-    rsa_private_key_path: str = os.getenv("RSA_PRIVATE_KEY_PATH")
-    rsa_public_key_path: str = os.getenv("RSA_PUBLIC_KEY_PATH")
+    # إعدادات RSA
+    RSA_PRIVATE_KEY_PATH: str
+    RSA_PUBLIC_KEY_PATH: str
 
     # إعدادات Redis وCelery
-    REDIS_URL: str = os.getenv("REDIS_URL")
-    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-    CELERY_BACKEND_URL: str = os.getenv(
-        "CELERY_BACKEND_URL", "redis://localhost:6379/0"
-    )
+    REDIS_URL: str
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_BACKEND_URL: str = "redis://localhost:6379/0"
 
-    # تحميل المفاتيح
+    # المتغيرات الخاصة لمفاتيح RSA (لن تُعرض كحقول)
     _rsa_private_key: str = PrivateAttr()
     _rsa_public_key: str = PrivateAttr()
 
-    # تعريف redis_client كمتغير فئة وليس كحقل بيانات
+    # تعريف عميل Redis كمتغير فئة
     redis_client: ClassVar[redis.Redis] = None
 
     model_config = SettingsConfigDict(
@@ -115,11 +104,11 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # تحميل مفاتيح RSA
+        # تحميل مفاتيح RSA من الملفات
         self._rsa_private_key = self._read_key_file(
-            self.rsa_private_key_path, "private"
+            self.RSA_PRIVATE_KEY_PATH, "private"
         )
-        self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
+        self._rsa_public_key = self._read_key_file(self.RSA_PUBLIC_KEY_PATH, "public")
 
         # إعداد Redis إذا كان REDIS_URL متاحًا
         if self.REDIS_URL:
@@ -176,11 +165,11 @@ class Settings(BaseSettings):
     @property
     def mail_config(self) -> ConnectionConfig:
         config_data = {
-            "MAIL_USERNAME": self.mail_username,
-            "MAIL_PASSWORD": self.mail_password,
-            "MAIL_FROM": self.mail_from,
-            "MAIL_PORT": self.mail_port,
-            "MAIL_SERVER": self.mail_server,
+            "MAIL_USERNAME": self.MAIL_USERNAME,
+            "MAIL_PASSWORD": self.MAIL_PASSWORD,
+            "MAIL_FROM": self.MAIL_FROM,
+            "MAIL_PORT": self.MAIL_PORT,
+            "MAIL_SERVER": self.MAIL_SERVER,
             "MAIL_FROM_NAME": "Your App Name",
             "MAIL_STARTTLS": True,
             "MAIL_SSL_TLS": False,
@@ -189,9 +178,8 @@ class Settings(BaseSettings):
         return CustomConnectionConfig(**config_data)
 
 
+# إنشاء كائن الإعدادات ليُستخدم في باقي التطبيق
 settings = Settings()
 
-# إنشاء كائن FastMail ليُستخدم في إرسال الرسائل الإلكترونية
-from fastapi_mail import FastMail
-
+# إنشاء كائن FastMail لإرسال الرسائل الإلكترونية
 fm = FastMail(settings.mail_config)
