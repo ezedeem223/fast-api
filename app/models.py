@@ -481,9 +481,15 @@ class User(Base):
     comments = relationship(
         "Comment", back_populates="owner", cascade="all, delete-orphan"
     )
+    # تم التعديل هنا لتحديد عمود المفتاح الأجنبي بوضوح لعلاقة التقارير (المستخدم الذي أرسل التقرير)
     reports = relationship(
-        "Report", back_populates="reporter", cascade="all, delete-orphan"
+        "Report",
+        foreign_keys="Report.reporter_id",
+        back_populates="reporter",
+        cascade="all, delete-orphan",
     )
+    # إذا كنت ترغب في تعريف علاقات أخرى للتقارير باستخدام أعمدة مفتاح أجنبي مختلفة، يمكن استخدام:
+    # reports_reviewed = relationship("Report", foreign_keys="Report.reviewed_by")
     followers = relationship(
         "Follow",
         back_populates="followed",
@@ -1442,6 +1448,7 @@ class Report(Base):
     ai_detected = Column(Boolean, default=False)
     ai_confidence = Column(Float, nullable=True)
 
+    # التعديل هنا: تحديد عمود المفتاح الأجنبي بوضوح لعلاقة المستخدم الذي قام بالإبلاغ
     reporter = relationship(
         "User", foreign_keys=[reporter_id], back_populates="reports"
     )
