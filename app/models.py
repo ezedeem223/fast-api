@@ -44,40 +44,92 @@ from sqlalchemy import Enum as SQLAlchemyEnum
 post_mentions = Table(
     "post_mentions",
     Base.metadata,
-    Column("post_id", Integer, ForeignKey("posts.id")),
-    Column("user_id", Integer, ForeignKey("users.id")),
+    Column(
+        "post_id",
+        Integer,
+        ForeignKey("posts.id", use_alter=True, name="fk_post_mentions_post_id"),
+    ),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", use_alter=True, name="fk_post_mentions_user_id"),
+    ),
 )
 
 # Table for linking communities and tags
 community_tags = Table(
     "community_tags",
     Base.metadata,
-    Column("community_id", Integer, ForeignKey("communities.id")),
-    Column("tag_id", Integer, ForeignKey("tags.id")),
+    Column(
+        "community_id",
+        Integer,
+        ForeignKey(
+            "communities.id", use_alter=True, name="fk_community_tags_community_id"
+        ),
+    ),
+    Column(
+        "tag_id",
+        Integer,
+        ForeignKey("tags.id", use_alter=True, name="fk_community_tags_tag_id"),
+    ),
 )
 
 # Table for linking stickers and sticker categories
 sticker_category_association = Table(
     "sticker_category_association",
     Base.metadata,
-    Column("sticker_id", Integer, ForeignKey("stickers.id")),
-    Column("category_id", Integer, ForeignKey("sticker_categories.id")),
+    Column(
+        "sticker_id",
+        Integer,
+        ForeignKey(
+            "stickers.id",
+            use_alter=True,
+            name="fk_sticker_category_association_sticker_id",
+        ),
+    ),
+    Column(
+        "category_id",
+        Integer,
+        ForeignKey(
+            "sticker_categories.id",
+            use_alter=True,
+            name="fk_sticker_category_association_category_id",
+        ),
+    ),
 )
 
 # Table for linking users and hashtags they follow
 user_hashtag_follows = Table(
     "user_hashtag_follows",
     Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id")),
-    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", use_alter=True, name="fk_user_hashtag_follows_user_id"),
+    ),
+    Column(
+        "hashtag_id",
+        Integer,
+        ForeignKey(
+            "hashtags.id", use_alter=True, name="fk_user_hashtag_follows_hashtag_id"
+        ),
+    ),
 )
 
 # Table for post hashtags association
 post_hashtags = Table(
     "post_hashtags",
     Base.metadata,
-    Column("post_id", Integer, ForeignKey("posts.id")),
-    Column("hashtag_id", Integer, ForeignKey("hashtags.id")),
+    Column(
+        "post_id",
+        Integer,
+        ForeignKey("posts.id", use_alter=True, name="fk_post_hashtags_post_id"),
+    ),
+    Column(
+        "hashtag_id",
+        Integer,
+        ForeignKey("hashtags.id", use_alter=True, name="fk_post_hashtags_hashtag_id"),
+    ),
 )
 
 # -------------------------
@@ -246,13 +298,33 @@ class BlockAppeal(Base):
 
     __tablename__ = "block_appeals"
     id = Column(Integer, primary_key=True, index=True)
-    block_id = Column(Integer, ForeignKey("blocks.id", ondelete="CASCADE"))
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    block_id = Column(
+        Integer,
+        ForeignKey(
+            "blocks.id",
+            use_alter=True,
+            name="fk_block_appeals_block_id",
+            ondelete="CASCADE",
+        ),
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey(
+            "users.id",
+            use_alter=True,
+            name="fk_block_appeals_user_id",
+            ondelete="CASCADE",
+        ),
+    )
     reason = Column(String, nullable=False)
     status = Column(Enum(AppealStatus), default=AppealStatus.PENDING)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewer_id = Column(
+        Integer,
+        ForeignKey("users.id", use_alter=True, name="fk_block_appeals_reviewer_id"),
+        nullable=True,
+    )
 
     # Relationships linking the appeal to the block and users involved.
     block = relationship("Block", back_populates="appeals")
@@ -279,11 +351,28 @@ class Reaction(Base):
     __tablename__ = "reactions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        Integer,
+        ForeignKey(
+            "users.id", use_alter=True, name="fk_reactions_user_id", ondelete="CASCADE"
+        ),
+        nullable=False,
     )
-    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=True)
+    post_id = Column(
+        Integer,
+        ForeignKey(
+            "posts.id", use_alter=True, name="fk_reactions_post_id", ondelete="CASCADE"
+        ),
+        nullable=True,
+    )
     comment_id = Column(
-        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+        Integer,
+        ForeignKey(
+            "comments.id",
+            use_alter=True,
+            name="fk_reactions_comment_id",
+            ondelete="CASCADE",
+        ),
+        nullable=True,
     )
     reaction_type = Column(Enum(ReactionType), nullable=False)
 
@@ -381,7 +470,7 @@ class User(Base):
     reset_token_expires = Column(DateTime, nullable=True)
     reputation_score = Column(Float, default=0.0)
     is_suspended = Column(Boolean, default=False)
-    preferred_language = Column(String, default="ar")  # Fixed default value as string
+    preferred_language = Column(String, default="ar")
     auto_translate = Column(Boolean, default=True)
     suspension_end_date = Column(DateTime, nullable=True)
     language = Column(String, nullable=False, default="en")
@@ -720,7 +809,18 @@ class Post(Base):
     category_id = Column(Integer, ForeignKey("post_categories.id"), nullable=True)
     scheduled_time = Column(DateTime(timezone=True), nullable=True)
     is_published = Column(Boolean, default=False)
-    original_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    # Self-referential foreign key: use_alter to break circular dependency.
+    original_post_id = Column(
+        Integer,
+        ForeignKey(
+            "posts.id",
+            use_alter=True,
+            name="fk_posts_original_post_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
     is_repost = Column(Boolean, default=False)
     repost_count = Column(Integer, default=0)
     allow_reposts = Column(Boolean, default=True)
@@ -823,7 +923,15 @@ class NotificationGroup(Base):
     group_type = Column(String, nullable=False)  # e.g., comment_thread, post_likes
     last_updated = Column(DateTime(timezone=True), server_default=func.now())
     count = Column(Integer, default=1)
-    sample_notification_id = Column(Integer, ForeignKey("notifications.id"))
+    sample_notification_id = Column(
+        Integer,
+        ForeignKey(
+            "notifications.id",
+            use_alter=True,
+            name="fk_notification_groups_sample_notification_id",
+        ),
+        nullable=True,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     notifications = relationship("Notification", back_populates="group")
@@ -1098,8 +1206,18 @@ class Comment(Base):
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    # Self-referential foreign key: add use_alter to break cycle.
     parent_id = Column(
-        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+        Integer,
+        ForeignKey(
+            "comments.id",
+            ondelete="CASCADE",
+            use_alter=True,
+            name="fk_comments_parent_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
     )
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -1193,7 +1311,18 @@ class PostCategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     description = Column(String)
-    parent_id = Column(Integer, ForeignKey("post_categories.id"))
+    # Self-referential relationship: add use_alter to break cycle.
+    parent_id = Column(
+        Integer,
+        ForeignKey(
+            "post_categories.id",
+            use_alter=True,
+            name="fk_postcategories_parent_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
     is_active = Column(Boolean, default=True)
 
     children = relationship(
@@ -1211,7 +1340,14 @@ class CommentEditHistory(Base):
     __tablename__ = "comment_edit_history"
     id = Column(Integer, primary_key=True, nullable=False)
     comment_id = Column(
-        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False
+        Integer,
+        ForeignKey(
+            "comments.id",
+            use_alter=True,
+            name="fk_comment_edit_history_comment_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
     )
     previous_content = Column(String, nullable=False)
     edited_at = Column(
@@ -1349,8 +1485,31 @@ class Message(Base):
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     encrypted_content = Column(LargeBinary, nullable=False)
     content = Column(Text, nullable=True)
-    replied_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
-    quoted_message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    # Self-referential keys: add use_alter to break cycles.
+    replied_to_id = Column(
+        Integer,
+        ForeignKey(
+            "messages.id",
+            ondelete="CASCADE",
+            use_alter=True,
+            name="fk_messages_replied_to_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
+    quoted_message_id = Column(
+        Integer,
+        ForeignKey(
+            "messages.id",
+            ondelete="CASCADE",
+            use_alter=True,
+            name="fk_messages_quoted_message_id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
     audio_url = Column(String, nullable=True)
     duration = Column(Float, nullable=True)
     latitude = Column(Float, nullable=True)
@@ -1700,12 +1859,9 @@ class Block(Base):
     """
 
     __tablename__ = "blocks"
-    blocker_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    blocked_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    blocker_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    blocked_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
