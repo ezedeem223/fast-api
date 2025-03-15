@@ -674,7 +674,6 @@ class UserActivity(Base):
 User.activities = relationship("UserActivity", back_populates="user")
 
 
-# نموذج لتصنيف المجتمعات (تصنيف منفصل)
 class CommunityCategory(Base):
     __tablename__ = "community_categories"
 
@@ -682,7 +681,13 @@ class CommunityCategory(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String, nullable=True)
 
-    # العلاقة مع المجتمعات التابعة لهذا التصنيف
+    # إضافة عمود المفتاح الأجنبي للربط مع Category
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+
+    # إضافة العلاقة مع Category
+    category = relationship("Category", back_populates="community_categories")
+
+    # العلاقة مع المجتمعات التابعة لهذا التصنيف (لا تغيير)
     communities = relationship("Community", back_populates="community_category")
 
 
@@ -1631,7 +1636,6 @@ class EncryptedCall(Base):
     )
 
 
-# نموذج يمثل المجتمعات/المجموعات
 class Community(Base):
     __tablename__ = "communities"
 
@@ -1651,10 +1655,19 @@ class Community(Base):
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
 
-    # العلاقة مع نموذج تصنيف المجتمعات
+    # العلاقة مع نموذج تصنيف المجتمعات (لا تغيير)
     community_category = relationship("CommunityCategory", back_populates="communities")
 
-    # العلاقات الأخرى حسب الحاجة:
+    # إزالة العلاقة المباشرة مع Category لأنها تتم الآن من خلال CommunityCategory
+    # تم حذف السطر: category = relationship("Category", back_populates="communities")
+
+    # إضافة خاصية للوصول إلى التصنيف الرئيسي
+    @property
+    def category(self):
+        """توفر وصولاً مباشراً إلى التصنيف الرئيسي للمجتمع"""
+        return self.community_category.category if self.community_category else None
+
+    # العلاقات الأخرى (لا تغيير)
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
@@ -1696,8 +1709,8 @@ class Category(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String)
 
-    # علاقة تصف المجتمعات التابعة لهذا التصنيف
-    communities = relationship("Community", back_populates="category")
+    # تم تعديل العلاقة لتشير إلى community_categories بدلاً من communities
+    community_categories = relationship("CommunityCategory", back_populates="category")
 
 
 class SearchSuggestion(Base):
