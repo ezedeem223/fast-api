@@ -1217,7 +1217,7 @@ class NotificationDeliveryLog(Base):
 
 class Comment(Base):
     """
-    Model for comments on posts.
+    نموذج للتعليقات على المشاركات.
     """
 
     __tablename__ = "comments"
@@ -1229,7 +1229,7 @@ class Comment(Base):
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # Self-referential foreign key: add use_alter to break cycle.
+    # مفتاح أجنبي ذاتي لتحديد التعليق الأب (لفك الدورة)
     parent_id = Column(
         Integer,
         ForeignKey(
@@ -1267,7 +1267,8 @@ class Comment(Base):
     is_pinned = Column(Boolean, default=False)
     pinned_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Relationships linking comment to sticker, owner, post, and nested replies.
+    # العلاقات
+    # العلاقة مع Sticker: تُستخدم back_populates لتكون العلاقة ثنائية الاتجاه مع Sticker.comments.
     sticker = relationship("Sticker", back_populates="comments")
     owner = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
@@ -1997,7 +1998,7 @@ class StickerPack(Base):
 
 class Sticker(Base):
     """
-    Model for individual stickers.
+    نموذج للملصقات الفردية.
     """
 
     __tablename__ = "stickers"
@@ -2013,6 +2014,8 @@ class Sticker(Base):
         "StickerCategory", secondary=sticker_category_association, backref="stickers"
     )
     reports = relationship("StickerReport", back_populates="sticker")
+    # العلاقة مع التعليقات التي تم إضافتها لتكون العلاقة ثنائية الاتجاه مع Comment.
+    comments = relationship("Comment", back_populates="sticker")
 
 
 class StickerCategory(Base):
