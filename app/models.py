@@ -1655,7 +1655,11 @@ class Community(Base):
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
-        "Post", back_populates="community", cascade="all, delete-orphan"
+        "Post",
+        back_populates="community",
+        cascade="all, delete-orphan",
+        # نحدد هنا أن العمود المستخدم للربط هو Post.community_id
+        foreign_keys=lambda: [Post.community_id],
     )
     reels = relationship(
         "Reel", back_populates="community", cascade="all, delete-orphan"
