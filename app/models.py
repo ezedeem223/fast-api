@@ -1658,8 +1658,7 @@ class Community(Base):
         "Post",
         back_populates="community",
         cascade="all, delete-orphan",
-        # نحدد هنا أن العمود المستخدم للربط هو Post.community_id
-        foreign_keys=lambda: [Post.community_id],
+        foreign_keys=lambda: [Post.community_id],  # استخدم المفتاح الأجنبي المحدد فقط
     )
     reels = relationship(
         "Reel", back_populates="community", cascade="all, delete-orphan"
