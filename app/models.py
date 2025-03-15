@@ -676,14 +676,16 @@ User.activities = relationship("UserActivity", back_populates="user")
 
 class CommunityCategory(Base):
     """
-    Model for community categories.
+    نموذج لتصنيف المجتمعات (تصنيف مستقل).
     """
 
     __tablename__ = "community_categories"
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
+    name = Column(String, unique=True, nullable=False)
     description = Column(String)
 
+    # علاقة تربط التصنيف بالمجتمعات التابعة له
     communities = relationship("Community", back_populates="category")
 
 
@@ -1634,7 +1636,7 @@ class EncryptedCall(Base):
 
 class Community(Base):
     """
-    نموذج للمجتمعات/المجموعات.
+    نموذج يمثل المجتمعات/المجموعات.
     """
 
     __tablename__ = "communities"
@@ -1647,16 +1649,16 @@ class Community(Base):
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
-    # تعديل المفتاح الأجنبي ليشير إلى جدول "categories" لتصنيف المجتمعات
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    # مفتاح أجنبي يشير إلى جدول التصنيفات "community_categories"
+    category_id = Column(Integer, ForeignKey("community_categories.id"), nullable=True)
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
 
-    # العلاقة مع نموذج Category بعد تعديل المفتاح الأجنبي
-    category = relationship("Category", back_populates="communities")
+    # العلاقة مع نموذج تصنيف المجتمعات CommunityCategory
+    category = relationship("CommunityCategory", back_populates="communities")
 
-    # العلاقات الأخرى كما هي في التصميم الأصلي
+    # العلاقات الأخرى في النموذج
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
