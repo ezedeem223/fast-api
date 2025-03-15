@@ -1634,10 +1634,11 @@ class EncryptedCall(Base):
 
 class Community(Base):
     """
-    Model for communities/groups.
+    نموذج للمجتمعات/المجموعات.
     """
 
     __tablename__ = "communities"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
     description = Column(String)
@@ -1646,19 +1647,23 @@ class Community(Base):
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
-    category_id = Column(Integer, ForeignKey("community_categories.id"), nullable=True)
+    # تعديل المفتاح الأجنبي ليشير إلى جدول "categories" لتصنيف المجتمعات
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
 
-    category = relationship("CommunityCategory", back_populates="communities")
+    # العلاقة مع نموذج Category بعد تعديل المفتاح الأجنبي
+    category = relationship("Category", back_populates="communities")
+
+    # العلاقات الأخرى كما هي في التصميم الأصلي
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
         "Post",
         back_populates="community",
         cascade="all, delete-orphan",
-        foreign_keys=lambda: [Post.community_id],  # استخدم المفتاح الأجنبي المحدد فقط
+        foreign_keys=lambda: [Post.community_id],
     )
     reels = relationship(
         "Reel", back_populates="community", cascade="all, delete-orphan"
@@ -1684,14 +1689,16 @@ class Community(Base):
 
 class Category(Base):
     """
-    Model for content categories (alternative grouping).
+    نموذج لتصنيف المجتمعات.
     """
 
     __tablename__ = "categories"
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     description = Column(String)
 
+    # علاقة تصف المجتمعات التابعة لهذا التصنيف
     communities = relationship("Community", back_populates="category")
 
 
