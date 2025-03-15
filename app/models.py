@@ -674,19 +674,16 @@ class UserActivity(Base):
 User.activities = relationship("UserActivity", back_populates="user")
 
 
+# نموذج لتصنيف المجتمعات (تصنيف منفصل)
 class CommunityCategory(Base):
-    """
-    نموذج لتصنيف المجتمعات (تصنيف مستقل).
-    """
-
     __tablename__ = "community_categories"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
-    description = Column(String)
+    description = Column(String, nullable=True)
 
-    # علاقة تربط التصنيف بالمجتمعات التابعة له
-    communities = relationship("Community", back_populates="category")
+    # العلاقة مع المجتمعات التابعة لهذا التصنيف
+    communities = relationship("Community", back_populates="community_category")
 
 
 class UserEvent(Base):
@@ -1634,31 +1631,30 @@ class EncryptedCall(Base):
     )
 
 
+# نموذج يمثل المجتمعات/المجموعات
 class Community(Base):
-    """
-    نموذج يمثل المجتمعات/المجموعات.
-    """
-
     __tablename__ = "communities"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
-    description = Column(String)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String, nullable=True)
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
-    # مفتاح أجنبي يشير إلى جدول التصنيفات "community_categories"
-    category_id = Column(Integer, ForeignKey("community_categories.id"), nullable=True)
+    # يتم الآن ربط المجتمعات بتصنيفها الخاص باستخدام عمود community_category_id
+    community_category_id = Column(
+        Integer, ForeignKey("community_categories.id"), nullable=True
+    )
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
 
-    # العلاقة مع نموذج تصنيف المجتمعات CommunityCategory
-    category = relationship("CommunityCategory", back_populates="communities")
+    # العلاقة مع نموذج تصنيف المجتمعات
+    community_category = relationship("CommunityCategory", back_populates="communities")
 
-    # العلاقات الأخرى في النموذج
+    # العلاقات الأخرى حسب الحاجة:
     owner = relationship("User", back_populates="owned_communities")
     members = relationship("CommunityMember", back_populates="community")
     posts = relationship(
@@ -1682,7 +1678,7 @@ class Community(Base):
     statistics = relationship(
         "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
     )
-    tags = relationship("Tag", secondary=community_tags, back_populates="communities")
+    tags = relationship("Tag", secondary="community_tags", back_populates="communities")
 
     @property
     def member_count(self):
