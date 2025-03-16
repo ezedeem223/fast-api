@@ -341,14 +341,21 @@ def is_ip_banned(db: Session, ip_address: str) -> bool:
     Checks if the given IP address is banned.
     If the ban has expired, it removes the ban.
     """
-    ban = db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
-    if ban:
-        if ban.expires_at and ban.expires_at < datetime.now():
-            db.delete(ban)
-            db.commit()
-            return False
-        return True
-    return False
+    try:
+        ban = (
+            db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
+        )
+        if ban:
+            if ban.expires_at and ban.expires_at < datetime.now():
+                db.delete(ban)
+                db.commit()
+                return False
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error checking IP ban for {ip_address}: {str(e)}")
+        # في حالة فشل الاستعلام، افترض أن العنوان غير محظور
+        return False
 
 
 def detect_ip_evasion(db: Session, user_id: int, current_ip: str) -> bool:
