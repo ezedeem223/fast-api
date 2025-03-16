@@ -135,9 +135,9 @@ class UserVoteAnalytics(BaseModel):
     total_posts: int
     total_votes_received: int
     average_votes_per_post: float
-    most_upvoted_post: PostVoteAnalytics
-    most_downvoted_post: PostVoteAnalytics
-    most_reacted_post: PostVoteAnalytics
+    most_upvoted_post: Optional[PostVoteAnalytics]
+    most_downvoted_post: Optional[PostVoteAnalytics]
+    most_reacted_post: Optional[PostVoteAnalytics]
 
 
 # ================================================================
@@ -1123,7 +1123,7 @@ class UserSettingsUpdate(BaseModel):
 class UserCreate(UserBase):
     password: str
     email: EmailStr
-    public_key: str
+    public_key: Optional[str] = None  # تم تعديل هذا الحقل ليصبح اختياريًا
 
 
 class UserUpdate(BaseModel):
@@ -2068,5 +2068,5 @@ if __name__ == "__main__":
             media_text=None,
         )
         print("PostOut instance:", post_example)
-    except ValidationError as e:
+    except Exception as e:
         print("Validation error:", e)

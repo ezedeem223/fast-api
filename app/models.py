@@ -47,12 +47,12 @@ post_mentions = Table(
     Column(
         "post_id",
         Integer,
-        ForeignKey("posts.id", use_alter=True, name="fk_post_mentions_post_id"),
+        ForeignKey("posts.id", ondelete="CASCADE"),
     ),
     Column(
         "user_id",
         Integer,
-        ForeignKey("users.id", use_alter=True, name="fk_post_mentions_user_id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
     ),
 )
 
@@ -63,14 +63,12 @@ community_tags = Table(
     Column(
         "community_id",
         Integer,
-        ForeignKey(
-            "communities.id", use_alter=True, name="fk_community_tags_community_id"
-        ),
+        ForeignKey("communities.id", ondelete="CASCADE"),
     ),
     Column(
         "tag_id",
         Integer,
-        ForeignKey("tags.id", use_alter=True, name="fk_community_tags_tag_id"),
+        ForeignKey("tags.id", ondelete="CASCADE"),
     ),
 )
 
@@ -81,20 +79,12 @@ sticker_category_association = Table(
     Column(
         "sticker_id",
         Integer,
-        ForeignKey(
-            "stickers.id",
-            use_alter=True,
-            name="fk_sticker_category_association_sticker_id",
-        ),
+        ForeignKey("stickers.id", ondelete="CASCADE"),
     ),
     Column(
         "category_id",
         Integer,
-        ForeignKey(
-            "sticker_categories.id",
-            use_alter=True,
-            name="fk_sticker_category_association_category_id",
-        ),
+        ForeignKey("sticker_categories.id", ondelete="CASCADE"),
     ),
 )
 
@@ -105,14 +95,12 @@ user_hashtag_follows = Table(
     Column(
         "user_id",
         Integer,
-        ForeignKey("users.id", use_alter=True, name="fk_user_hashtag_follows_user_id"),
+        ForeignKey("users.id", ondelete="CASCADE"),
     ),
     Column(
         "hashtag_id",
         Integer,
-        ForeignKey(
-            "hashtags.id", use_alter=True, name="fk_user_hashtag_follows_hashtag_id"
-        ),
+        ForeignKey("hashtags.id", ondelete="CASCADE"),
     ),
 )
 
@@ -123,12 +111,12 @@ post_hashtags = Table(
     Column(
         "post_id",
         Integer,
-        ForeignKey("posts.id", use_alter=True, name="fk_post_hashtags_post_id"),
+        ForeignKey("posts.id", ondelete="CASCADE"),
     ),
     Column(
         "hashtag_id",
         Integer,
-        ForeignKey("hashtags.id", use_alter=True, name="fk_post_hashtags_hashtag_id"),
+        ForeignKey("hashtags.id", ondelete="CASCADE"),
     ),
 )
 
@@ -300,21 +288,11 @@ class BlockAppeal(Base):
     id = Column(Integer, primary_key=True, index=True)
     block_id = Column(
         Integer,
-        ForeignKey(
-            "blocks.id",
-            use_alter=True,
-            name="fk_block_appeals_block_id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("blocks.id", ondelete="CASCADE"),
     )
     user_id = Column(
         Integer,
-        ForeignKey(
-            "users.id",
-            use_alter=True,
-            name="fk_block_appeals_user_id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("users.id", ondelete="CASCADE"),
     )
     reason = Column(String, nullable=False)
     status = Column(Enum(AppealStatus), default=AppealStatus.PENDING)
@@ -322,7 +300,7 @@ class BlockAppeal(Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     reviewer_id = Column(
         Integer,
-        ForeignKey("users.id", use_alter=True, name="fk_block_appeals_reviewer_id"),
+        ForeignKey("users.id"),
         nullable=True,
     )
 
@@ -344,7 +322,7 @@ class Hashtag(Base):
     # علاقة المتابعين للمشاركات عبر جدول العلاقة (association table)
     followers = relationship(
         "User",
-        secondary=user_hashtag_follows,  # تأكد من تعريف جدول العلاقة بشكل صحيح
+        secondary=user_hashtag_follows,
         back_populates="followed_hashtags",
     )
 
@@ -358,26 +336,17 @@ class Reaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
         Integer,
-        ForeignKey(
-            "users.id", use_alter=True, name="fk_reactions_user_id", ondelete="CASCADE"
-        ),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
     post_id = Column(
         Integer,
-        ForeignKey(
-            "posts.id", use_alter=True, name="fk_reactions_post_id", ondelete="CASCADE"
-        ),
+        ForeignKey("posts.id", ondelete="CASCADE"),
         nullable=True,
     )
     comment_id = Column(
         Integer,
-        ForeignKey(
-            "comments.id",
-            use_alter=True,
-            name="fk_reactions_comment_id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("comments.id", ondelete="CASCADE"),
         nullable=True,
     )
     reaction_type = Column(Enum(ReactionType), nullable=False)
@@ -487,15 +456,12 @@ class User(Base):
     comments = relationship(
         "Comment", back_populates="owner", cascade="all, delete-orphan"
     )
-    # تم التعديل هنا لتحديد عمود المفتاح الأجنبي بوضوح لعلاقة التقارير (المستخدم الذي أرسل التقرير)
     reports = relationship(
         "Report",
         foreign_keys="Report.reporter_id",
         back_populates="reporter",
         cascade="all, delete-orphan",
     )
-    # إذا كنت ترغب في تعريف علاقات أخرى للتقارير باستخدام أعمدة مفتاح أجنبي مختلفة، يمكن استخدام:
-    # reports_reviewed = relationship("Report", foreign_keys="Report.reviewed_by")
     followers = relationship(
         "Follow",
         back_populates="followed",
@@ -565,7 +531,6 @@ class User(Base):
         "Call", foreign_keys="[Call.receiver_id]", back_populates="receiver"
     )
     screen_shares = relationship("ScreenShareSession", back_populates="sharer")
-    # تم التعديل هنا بإضافة foreign_keys لتحديد العمود الصحيح في جدول الجلسات المشفرة.
     encrypted_sessions = relationship(
         "EncryptedSession",
         back_populates="user",
@@ -605,6 +570,15 @@ class User(Base):
     amenhotep_analytics = relationship("AmenhotepChatAnalytics", back_populates="user")
     social_accounts = relationship("SocialMediaAccount", back_populates="user")
     social_posts = relationship("SocialMediaPost", back_populates="user")
+    activities = relationship("UserActivity", back_populates="user")
+    events = relationship("UserEvent", back_populates="user")
+    ip_bans_created = relationship("IPBan", back_populates="created_by_user")
+    banned_words_created = relationship("BannedWord", back_populates="created_by_user")
+    poll_votes = relationship("PollVote", back_populates="user")
+    notification_preferences = relationship(
+        "NotificationPreferences", back_populates="user", uselist=False
+    )
+    amenhotep_messages = relationship("AmenhotepMessage", back_populates="user")
 
 
 class SocialMediaAccount(Base):
@@ -663,15 +637,12 @@ class UserActivity(Base):
 
     __tablename__ = "user_activities"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     activity_type = Column(String)  # e.g., login, post, comment, report
     timestamp = Column(DateTime, default=func.now())
     details = Column(JSON)
 
     user = relationship("User", back_populates="activities")
-
-
-User.activities = relationship("UserActivity", back_populates="user")
 
 
 class CommunityCategory(Base):
@@ -687,7 +658,7 @@ class CommunityCategory(Base):
     # إضافة العلاقة مع Category
     category = relationship("Category", back_populates="community_categories")
 
-    # العلاقة مع المجتمعات التابعة لهذا التصنيف (لا تغيير)
+    # العلاقة مع المجتمعات التابعة لهذا التصنيف
     communities = relationship("Community", back_populates="community_category")
 
 
@@ -704,9 +675,6 @@ class UserEvent(Base):
     details = Column(JSON, nullable=True)
 
     user = relationship("User", back_populates="events")
-
-
-User.events = relationship("UserEvent", back_populates="user")
 
 
 class UserWarning(Base):
@@ -745,12 +713,9 @@ class IPBan(Base):
     reason = Column(String)
     banned_at = Column(DateTime(timezone=True), server_default=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_by = Column(Integer, ForeignKey("users.id"))
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
 
     created_by_user = relationship("User", back_populates="ip_bans_created")
-
-
-User.ip_bans_created = relationship("IPBan", back_populates="created_by_user")
 
 
 class BannedWord(Base):
@@ -762,13 +727,10 @@ class BannedWord(Base):
     id = Column(Integer, primary_key=True, index=True)
     word = Column(String, unique=True, nullable=False)
     severity = Column(Enum("warn", "ban", name="word_severity"), default="warn")
-    created_by = Column(Integer, ForeignKey("users.id"))
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     created_by_user = relationship("User", back_populates="banned_words_created")
-
-
-User.banned_words_created = relationship("BannedWord", back_populates="created_by_user")
 
 
 class BanStatistics(Base):
@@ -830,16 +792,10 @@ class Post(Base):
     category_id = Column(Integer, ForeignKey("post_categories.id"), nullable=True)
     scheduled_time = Column(DateTime(timezone=True), nullable=True)
     is_published = Column(Boolean, default=False)
-    # Self-referential foreign key: use_alter to break circular dependency.
+    # Self-referential foreign key
     original_post_id = Column(
         Integer,
-        ForeignKey(
-            "posts.id",
-            use_alter=True,
-            name="fk_posts_original_post_id",
-            deferrable=True,
-            initially="DEFERRED",
-        ),
+        ForeignKey("posts.id", ondelete="SET NULL"),
         nullable=True,
     )
     is_repost = Column(Boolean, default=False)
@@ -862,7 +818,7 @@ class Post(Base):
     search_vector = Column(TSVECTOR)
     share_scope = Column(String, default="public")  # Options: public, community, group
     shared_with_community_id = Column(
-        Integer, ForeignKey("communities.id"), nullable=True
+        Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
     )
     score = Column(Float, default=0.0, index=True)
     sharing_settings = Column(JSONB, default={})  # Advanced sharing settings
@@ -932,9 +888,10 @@ class NotificationPreferences(Base):
     user = relationship("User", back_populates="notification_preferences")
 
 
-User.notification_preferences = relationship(
-    "NotificationPreferences", back_populates="user", uselist=False
-)
+# تم نقل هذا التعريف إلى قسم User في مكان آخر من الملف
+# User.notification_preferences = relationship(
+#     "NotificationPreferences", back_populates="user", uselist=False
+# )
 
 
 class NotificationGroup(Base):
@@ -1058,7 +1015,8 @@ class PollVote(Base):
     option = relationship("PollOption", back_populates="votes")
 
 
-User.poll_votes = relationship("PollVote", back_populates="user")
+# تم نقل هذا التعريف إلى قسم User في مكان آخر من الملف
+# User.poll_votes = relationship("PollVote", back_populates="user")
 
 
 class Notification(Base):
@@ -1309,7 +1267,8 @@ class AmenhotepMessage(Base):
     user = relationship("User", back_populates="amenhotep_messages")
 
 
-User.amenhotep_messages = relationship("AmenhotepMessage", back_populates="user")
+# تم نقل هذا التعريف إلى قسم User في مكان آخر من الملف
+# User.amenhotep_messages = relationship("AmenhotepMessage", back_populates="user")
 
 
 class AmenhotepChatAnalytics(Base):
@@ -1674,7 +1633,7 @@ class Community(Base):
         "Post",
         back_populates="community",
         cascade="all, delete-orphan",
-        foreign_keys=lambda: [Post.community_id],
+        foreign_keys="[Post.community_id]",
     )
     reels = relationship(
         "Reel", back_populates="community", cascade="all, delete-orphan"
@@ -1752,7 +1711,7 @@ class Tag(Base):
     name = Column(String, unique=True, nullable=False)
 
     communities = relationship(
-        "Community", secondary=community_tags, back_populates="tags"
+        "Community", secondary="community_tags", back_populates="tags"
     )
 
 

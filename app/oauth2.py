@@ -17,9 +17,7 @@ from .config import settings
 import logging
 from typing import Optional
 from .database import get_db
-from .models import User
-
-# Import IP management functions from utils
+from .models import User, UserRole
 from .utils import get_client_ip, is_ip_banned, detect_ip_evasion
 
 # Configure logging
@@ -89,7 +87,7 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Invalid Credentials",  # تم تعديل الرسالة هنا
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -160,7 +158,7 @@ def get_current_user(
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Invalid Credentials",  # تم تعديل الرسالة هنا
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -199,12 +197,9 @@ def get_current_user(
             )
 
         if request:
+            client_ip = get_client_ip(request)
             if detect_ip_evasion(db, user.id, client_ip):
                 logger.warning(f"Possible IP evasion detected for user {user.id}")
-                # Additional logic can be added here, e.g.:
-                # - Sending an alert to the administrator
-                # - Temporarily banning the user
-                # - Requesting additional authentication
 
         # Check if the user is banned
         if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
@@ -240,7 +235,9 @@ def get_current_admin(
     - Raises HTTPException if the user does not have admin privileges.
     """
     user = get_current_user(token, db)
-    if user.role != "admin":
+    if (
+        user.role != models.UserRole.ADMIN
+    ):  # تم تعديل المقارنة لتستخدم enum بدلاً من النص
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
         )

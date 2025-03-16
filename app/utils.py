@@ -39,6 +39,7 @@ from collections import deque
 from datetime import datetime, timezone, date
 from typing import List, Optional
 import logging
+from sqlalchemy.exc import ProgrammingError
 
 # SpellChecker and language detection
 from spellchecker import SpellChecker
@@ -48,11 +49,10 @@ from langdetect import detect, LangDetectException
 # Import external function for link preview extraction
 from .link_preview import extract_link_preview
 
-# Attempt to import 'translate_text' from an external module.
 try:
     from .translation import translate_text
 except ImportError:
-    # Placeholder implementation; should be replaced with a proper implementation.
+
     async def translate_text(text: str, source_lang: str, target_lang: str):
         raise NotImplementedError("translate_text function is not implemented.")
 
@@ -62,7 +62,7 @@ except ImportError:
 # ============================================
 spell = SpellChecker()
 translation_cache = TTLCache(maxsize=1000, ttl=3600)
-cache = TTLCache(maxsize=100, ttl=60)  # Cache for temporary storage
+cache = TTLCache(maxsize=100, ttl=60)
 logger = logging.getLogger(__name__)
 
 QUALITY_WINDOW_SIZE = 10
@@ -93,16 +93,12 @@ sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=token
 # Authentication Utilities
 # ============================================
 def hash(password: str) -> str:
-    """
-    Encrypts the password using bcrypt.
-    """
+    """Encrypts the password using bcrypt."""
     return pwd_context.hash(password)
 
 
 def verify(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verifies a plain password against its hashed version.
-    """
+    """Verifies a plain password against its hashed version."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -110,9 +106,7 @@ def verify(plain_password: str, hashed_password: str) -> bool:
 # Content Moderation and Validation Functions
 # ============================================
 def check_content_against_rules(content: str, rules: List[str]) -> bool:
-    """
-    Checks if the content violates any of the regex-based rules.
-    """
+    """Checks if the content violates any of the regex-based rules."""
     for rule in rules:
         if re.search(rule, content, re.IGNORECASE):
             return False
@@ -120,10 +114,7 @@ def check_content_against_rules(content: str, rules: List[str]) -> bool:
 
 
 def detect_language(text: str) -> str:
-    """
-    Detects the language of the given text.
-    Returns 'unknown' if detection fails.
-    """
+    """Detects the language of the given text. Returns 'unknown' if detection fails."""
     try:
         return detect(text)
     except LangDetectException:
@@ -131,35 +122,23 @@ def detect_language(text: str) -> str:
 
 
 def train_content_classifier():
-    """
-    Trains a simple content classifier using dummy data.
-    Note: Replace dummy data with real data in production.
-    """
+    """Trains a simple content classifier using dummy data. Replace dummy data with real data in production."""
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
-    y = [0, 1, 0]  # 0: Normal content, 1: Offensive content
-
+    y = [0, 1, 0]
     vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
     X_vectorized = vectorizer.fit_transform(X)
-
     classifier = MultinomialNB()
     classifier.fit(X_vectorized, y)
-
-    # Save the classifier and the vectorizer for later use
     joblib.dump(classifier, "content_classifier.joblib")
     joblib.dump(vectorizer, "content_vectorizer.joblib")
 
 
 def check_for_profanity(text: str) -> bool:
-    """
-    Checks if the text contains offensive words using better-profanity and a machine learning model.
-    Returns True if offensive content is detected.
-    """
+    """Checks if the text contains offensive words using better-profanity and a machine learning model."""
     if profanity.contains_profanity(text):
         return True
-
     if not os.path.exists("content_classifier.joblib"):
         train_content_classifier()
-
     classifier = joblib.load("content_classifier.joblib")
     vectorizer = joblib.load("content_vectorizer.joblib")
     X_vectorized = vectorizer.transform([text])
@@ -168,19 +147,14 @@ def check_for_profanity(text: str) -> bool:
 
 
 def validate_urls(text: str) -> bool:
-    """
-    Validates all URLs present in the text.
-    Returns True if all URLs are valid.
-    """
+    """Validates all URLs present in the text. Returns True if all URLs are valid."""
     words = text.split()
     urls = [word for word in words if word.startswith(("http://", "https://"))]
     return all(validators.url(url) for url in urls)
 
 
 def is_valid_image_url(url: str) -> bool:
-    """
-    Checks if the URL points to an image resource.
-    """
+    """Checks if the URL points to an image resource."""
     try:
         import requests
 
@@ -191,9 +165,7 @@ def is_valid_image_url(url: str) -> bool:
 
 
 def is_valid_video_url(url: str) -> bool:
-    """
-    Checks if the URL belongs to a supported video hosting service.
-    """
+    """Checks if the URL belongs to a supported video hosting service."""
     from urllib.parse import urlparse
 
     parsed_url = urlparse(url)
@@ -202,10 +174,7 @@ def is_valid_video_url(url: str) -> bool:
 
 
 def analyze_sentiment(text: str) -> float:
-    """
-    Analyzes the sentiment of the text using TextBlob.
-    Returns the polarity score.
-    """
+    """Analyzes the sentiment of the text using TextBlob. Returns the polarity score."""
     from textblob import TextBlob
 
     analysis = TextBlob(text)
@@ -216,9 +185,7 @@ def analyze_sentiment(text: str) -> float:
 # QR Code and File Upload Functions
 # ============================================
 def generate_qr_code(data: str) -> str:
-    """
-    Generates a QR code for the given data and returns it as a base64-encoded PNG string.
-    """
+    """Generates a QR code for the given data and returns it as a base64-encoded PNG string."""
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(data)
     qr.make(fit=True)
@@ -229,9 +196,7 @@ def generate_qr_code(data: str) -> str:
 
 
 async def save_upload_file(upload_file: UploadFile) -> str:
-    """
-    Asynchronously saves an uploaded file and returns its storage path.
-    """
+    """Asynchronously saves an uploaded file and returns its storage path."""
     file_location = f"uploads/{upload_file.filename}"
     async with aiofiles.open(file_location, "wb") as out_file:
         content = await upload_file.read()
@@ -243,9 +208,7 @@ async def save_upload_file(upload_file: UploadFile) -> str:
 # Default Categories and Statistics Functions
 # ============================================
 def create_default_categories(db: Session):
-    """
-    Creates default post categories and subcategories if they do not already exist.
-    """
+    """Creates default post categories and subcategories if they do not already exist."""
     default_categories = [
         {"name": "Work", "description": "Posts related to job opportunities"},
         {
@@ -265,8 +228,6 @@ def create_default_categories(db: Session):
             db.add(new_category)
             db.commit()
             db.refresh(new_category)
-
-            # Adding subcategories based on category
             if category["name"] == "Work":
                 sub_categories = ["Work in Canada", "Work in USA", "Work in Europe"]
             elif category["name"] == "Migration":
@@ -281,7 +242,6 @@ def create_default_categories(db: Session):
                     "Asylum in Canada",
                     "Asylum in USA",
                 ]
-
             for sub_cat in sub_categories:
                 db_sub_category = (
                     db.query(models.PostCategory)
@@ -297,9 +257,7 @@ def create_default_categories(db: Session):
 
 
 def update_user_statistics(db: Session, user_id: int, action: str):
-    """
-    Updates user statistics in the database based on the action performed (post, comment, like, view).
-    """
+    """Updates user statistics in the database based on the action performed (post, comment, like, view)."""
     today = date.today()
     stats = (
         db.query(models.UserStatistics)
@@ -312,7 +270,6 @@ def update_user_statistics(db: Session, user_id: int, action: str):
     if not stats:
         stats = models.UserStatistics(user_id=user_id, date=today)
         db.add(stats)
-
     if action == "post":
         stats.post_count += 1
     elif action == "comment":
@@ -321,7 +278,6 @@ def update_user_statistics(db: Session, user_id: int, action: str):
         stats.like_count += 1
     elif action == "view":
         stats.view_count += 1
-
     db.commit()
 
 
@@ -329,9 +285,7 @@ def update_user_statistics(db: Session, user_id: int, action: str):
 # IP Management and Ban Functions
 # ============================================
 def get_client_ip(request: Request) -> str:
-    """
-    Retrieves the client's IP address from the request headers.
-    """
+    """Retrieves the client's IP address from the request headers."""
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
@@ -354,9 +308,11 @@ def is_ip_banned(db: Session, ip_address: str) -> bool:
                 return False
             return True
         return False
+    except ProgrammingError as pe:
+        logger.error(f"ProgrammingError checking IP ban for {ip_address}: {str(pe)}")
+        return False
     except Exception as e:
         logger.error(f"Error checking IP ban for {ip_address}: {str(e)}")
-        # في حالة فشل الاستعلام، افترض أن العنوان غير محظور
         return False
 
 
@@ -385,9 +341,7 @@ def detect_ip_evasion(db: Session, user_id: int, current_ip: str) -> bool:
 # Hashtag and Repost Functions
 # ============================================
 def get_or_create_hashtag(db: Session, hashtag_name: str):
-    """
-    Retrieves an existing hashtag or creates a new one.
-    """
+    """Retrieves an existing hashtag or creates a new one."""
     hashtag = (
         db.query(models.Hashtag).filter(models.Hashtag.name == hashtag_name).first()
     )
@@ -400,9 +354,7 @@ def get_or_create_hashtag(db: Session, hashtag_name: str):
 
 
 def update_repost_statistics(db: Session, post_id: int):
-    """
-    Updates repost statistics for a specific post.
-    """
+    """Updates repost statistics for a specific post."""
     stats = (
         db.query(models.RepostStatistics)
         .filter(models.RepostStatistics.post_id == post_id)
@@ -419,9 +371,7 @@ def update_repost_statistics(db: Session, post_id: int):
 def send_repost_notification(
     db: Session, original_owner_id: int, reposter_id: int, repost_id: int
 ):
-    """
-    Sends a notification when a post is reposted.
-    """
+    """Sends a notification when a post is reposted."""
     original_owner = (
         db.query(models.User).filter(models.User.id == original_owner_id).first()
     )
@@ -440,9 +390,7 @@ def send_repost_notification(
 # Mentions and Offensive Content Functions
 # ============================================
 def process_mentions(content: str, db: Session):
-    """
-    Extracts and processes user mentions from the content.
-    """
+    """Extracts and processes user mentions from the content."""
     mentioned_usernames = re.findall(r"@(\w+)", content)
     mentioned_users = []
     for username in mentioned_usernames:
@@ -466,9 +414,7 @@ def is_content_offensive(text: str) -> tuple:
 # Encryption Key Functions
 # ============================================
 def generate_encryption_key() -> str:
-    """
-    Generates a new encryption key using Fernet.
-    """
+    """Generates a new encryption key using Fernet."""
     return Fernet.generate_key().decode()
 
 
@@ -488,9 +434,7 @@ def update_encryption_key(old_key: str) -> str:
 # Call Quality and Video Adjustment Functions
 # ============================================
 class CallQualityBuffer:
-    """
-    A class to store call quality scores within a specified time window.
-    """
+    """A class to store call quality scores within a specified time window."""
 
     def __init__(self, window_size=QUALITY_WINDOW_SIZE):
         self.window_size = window_size
@@ -498,18 +442,14 @@ class CallQualityBuffer:
         self.last_update_time = time.time()
 
     def add_score(self, score: float):
-        """
-        Adds a new score to the quality buffer.
-        """
+        """Adds a new score to the quality buffer."""
         self.quality_scores.append(score)
         self.last_update_time = time.time()
 
     def get_average_score(self) -> float:
-        """
-        Computes the average quality score.
-        """
+        """Computes the average quality score."""
         if not self.quality_scores:
-            return 100.0  # Assume excellent quality if no scores are recorded
+            return 100.0
         return sum(self.quality_scores) / len(self.quality_scores)
 
 
@@ -532,9 +472,7 @@ def check_call_quality(data: dict, call_id: str) -> float:
 
 
 def should_adjust_video_quality(call_id: str) -> bool:
-    """
-    Determines if video quality should be adjusted based on the average score.
-    """
+    """Determines if video quality should be adjusted based on the average score."""
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         return average_quality < MIN_QUALITY_THRESHOLD
@@ -542,9 +480,7 @@ def should_adjust_video_quality(call_id: str) -> bool:
 
 
 def get_recommended_video_quality(call_id: str) -> str:
-    """
-    Recommends the video quality level based on the average quality score.
-    """
+    """Recommends the video quality level based on the average quality score."""
     if call_id in quality_buffers:
         average_quality = quality_buffers[call_id].get_average_score()
         if average_quality < 30:
@@ -553,13 +489,11 @@ def get_recommended_video_quality(call_id: str) -> str:
             return "medium"
         else:
             return "high"
-    return "high"  # Default quality if no data is available
+    return "high"
 
 
 def clean_old_quality_buffers():
-    """
-    Removes call quality buffers that have not been updated for more than 5 minutes.
-    """
+    """Removes call quality buffers that have not been updated for more than 5 minutes."""
     current_time = time.time()
     for call_id in list(quality_buffers.keys()):
         if current_time - quality_buffers[call_id].last_update_time > 300:
@@ -592,9 +526,7 @@ def update_search_vector():
 
 
 def search_posts(query: str, db: Session):
-    """
-    Searches for posts matching the given query using full-text search.
-    """
+    """Searches for posts matching the given query using full-text search."""
     search_query = func.plainto_tsquery("english", query)
     return (
         db.query(models.Post)
@@ -609,9 +541,7 @@ def search_posts(query: str, db: Session):
 
 
 def get_spell_suggestions(query: str) -> List[str]:
-    """
-    Generates spelling suggestions for the given query.
-    """
+    """Generates spelling suggestions for the given query."""
     words = query.split()
     suggestions = []
     for word in words:
@@ -623,18 +553,14 @@ def get_spell_suggestions(query: str) -> List[str]:
 
 
 def format_spell_suggestions(original_query: str, suggestions: List[str]) -> str:
-    """
-    Formats the spelling suggestions if the corrected query differs from the original.
-    """
+    """Formats the spelling suggestions if the corrected query differs from the original."""
     if original_query.lower() != " ".join(suggestions).lower():
         return f"Did you mean: {' '.join(suggestions)}?"
     return ""
 
 
 def sort_search_results(query, sort_option: str, db: Session):
-    """
-    Sorts search results based on relevance, date, or popularity.
-    """
+    """Sorts search results based on relevance, date, or popularity."""
     if sort_option == "RELEVANCE":
         return query.order_by(
             desc(
@@ -662,7 +588,7 @@ def analyze_user_behavior(user_history, content: str) -> float:
     Returns a relevance score.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]  # Limit text length for analysis
+    result = sentiment_pipeline(content[:512])[0]
     sentiment = result["label"]
     score = result["score"]
     relevance_score = sum(
@@ -675,9 +601,7 @@ def analyze_user_behavior(user_history, content: str) -> float:
 def calculate_post_score(
     upvotes: int, downvotes: int, comment_count: int, created_at: datetime
 ) -> float:
-    """
-    Calculates the score of a post based on vote difference, comment count, and post age.
-    """
+    """Calculates the score of a post based on vote difference, comment count, and post age."""
     vote_difference = upvotes - downvotes
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
     score = (vote_difference + comment_count) / (age_hours + 2) ** 1.8
@@ -685,9 +609,7 @@ def calculate_post_score(
 
 
 def update_post_score(db: Session, post: models.Post):
-    """
-    Updates the post's score and commits the changes to the database.
-    """
+    """Updates the post's score and commits the changes to the database."""
     upvotes = (
         db.query(models.Vote)
         .filter(models.Vote.post_id == post.id, models.Vote.dir == 1)
@@ -705,9 +627,7 @@ def update_post_score(db: Session, post: models.Post):
 
 
 def update_post_vote_statistics(db: Session, post_id: int):
-    """
-    Updates the vote statistics for a specific post.
-    """
+    """Updates the vote statistics for a specific post."""
     post = db.query(models.Post).filter(models.Post.id == post_id).first()
     if not post:
         return
@@ -741,9 +661,7 @@ def update_post_vote_statistics(db: Session, post_id: int):
 
 
 def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalytics:
-    """
-    Generates vote analytics for a user's posts.
-    """
+    """Generates vote analytics for a user's posts."""
     user_posts = db.query(models.Post).filter(models.Post.owner_id == user_id).all()
     total_posts = len(user_posts)
     total_votes = sum(
@@ -783,13 +701,11 @@ def get_user_vote_analytics(db: Session, user_id: int) -> schemas.UserVoteAnalyt
 def create_post_vote_analytics(
     post: models.Post,
 ) -> Optional[schemas.PostVoteAnalytics]:
-    """
-    Creates vote analytics data for a specific post.
-    """
+    """Creates vote analytics data for a specific post."""
     stats = post.vote_statistics
     if not stats:
         return None
-    total_votes = stats.total_votes or 1  # Avoid division by zero
+    total_votes = stats.total_votes or 1
     upvote_percentage = (stats.upvotes / total_votes) * 100
     downvote_percentage = (stats.downvotes / total_votes) * 100
     reaction_counts = {
@@ -815,13 +731,10 @@ def create_post_vote_analytics(
 # Admin and Exception Handlers
 # ============================================
 def admin_required(func):
-    """
-    Decorator to ensure that the current user has admin privileges.
-    """
+    """Decorator to ensure that the current user has admin privileges."""
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        # Local import to avoid circular dependency
         from .oauth2 import get_current_user
 
         current_user = await get_current_user()
@@ -833,9 +746,7 @@ def admin_required(func):
 
 
 def handle_exceptions(func):
-    """
-    Decorator for handling exceptions and returning a standardized error message.
-    """
+    """Decorator for handling exceptions and returning a standardized error message."""
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -900,8 +811,6 @@ def update_link_preview(db: Session, message_id: int, url: str):
 def log_user_event(
     db: Session, user_id: int, event: str, metadata: Optional[dict] = None
 ):
-    """
-    Logs user events. Currently prints the event; can be modified to store the events in the database.
-    """
+    """Logs user events. Currently prints the event; can be modified to store the events in the database."""
     log_message = f"User Event - User: {user_id}, Event: {event}, Metadata: {metadata}"
     print(log_message)
