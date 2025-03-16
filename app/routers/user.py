@@ -58,7 +58,7 @@ async def create_user(
         email=user.email,
         hashed_password=hashed_password,
         public_key=user.public_key,
-        **user.model_dump(exclude={"password", "public_key"}),
+        **user.model_dump(exclude={"password", "public_key", "email"}),
     )
     db.add(new_user)
     db.commit()

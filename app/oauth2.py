@@ -82,16 +82,17 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
     """
     Extracts the current session_id from the token.
 
-    - Decodes the token using the secret key.
+    - Decodes the token using the RSA public key.
     - Returns the session_id if present; otherwise, raises HTTPException.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid Credentials",  # تم تعديل الرسالة هنا
+        detail="Invalid Credentials",  # Message in English
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        # Updated to use RSA public key for decoding
+        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
         session_id: str = payload.get("session_id")
         if session_id is None:
             raise credentials_exception
@@ -158,7 +159,7 @@ def get_current_user(
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid Credentials",  # تم تعديل الرسالة هنا
+        detail="Invalid Credentials",  # Message in English
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -168,13 +169,15 @@ def get_current_user(
             raise HTTPException(status_code=403, detail="Your IP address is banned")
 
     try:
-        payload = jwt.decode(
-            token, settings.rsa_public_key, algorithms=[settings.algorithm]
-        )
-        user_id: str = payload.get("user_id")
+        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
         if user_id is None:
             raise credentials_exception
-        token_data = schemas.TokenData(id=user_id)
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            raise credentials_exception
+        token_data = TokenData(id=user_id)
     except JWTError as e:
         logger.error(f"JWT Error: {str(e)}")
         raise credentials_exception
@@ -235,9 +238,7 @@ def get_current_admin(
     - Raises HTTPException if the user does not have admin privileges.
     """
     user = get_current_user(token, db)
-    if (
-        user.role != models.UserRole.ADMIN
-    ):  # تم تعديل المقارنة لتستخدم enum بدلاً من النص
+    if user.role != models.UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
         )
