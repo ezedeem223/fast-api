@@ -38,6 +38,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone, date
 from typing import List, Optional
+import logging
 
 # SpellChecker and language detection
 from spellchecker import SpellChecker
@@ -62,6 +63,7 @@ except ImportError:
 spell = SpellChecker()
 translation_cache = TTLCache(maxsize=1000, ttl=3600)
 cache = TTLCache(maxsize=100, ttl=60)  # Cache for temporary storage
+logger = logging.getLogger(__name__)
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
