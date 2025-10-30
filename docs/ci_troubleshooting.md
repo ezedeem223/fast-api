@@ -15,8 +15,12 @@ the pipeline stopped because the runner's filesystem is full.
 The paths in the error message (`/home/runner/actions-runner/...`) show that the
 failure happened on a **self-hosted GitHub Actions runner**. You must sign in to
 that physical or virtual machine to fix the issue—running the commands on your
-local development laptop or inside a workflow step will not free space on the
-runner.
+local development laptop will not free space on the runner. The repository now
+includes an automated cleanup step in `.github/workflows/build-deploy.yml` that
+prunes Docker caches and deletes stale runner logs before every build, but the
+step can only clean files that are accessible to the workflow user. When the
+underlying host's disk is already full, you still need to connect to the
+machine and remove the excess data manually.
 
 1. Log into the runner host (SSH, remote desktop, etc.) using the same account
    that maintains the Actions runner service.
@@ -27,7 +31,8 @@ runner.
 
 1. **Check disk usage.** Run `df -h` to identify partitions that are full and
    `du -h ~/actions-runner/cached --max-depth=1` to see which cache folders are
-   consuming space.
+   consuming space. If the workflow still fails after the automated cleanup
+   step, these commands reveal what remained.
 2. **Clear old caches and logs.** Remove obsolete workflow workspaces inside
    `~/actions-runner/_work`, delete outdated entries under `~/actions-runner/cached`,
    and truncate or rotate large files in `~/actions-runner/cached/_diag/` (the

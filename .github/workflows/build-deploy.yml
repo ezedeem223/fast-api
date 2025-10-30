@@ -56,6 +56,33 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      - name: Reclaim runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Disk usage before cleanup"
+          df -h
+          # Trim cached diagnostic logs if we are on a self-hosted runner.
+          if [ -d "/home/runner/actions-runner/cached/_diag" ]; then
+            find /home/runner/actions-runner/cached/_diag -type f -name '*.log' -delete || true
+          fi
+          # Drop old workflow workspaces when available on self-hosted infrastructure.
+          if [ -d "/home/runner/actions-runner/_work" ]; then
+            find /home/runner/actions-runner/_work -maxdepth 1 -mindepth 1 -type d -mtime +7 -exec rm -rf {} + || true
+          fi
+          # Remove residual Buildx cache created by previous runs.
+          if [ -d "/tmp/.buildx-cache" ]; then
+            rm -rf /tmp/.buildx-cache || true
+          fi
+          # Free Docker space when the daemon is available (self-hosted runners).
+          if command -v docker >/dev/null 2>&1; then
+            docker system prune -af || true
+            docker volume prune -f || true
+            docker builder prune -af || true
+          fi
+          echo "Disk usage after cleanup"
+          df -h
+
       - name: pulling git repo
         uses: actions/checkout@v2
 
