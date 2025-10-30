@@ -1,135 +1,118 @@
-from sqlalchemy import func
-from datetime import (
-    datetime,
-    timedelta,
-    timezone,
-)  # Added timezone for correct UTC usage
-from . import models
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from .config import settings
-import matplotlib.pyplot as plt
-import seaborn as sns
-import io
+"""Utility helpers for lightweight analytics and reporting.
+
+The original project attempted to pull in a large collection of optional
+dependencies (PyTorch, Transformers, Matplotlib, Seaborn) at import time.
+Those imports frequently fail in minimal environments which makes the
+application hard to bootstrap and test.  The rewritten module keeps the same
+public helpers but implements them using standard library building blocks and
+optional dependencies where appropriate.  When third-party integrations are
+available they are used; otherwise the code falls back to deterministic,
+lightweight heuristics.
+"""
+
+from __future__ import annotations
+
 import base64
-from .models import SearchStatistics, User
+import io
+import json
+import logging
+from collections import Counter
+from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
+from typing import Dict, Iterable, List, Sequence, Tuple
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-# NOTE: Ensure that get_db() is defined in your project or import it accordingly.
-# from .database import get_db
+from . import models
+from .database import get_db
+from .models import SearchStatistics
 
-# Initialize the tokenizer and model for sentiment analysis
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+try:  # Sentiment analysis is optional
+    from transformers import pipeline
+except Exception:  # pragma: no cover - optional dependency
+    pipeline = None
 
-# ------------------------- Content Analysis Functions -------------------------
+try:  # Optional plotting dependencies
+    import matplotlib.pyplot as plt
+except Exception:  # pragma: no cover - optional dependency
+    plt = None
+
+try:  # Optional plotting dependencies
+    import seaborn as sns
+except Exception:  # pragma: no cover - optional dependency
+    sns = None
+
+logger = logging.getLogger(__name__)
+_PLOTTING_AVAILABLE = plt is not None and sns is not None
 
 
-def analyze_sentiment(text):
+def _build_sentiment_pipeline():
+    if not pipeline:
+        return None
+    try:
+        return pipeline("sentiment-analysis")
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Unable to load sentiment pipeline: %s", exc)
+        return None
+
+
+_SENTIMENT_PIPELINE = _build_sentiment_pipeline()
+_POSITIVE_KEYWORDS = {"great", "love", "excellent", "جميل", "رائع"}
+_NEGATIVE_KEYWORDS = {"bad", "hate", "terrible", "سيء", "كريه"}
+
+
+def analyze_sentiment(text: str) -> Dict[str, float | str]:
+    """Return a sentiment score for ``text``.
+
+    When the optional Transformers pipeline is available we delegate to it.  In
+    lightweight environments we fall back to a keyword heuristic that classifies
+    text as positive, negative, or neutral based on simple word matching.
     """
-    Analyze the sentiment of the given text using a pre-trained transformer model.
-    Returns a dictionary with sentiment label and score.
-    """
-    result = sentiment_pipeline(text)[0]
-    return {"sentiment": result["label"], "score": result["score"]}
+
+    if _SENTIMENT_PIPELINE:
+        result = _SENTIMENT_PIPELINE(text)[0]
+        return {
+            "sentiment": result.get("label", "NEUTRAL"),
+            "score": float(result.get("score", 0.0)),
+        }
+
+    lowered = text.lower()
+    tokens = {word.strip(".,!?") for word in lowered.split()}
+    positive_hits = len(tokens & _POSITIVE_KEYWORDS)
+    negative_hits = len(tokens & _NEGATIVE_KEYWORDS)
+    if positive_hits > negative_hits:
+        return {"sentiment": "POSITIVE", "score": 0.6}
+    if negative_hits > positive_hits:
+        return {"sentiment": "NEGATIVE", "score": 0.6}
+    return {"sentiment": "NEUTRAL", "score": 0.5}
 
 
-def suggest_improvements(text, sentiment):
-    """
-    Provide suggestions for improvements based on the sentiment analysis.
-    If the sentiment is negative with high confidence or the text is too short,
-    suggestions are provided to improve the post.
-    """
-    if sentiment["sentiment"] == "NEGATIVE" and sentiment["score"] > 0.8:
+def suggest_improvements(text: str, sentiment: Dict[str, float | str]) -> str:
+    """Provide a simple suggestion message based on ``sentiment``."""
+
+    if sentiment.get("sentiment") == "NEGATIVE" and sentiment.get("score", 0) > 0.8:
         return "Consider rephrasing your post to have a more positive tone."
-    elif len(text.split()) < 10:
+    if len(text.split()) < 10:
         return "Your post seems short. Consider adding more details to engage your audience."
-    else:
-        return "Your post looks good!"
+    return "Your post looks good!"
 
 
-def analyze_content(text):
-    """
-    Analyze the content of the text by determining its sentiment and suggesting improvements.
-    """
+def analyze_content(text: str) -> Dict[str, object]:
+    """Return sentiment and suggestion information for ``text``."""
+
     sentiment = analyze_sentiment(text)
     suggestion = suggest_improvements(text, sentiment)
     return {"sentiment": sentiment, "suggestion": suggestion}
 
 
-# ------------------------- User Activity & Reporting Functions -------------------------
+# ---------------------------------------------------------------------------
+# Search statistics helpers
+# ---------------------------------------------------------------------------
 
+def record_search_query(db: Session, query: str, user_id: int) -> None:
+    """Increment the counter for a search query."""
 
-def get_user_activity(db: Session, user_id: int, days: int = 30):
-    """
-    Retrieve user activity events for the past 'days' days.
-    Returns a dictionary with event types and their respective counts.
-    """
-    end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=days)
-
-    activities = (
-        db.query(
-            models.UserEvent.event_type, func.count(models.UserEvent.id).label("count")
-        )
-        .filter(
-            models.UserEvent.user_id == user_id,
-            models.UserEvent.created_at.between(start_date, end_date),
-        )
-        .group_by(models.UserEvent.event_type)
-        .all()
-    )
-    return {activity.event_type: activity.count for activity in activities}
-
-
-def get_problematic_users(db: Session, threshold: int = 5):
-    """
-    Identify users with a number of valid reports greater than or equal to the threshold within the past 30 days.
-    """
-    subquery = (
-        db.query(
-            models.Report.reported_user_id,
-            func.count(models.Report.id).label("report_count"),
-        )
-        .filter(
-            models.Report.is_valid == True,
-            models.Report.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
-        )
-        .group_by(models.Report.reported_user_id)
-        .subquery()
-    )
-
-    return (
-        db.query(models.User)
-        .join(subquery, models.User.id == subquery.c.reported_user_id)
-        .filter(subquery.c.report_count >= threshold)
-        .all()
-    )
-
-
-def get_ban_statistics(db: Session):
-    """
-    Get overall ban statistics including total bans and average ban duration.
-    """
-    return db.query(
-        func.count(models.UserBan.id).label("total_bans"),
-        func.avg(models.UserBan.duration).label("avg_duration"),
-    ).first()
-
-
-# ------------------------- Search Statistics Functions -------------------------
-
-
-def record_search_query(db: Session, query: str, user_id: int):
-    """
-    Record a search query. If the query exists for the user, increment the count;
-    otherwise, create a new record.
-    """
     search_stat = (
         db.query(SearchStatistics)
         .filter(SearchStatistics.query == query, SearchStatistics.user_id == user_id)
@@ -140,13 +123,11 @@ def record_search_query(db: Session, query: str, user_id: int):
     else:
         search_stat = SearchStatistics(query=query, user_id=user_id)
         db.add(search_stat)
+    search_stat.last_searched = datetime.now(timezone.utc)
     db.commit()
 
 
-def get_popular_searches(db: Session, limit: int = 10):
-    """
-    Retrieve the most popular searches based on the count.
-    """
+def get_popular_searches(db: Session, limit: int = 10) -> List[SearchStatistics]:
     return (
         db.query(SearchStatistics)
         .order_by(SearchStatistics.count.desc())
@@ -155,10 +136,7 @@ def get_popular_searches(db: Session, limit: int = 10):
     )
 
 
-def get_recent_searches(db: Session, limit: int = 10):
-    """
-    Retrieve the most recent search queries.
-    """
+def get_recent_searches(db: Session, limit: int = 10) -> List[SearchStatistics]:
     return (
         db.query(SearchStatistics)
         .order_by(SearchStatistics.last_searched.desc())
@@ -167,10 +145,7 @@ def get_recent_searches(db: Session, limit: int = 10):
     )
 
 
-def get_user_searches(db: Session, user_id: int, limit: int = 10):
-    """
-    Retrieve recent search queries for a specific user.
-    """
+def get_user_searches(db: Session, user_id: int, limit: int = 10) -> List[SearchStatistics]:
     return (
         db.query(SearchStatistics)
         .filter(SearchStatistics.user_id == user_id)
@@ -180,75 +155,111 @@ def get_user_searches(db: Session, user_id: int, limit: int = 10):
     )
 
 
-def clean_old_statistics(db: Session, days: int = 30):
-    """
-    Delete search statistics that are older than the specified number of days.
-    """
-    threshold = datetime.now() - timedelta(days=days)
-    db.query(SearchStatistics).filter(
-        SearchStatistics.last_searched < threshold
-    ).delete()
+def clean_old_statistics(db: Session, days: int = 30) -> None:
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
+    db.query(SearchStatistics).filter(SearchStatistics.last_searched < threshold).delete()
     db.commit()
 
 
-def generate_search_trends_chart():
-    """
-    Generate a line chart showing search trends over time.
-    Returns the chart as a base64 encoded PNG image.
-    """
-    db = next(get_db())  # Ensure get_db() is properly defined in your project
-    data = (
+def summarize_trends(entries: Iterable[SearchStatistics]) -> Dict[str, int]:
+    """Return a frequency table for the supplied search statistics."""
+
+    return Counter(entry.query for entry in entries)
+
+
+@contextmanager
+def _session_scope(db: Session | None):
+    """Yield a database session, creating one if ``db`` is ``None``."""
+
+    if db is not None:
+        yield db
+        return
+
+    generator = get_db()
+    try:
+        session = next(generator)
+    except StopIteration:  # pragma: no cover - defensive
+        yield None
+        return
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Unable to create session for analytics: %s", exc)
+        yield None
+        return
+
+    try:
+        yield session
+    finally:
+        generator.close()
+
+
+def _fetch_trend_rows(db: Session, lookback_days: int) -> Sequence[Tuple[date | datetime, int]]:
+    threshold = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+
+    rows = (
         db.query(
             func.date(SearchStatistics.last_searched).label("date"),
             func.count(SearchStatistics.id).label("count"),
         )
+        .filter(SearchStatistics.last_searched.isnot(None))
+        .filter(SearchStatistics.last_searched >= threshold)
         .group_by(func.date(SearchStatistics.last_searched))
         .order_by("date")
         .all()
     )
 
-    dates = [row.date for row in data]
-    counts = [row.count for row in data]
-
-    plt.figure(figsize=(12, 6))
-    sns.lineplot(x=dates, y=counts)
-    plt.title("Search Trends Over Time")
-    plt.xlabel("Date")
-    plt.ylabel("Number of Searches")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png")
-    buffer.seek(0)
-    image_png = buffer.getvalue()
-    buffer.close()
-
-    graphic = base64.b64encode(image_png)
-    graphic = graphic.decode("utf-8")
-    return graphic
+    return [(row.date, int(row.count)) for row in rows]
 
 
-# ------------------------- Conversation Statistics Function -------------------------
+def _render_chart(records: Sequence[Tuple[date | datetime, int]]) -> str:
+    if records and _PLOTTING_AVAILABLE:
+        dates = [row[0] for row in records]
+        counts = [row[1] for row in records]
+        plt.figure(figsize=(10, 5))
+        sns.lineplot(x=dates, y=counts, marker="o")
+        plt.title("Search Trends Over Time")
+        plt.xlabel("Date")
+        plt.ylabel("Number of Searches")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format="png")
+        plt.close()
+        buffer.seek(0)
+        graphic = base64.b64encode(buffer.read()).decode("utf-8")
+        buffer.close()
+        return graphic
+
+    serialisable = [
+        {"date": getattr(date, "isoformat", lambda: str(date))(), "count": count}
+        for date, count in records
+    ]
+    return json.dumps({"series": serialisable})
 
 
-def update_conversation_statistics(
-    db: Session, conversation_id: str, new_message: models.Message
-):
-    """
-    Update conversation statistics based on a new message.
-    - Increments total messages.
-    - Updates the last message time.
-    - Increments counters for attachments, emojis, and stickers.
-    - Calculates response time based on the previous message.
-    """
+def generate_search_trends_chart(lookback_days: int = 30, db: Session | None = None) -> str:
+    """Return a base64-encoded PNG chart or JSON representation of search trends."""
+
+    with _session_scope(db) as session:
+        if session is None:
+            records: Sequence[Tuple[datetime, int]] = []
+        else:
+            records = _fetch_trend_rows(session, lookback_days)
+
+    return _render_chart(records)
+
+
+# ---------------------------------------------------------------------------
+# Conversation & moderation statistics
+# ---------------------------------------------------------------------------
+
+def update_conversation_statistics(db: Session, conversation_id: str, new_message: models.Message) -> None:
     stats = (
         db.query(models.ConversationStatistics)
         .filter(models.ConversationStatistics.conversation_id == conversation_id)
         .first()
     )
 
-    # If no statistics exist for this conversation, create a new record.
     if not stats:
         stats = models.ConversationStatistics(
             conversation_id=conversation_id,
@@ -265,19 +276,16 @@ def update_conversation_statistics(
         )
         db.add(stats)
 
-    # Update basic statistics
     stats.total_messages += 1
     stats.last_message_at = func.now()
 
-    # Update counts for attachments, emojis, and stickers
     if new_message.attachments:
         stats.total_files += len(new_message.attachments)
-    if new_message.has_emoji:
+    if getattr(new_message, "has_emoji", False):
         stats.total_emojis += 1
-    if hasattr(new_message, "message_type") and new_message.message_type == "sticker":
+    if getattr(new_message, "message_type", "") == "sticker":
         stats.total_stickers += 1
 
-    # Calculate response time if a previous message exists
     last_message = (
         db.query(models.Message)
         .filter(
@@ -292,6 +300,72 @@ def update_conversation_statistics(
         time_diff = (new_message.created_at - last_message.created_at).total_seconds()
         stats.total_response_time += time_diff
         stats.total_responses += 1
-        stats.average_response_time = stats.total_response_time / stats.total_responses
+        stats.average_response_time = stats.total_response_time / max(stats.total_responses, 1)
 
     db.commit()
+
+
+def get_problematic_users(db: Session, threshold: int = 5):
+    subquery = (
+        db.query(
+            models.Report.reported_user_id,
+            func.count(models.Report.id).label("report_count"),
+        )
+        .filter(
+            models.Report.is_valid.is_(True),
+            models.Report.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+        )
+        .group_by(models.Report.reported_user_id)
+        .subquery()
+    )
+
+    return (
+        db.query(models.User)
+        .join(subquery, models.User.id == subquery.c.reported_user_id)
+        .filter(subquery.c.report_count >= threshold)
+        .all()
+    )
+
+
+def get_ban_statistics(db: Session):
+    return db.query(
+        func.count(models.UserBan.id).label("total_bans"),
+        func.avg(models.UserBan.duration).label("avg_duration"),
+    ).first()
+
+
+def get_user_activity(db: Session, user_id: int, days: int = 30):
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+
+    activities = (
+        db.query(
+            models.UserEvent.event_type,
+            func.count(models.UserEvent.id).label("count"),
+        )
+        .filter(
+            models.UserEvent.user_id == user_id,
+            models.UserEvent.created_at.between(start_date, end_date),
+        )
+        .group_by(models.UserEvent.event_type)
+        .all()
+    )
+    return {activity.event_type: activity.count for activity in activities}
+
+
+__all__ = [
+    "analyze_content",
+    "analyze_sentiment",
+    "clean_old_statistics",
+    "get_ban_statistics",
+    "get_popular_searches",
+    "get_problematic_users",
+    "get_recent_searches",
+    "get_user_activity",
+    "get_user_searches",
+    "generate_search_trends_chart",
+    "record_search_query",
+    "suggest_improvements",
+    "summarize_trends",
+    "update_conversation_statistics",
+]

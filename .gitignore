@@ -14,3 +14,4 @@ public_key
 private_key
 env.
 venv
+test_app.db

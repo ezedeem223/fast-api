@@ -462,6 +462,12 @@ class User(Base):
         back_populates="reporter",
         cascade="all, delete-orphan",
     )
+    reports_received = relationship(
+        "Report",
+        foreign_keys="Report.reported_user_id",
+        back_populates="reported_user",
+        cascade="all, delete-orphan",
+    )
     followers = relationship(
         "Follow",
         back_populates="followed",
@@ -1415,6 +1421,9 @@ class Report(Base):
     reporter_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    reported_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -1432,6 +1441,9 @@ class Report(Base):
     # التعديل هنا: تحديد عمود المفتاح الأجنبي بوضوح لعلاقة المستخدم الذي قام بالإبلاغ
     reporter = relationship(
         "User", foreign_keys=[reporter_id], back_populates="reports"
+    )
+    reported_user = relationship(
+        "User", foreign_keys=[reported_user_id], back_populates="reports_received"
     )
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     post = relationship("Post", back_populates="reports")
