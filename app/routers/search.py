@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import or_, and_, func
 import json
 
-from .. import models, database, schemas, oauth2
+from .. import database, models, oauth2, schemas
 from ..database import get_db
 from ..utils import (
     search_posts,
@@ -24,6 +24,10 @@ from ..analytics import (
 )
 
 router = APIRouter(prefix="/search", tags=["Search"])
+
+
+def _get_cache():
+    return getattr(database.settings, "redis_client", None)
 
 
 @router.post("/", response_model=SearchResponse)
@@ -45,11 +49,11 @@ async def search(
     Returns a SearchResponse with results, spell suggestion, and search suggestions.
     """
     cache_key = f"search:{search_params.query}:{search_params.sort_by}"
-    cached_result = database.settings.redis_client.get(
-        cache_key
-    )  # assuming redis_client exists in settings
-    if cached_result:
-        return json.loads(cached_result)
+    cache = _get_cache()
+    if cache:
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return json.loads(cached_result)
 
     # Record the search query
     record_search_query(db, search_params.query, current_user.id)
@@ -73,10 +77,8 @@ async def search(
         "search_suggestions": search_suggestions,
     }
 
-    if results:
-        database.settings.redis_client.setex(
-            cache_key, 3600, json.dumps(search_response)
-        )
+    if results and cache:
+        cache.setex(cache_key, 3600, json.dumps(search_response))
 
     return search_response
 
@@ -167,9 +169,11 @@ async def autocomplete(
     - Orders by frequency and caches results for 5 minutes.
     """
     cache_key = f"autocomplete:{query}"
-    cached_result = database.settings.redis_client.get(cache_key)
-    if cached_result:
-        return json.loads(cached_result)
+    cache = _get_cache()
+    if cache:
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return json.loads(cached_result)
 
     suggestions = (
         db.query(models.SearchSuggestion)
@@ -180,9 +184,8 @@ async def autocomplete(
     )
 
     result = [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
-    database.settings.redis_client.setex(
-        cache_key, 300, json.dumps([s.dict() for s in result])
-    )
+    if cache:
+        cache.setex(cache_key, 300, json.dumps([s.dict() for s in result]))
 
     return result
 

@@ -895,6 +895,32 @@ class NotificationPreferencesOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ================================================================
+# Insight and Growth Analytics Models
+# Lightweight schemas that power the Insights API.
+# ================================================================
+
+
+class CohortInput(BaseModel):
+    """Describe an onboarding cohort for retention analysis."""
+
+    start_date: date
+    size: int = Field(..., ge=0)
+    returning: int = Field(..., ge=0)
+
+
+class InsightsRequest(BaseModel):
+    """Structured payload used by the insights endpoints."""
+
+    daily_active_users: List[int] = Field(..., min_length=1)
+    new_signups: List[int] = Field(..., min_length=1)
+    churned_users: List[int] = Field(default_factory=list)
+    feature_usage: Dict[str, int] = Field(default_factory=dict)
+    cohorts: List[CohortInput] = Field(default_factory=list)
+    sentiment_score: float = Field(0.5, ge=0.0, le=1.0)
+    feedback_samples: List[str] = Field(default_factory=list)
+
+
 # Amenhotep (chatbot or analytics) models
 class AmenhotepMessageCreate(BaseModel):
     message: str
@@ -1988,13 +2014,12 @@ class StickerReport(StickerReportBase):
 # Resolve Forward References
 # This section ensures that forward references are updated.
 # ================================================================
-Message.update_forward_refs()
+Message.model_rebuild()
 CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
 PostOut.model_rebuild()
-PostOut.update_forward_refs()
-Comment.update_forward_refs()
+Comment.model_rebuild()
 CommunityInvitationOut.model_rebuild()
 
 # ================================================================

@@ -22,15 +22,12 @@ from better_profanity import profanity
 import validators
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
-import nltk
-from nltk.corpus import stopwords
 import joblib
 from functools import wraps, lru_cache
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, desc, asc, or_
 from . import models, schemas
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from .config import settings
 import secrets
 from cryptography.fernet import Fernet
@@ -40,6 +37,18 @@ from datetime import datetime, timezone, date
 from typing import List, Optional
 import logging
 from sqlalchemy.exc import ProgrammingError
+
+try:
+    import nltk
+    from nltk.corpus import stopwords
+except Exception:  # pragma: no cover - the download may fail in CI environments
+    nltk = None
+    stopwords = None
+
+try:  # Transformers are optional in lightweight environments
+    from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+except Exception:  # pragma: no cover - optional dependency
+    pipeline = AutoTokenizer = AutoModelForSequenceClassification = None
 
 # SpellChecker and language detection
 from spellchecker import SpellChecker
@@ -51,7 +60,7 @@ from .link_preview import extract_link_preview
 
 try:
     from .translation import translate_text
-except ImportError:
+except ImportError:  # pragma: no cover - translation module is optional
 
     async def translate_text(text: str, source_lang: str, target_lang: str):
         raise NotImplementedError("translate_text function is not implemented.")
@@ -68,25 +77,62 @@ logger = logging.getLogger(__name__)
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
 
-# Offensive content classifier initialization using Hugging Face model
+
+def _load_transformer_pipeline(task: str, model_name: str, **kwargs):
+    if not pipeline or getattr(settings, "testing", False):
+        return None
+    try:
+        return pipeline(task, model=model_name, **kwargs)
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Unable to load transformer pipeline %s: %s", model_name, exc)
+        return None
+
+
+def _ensure_stopwords() -> List[str]:
+    if not stopwords or not nltk:
+        return []
+    try:
+        nltk.data.find("corpora/stopwords")
+    except LookupError:  # pragma: no cover - download is best-effort
+        try:
+            nltk.download("stopwords", quiet=True)
+        except Exception as exc:
+            logger.warning("Failed to download NLTK stopwords: %s", exc)
+            return []
+    try:
+        return stopwords.words("english")
+    except LookupError:
+        return []
+
+
+spell_stop_words = _ensure_stopwords()
+
 model_name = "cardiffnlp/twitter-roberta-base-offensive"
-offensive_classifier = pipeline(
+offensive_classifier = _load_transformer_pipeline(
     "text-classification",
-    model=model_name,
+    model_name,
     device=0 if getattr(settings, "USE_GPU", False) else -1,
 )
 
-# Password hashing configuration using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+
+if AutoTokenizer and AutoModelForSequenceClassification:
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            "distilbert-base-uncased-finetuned-sst-2-english"
+        )
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "distilbert-base-uncased-finetuned-sst-2-english"
+        )
+        sentiment_pipeline = pipeline(
+            "sentiment-analysis", model=model, tokenizer=tokenizer
+        )
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Unable to load sentiment model: %s", exc)
+        tokenizer = model = sentiment_pipeline = None
+else:
+    tokenizer = model = sentiment_pipeline = None
 
 
 # ============================================
@@ -125,7 +171,8 @@ def train_content_classifier():
     """Trains a simple content classifier using dummy data. Replace dummy data with real data in production."""
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
     y = [0, 1, 0]
-    vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
+    stop_words = spell_stop_words if spell_stop_words else None
+    vectorizer = CountVectorizer(stop_words=stop_words)
     X_vectorized = vectorizer.fit_transform(X)
     classifier = MultinomialNB()
     classifier.fit(X_vectorized, y)
@@ -405,9 +452,11 @@ def is_content_offensive(text: str) -> tuple:
     Determines if the text is offensive using an AI model.
     Returns a tuple (is_offensive, score) where is_offensive is a boolean.
     """
+    if not offensive_classifier:
+        return False, 0.0
     result = offensive_classifier(text)[0]
-    is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
-    return is_offensive, result["score"]
+    is_offensive = result.get("label") == "LABEL_1" and result.get("score", 0) > 0.8
+    return is_offensive, result.get("score", 0.0)
 
 
 # ============================================
@@ -510,7 +559,7 @@ def update_search_vector():
     """
     from sqlalchemy import create_engine
 
-    engine = create_engine(settings.DATABASE_URL)
+    engine = create_engine(settings.sqlalchemy_database_uri)
     with engine.connect() as conn:
         conn.execute(
             text(
@@ -588,9 +637,12 @@ def analyze_user_behavior(user_history, content: str) -> float:
     Returns a relevance score.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]
-    sentiment = result["label"]
-    score = result["score"]
+    sentiment = "NEUTRAL"
+    score = 0.0
+    if sentiment_pipeline:
+        result = sentiment_pipeline(content[:512])[0]
+        sentiment = result.get("label", "NEUTRAL")
+        score = float(result.get("score", 0.0))
     relevance_score = sum(
         1 for word in content.lower().split() if word in user_interests
     )

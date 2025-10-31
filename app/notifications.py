@@ -169,6 +169,7 @@ class NotificationBatcher:
         """
         Adds a notification to the batch and flushes if batch size or wait time is reached.
         """
+        should_flush = False
         async with self._lock:
             self.batch.append(notification)
             if (
@@ -176,7 +177,9 @@ class NotificationBatcher:
                 or (datetime.now(timezone.utc) - self._last_flush).total_seconds()
                 >= self.max_wait_time
             ):
-                await self.flush()
+                should_flush = True
+        if should_flush:
+            await self.flush()
 
     async def flush(self) -> None:
         """
@@ -185,11 +188,10 @@ class NotificationBatcher:
         async with self._lock:
             if not self.batch:
                 return
-            try:
-                await self._process_batch(self.batch)
-            finally:
-                self.batch = []
-                self._last_flush = datetime.now(timezone.utc)
+            pending = list(self.batch)
+            self.batch = []
+            self._last_flush = datetime.now(timezone.utc)
+        await self._process_batch(pending)
 
     async def _process_batch(self, notifications: List[dict]) -> None:
         """
