@@ -11,7 +11,7 @@ analytics, and retry mechanisms.
 from fastapi import BackgroundTasks, WebSocket, HTTPException
 from fastapi_mail import MessageSchema
 from pydantic import EmailStr
-from typing import List, Union, Optional, Dict, Any
+from typing import Iterable, List, Optional, Sequence, Union, Dict, Any
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
@@ -100,15 +100,92 @@ def handle_async_errors(func):
 # ============================================
 # Email Notification Function
 # ============================================
-@handle_async_errors
-async def send_email_notification(message: MessageSchema) -> None:
-    """
-    Sends an email notification using the fastapi_mail instance (fm).
+def _coerce_recipients(
+    to: Union[str, EmailStr, Sequence[Union[str, EmailStr]]]
+) -> List[str]:
+    """Normalize the recipient input into a list of strings."""
 
-    Raises an exception if sending fails.
-    """
+    if isinstance(to, (str, EmailStr)):
+        return [str(to)]
+
+    if isinstance(to, Iterable):
+        recipients: List[str] = []
+        for value in to:
+            if value is None:
+                continue
+            recipients.append(str(value))
+        if not recipients:
+            raise ValueError("At least one non-empty recipient email is required")
+        return recipients
+
+    raise TypeError("'to' must be a string email or a sequence of emails")
+
+
+@handle_async_errors
+async def _deliver_email_message(message: MessageSchema) -> None:
+    """Send the composed email message using FastAPI Mail."""
+
     await fm.send_message(message)
     logger.info("Email notification sent successfully")
+
+
+def send_email_notification(
+    message: Optional[MessageSchema] = None,
+    *,
+    to: Optional[Union[str, EmailStr, Sequence[Union[str, EmailStr]]]] = None,
+    subject: Optional[str] = None,
+    body: Optional[str] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+    subtype: str = "html",
+    reply_to: Optional[Union[str, EmailStr]] = None,
+    cc: Optional[Sequence[Union[str, EmailStr]]] = None,
+    bcc: Optional[Sequence[Union[str, EmailStr]]] = None,
+    attachments: Optional[Sequence[Any]] = None,
+) -> Optional[Any]:
+    """Flexible email sender that supports both immediate and background delivery."""
+
+    original_to = to
+
+    if message is None:
+        if to is None or subject is None or body is None:
+            raise ValueError(
+                "When no MessageSchema is provided, 'to', 'subject', and 'body' are required"
+            )
+
+        recipients = _coerce_recipients(to)
+        message = MessageSchema(
+            subject=subject,
+            recipients=recipients,
+            body=body,
+            subtype=subtype,
+            cc=list(map(str, cc)) if cc else [],
+            bcc=list(map(str, bcc)) if bcc else [],
+            reply_to=[str(reply_to)] if reply_to else [],
+            attachments=list(attachments) if attachments else [],
+        )
+    else:
+        # Allow passing a pre-built MessageSchema while still supporting scheduling.
+        recipients = to if to is not None else message.recipients
+        subject = subject or message.subject
+        body = body or message.body
+
+    if background_tasks is not None:
+        background_tasks.add_task(
+            send_email_notification,
+            message=message,
+            to=original_to if original_to is not None else recipients,
+            subject=subject,
+            body=body,
+            subtype=subtype,
+            reply_to=reply_to,
+            cc=cc,
+            bcc=bcc,
+            attachments=attachments,
+        )
+        return None
+
+    # Return the coroutine so callers in async contexts can await the delivery.
+    return _deliver_email_message(message)
 
 
 # ============================================
