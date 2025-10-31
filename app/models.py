@@ -34,6 +34,69 @@ import enum
 from datetime import date, timedelta
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy.types import TypeDecorator
+import json
+
+# -------------------------
+# Type helpers
+# -------------------------
+
+
+class FlexibleArray(TypeDecorator):
+    """Cross-database array storage using PostgreSQL ARRAY or JSON serialization."""
+
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, item_type, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.item_type = item_type
+
+    def load_dialect_impl(self, dialect):  # pragma: no cover - SQLAlchemy hook
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(ARRAY(self.item_type))
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):  # pragma: no cover - SQLAlchemy hook
+        if value is None:
+            return value
+        if dialect.name == "postgresql":
+            return value
+        return json.dumps(value)
+
+    def process_result_value(self, value, dialect):  # pragma: no cover - SQLAlchemy hook
+        if value is None:
+            return value
+        if dialect.name == "postgresql":
+            return value
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            return value
+
+
+class FlexibleJSONB(TypeDecorator):
+    """Use native JSONB on PostgreSQL and JSON elsewhere."""
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # pragma: no cover - SQLAlchemy hook
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+
+class FlexibleTSVector(TypeDecorator):
+    """Provide TSVECTOR support on PostgreSQL and TEXT elsewhere."""
+
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # pragma: no cover - SQLAlchemy hook
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(TSVECTOR())
+        return dialect.type_descriptor(Text())
 
 # -------------------------
 # Association Tables
@@ -396,10 +459,10 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     failed_login_attempts = Column(Integer, default=0)
     account_locked_until = Column(DateTime(timezone=True), nullable=True)
-    skills = Column(ARRAY(String), nullable=True)
-    interests = Column(ARRAY(String), nullable=True)
-    ui_settings = Column(JSONB, default={})
-    notifications_settings = Column(JSONB, default={})
+    skills = Column(FlexibleArray(String), nullable=True)
+    interests = Column(FlexibleArray(String), nullable=True)
+    ui_settings = Column(FlexibleJSONB, default={})
+    notifications_settings = Column(FlexibleJSONB, default={})
     user_type = Column(
         SQLAlchemyEnum(UserType, name="user_type_enum"), default=UserType.PERSONAL
     )
@@ -427,7 +490,7 @@ class User(Base):
     interaction_count = Column(Integer, default=0)
     followers_count = Column(Integer, default=0)
     following_count = Column(Integer, default=0)
-    followers_growth = Column(ARRAY(Integer), default=list)
+    followers_growth = Column(FlexibleArray(Integer), default=list)
     comment_count = Column(Integer, default=0)
     warning_count = Column(Integer, default=0)
     last_warning_date = Column(DateTime(timezone=True), nullable=True)
@@ -615,13 +678,13 @@ class SocialMediaPost(Base):
     title = Column(String, nullable=True)
     content = Column(Text, nullable=False)
     platform_post_id = Column(String, nullable=True)
-    media_urls = Column(ARRAY(String), nullable=True)
+    media_urls = Column(FlexibleArray(String), nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     status = Column(SQLAlchemyEnum(PostStatus), default=PostStatus.DRAFT)
     error_message = Column(Text, nullable=True)
     # Renamed column to avoid conflict with reserved keyword.
-    post_metadata = Column(JSONB, default={})
-    engagement_stats = Column(JSONB, default={})
+    post_metadata = Column(FlexibleJSONB, default={})
+    engagement_stats = Column(FlexibleJSONB, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -815,13 +878,13 @@ class Post(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)
     is_flagged = Column(Boolean, default=False)
     flag_reason = Column(String, nullable=True)
-    search_vector = Column(TSVECTOR)
+    search_vector = Column(FlexibleTSVector)
     share_scope = Column(String, default="public")  # Options: public, community, group
     shared_with_community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
     )
     score = Column(Float, default=0.0, index=True)
-    sharing_settings = Column(JSONB, default={})  # Advanced sharing settings
+    sharing_settings = Column(FlexibleJSONB, default={})  # Advanced sharing settings
 
     __table_args__ = (
         Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
@@ -878,7 +941,7 @@ class NotificationPreferences(Base):
     in_app_notifications = Column(Boolean, default=True)
     quiet_hours_start = Column(Time, nullable=True)
     quiet_hours_end = Column(Time, nullable=True)
-    categories_preferences = Column(JSONB, default={})
+    categories_preferences = Column(FlexibleJSONB, default={})
     notification_frequency = Column(
         String, default="realtime"
     )  # Options: realtime, hourly, daily, weekly
@@ -1039,7 +1102,7 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    notification_metadata = Column(JSONB, default={})
+    notification_metadata = Column(FlexibleJSONB, default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -1050,14 +1113,14 @@ class Notification(Base):
     importance_level = Column(Integer, default=1)
     seen_at = Column(DateTime(timezone=True), nullable=True)
     interaction_count = Column(Integer, default=0)
-    custom_data = Column(JSONB, default={})
-    device_info = Column(JSONB, nullable=True)
+    custom_data = Column(FlexibleJSONB, default={})
+    device_info = Column(FlexibleJSONB, nullable=True)
     notification_channel = Column(String, default="in_app")
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
-    delivery_tracking = Column(JSONB, default={})
+    delivery_tracking = Column(FlexibleJSONB, default={})
     retry_strategy = Column(
         String, nullable=True
     )  # خيارات مثل "exponential" أو "linear"
@@ -1122,7 +1185,7 @@ class NotificationDeliveryAttempt(Base):
     delivery_channel = Column(String, nullable=False)
     response_time = Column(Float)  # In seconds
     # Renamed column to avoid reserved keyword conflict.
-    attempt_metadata = Column(JSONB, default={})
+    attempt_metadata = Column(FlexibleJSONB, default={})
 
     notification = relationship("Notification", back_populates="delivery_attempts_rel")
 
@@ -1148,8 +1211,8 @@ class NotificationAnalytics(Base):
     last_delivery_attempt = Column(DateTime(timezone=True), onupdate=func.now())
     successful_delivery = Column(Boolean, default=False)
     delivery_channel = Column(String)
-    device_info = Column(JSONB, default={})
-    performance_metrics = Column(JSONB, default={})
+    device_info = Column(FlexibleJSONB, default={})
+    performance_metrics = Column(FlexibleJSONB, default={})
 
     notification = relationship("Notification", back_populates="analytics")
 
@@ -1281,7 +1344,7 @@ class AmenhotepChatAnalytics(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
-    topics_discussed = Column(ARRAY(String), default=list)
+    topics_discussed = Column(FlexibleArray(String), default=list)
     session_duration = Column(Integer)  # in seconds
     satisfaction_score = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
