@@ -68,25 +68,123 @@ logger = logging.getLogger(__name__)
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
 
-# Offensive content classifier initialization using Hugging Face model
+_OFFENSIVE_KEYWORDS = {
+    "abuse",
+    "attack",
+    "ban",
+    "bloody",
+    "hate",
+    "idiot",
+    "kill",
+    "loser",
+    "racist",
+    "stupid",
+}
+
+_POSITIVE_TOKENS = {
+    "amazing",
+    "awesome",
+    "excellent",
+    "good",
+    "great",
+    "love",
+    "nice",
+    "positive",
+    "support",
+    "wonderful",
+}
+
+_NEGATIVE_TOKENS = {
+    "awful",
+    "bad",
+    "boring",
+    "disappointing",
+    "hate",
+    "poor",
+    "terrible",
+    "toxic",
+    "ugly",
+    "worst",
+}
+
+# Offensive content classifier initialization using Hugging Face model with graceful fallback
 model_name = "cardiffnlp/twitter-roberta-base-offensive"
-offensive_classifier = pipeline(
-    "text-classification",
-    model=model_name,
-    device=0 if getattr(settings, "USE_GPU", False) else -1,
-)
+try:
+    offensive_classifier = pipeline(
+        "text-classification",
+        model=model_name,
+        device=0 if getattr(settings, "USE_GPU", False) else -1,
+    )
+except Exception as exc:  # pragma: no cover - defensive fallback
+    logger.warning(
+        "Offensive classifier unavailable, falling back to keyword heuristic: %s",
+        exc,
+    )
+    offensive_classifier = None
 
 # Password hashing configuration using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+try:
+    tokenizer = AutoTokenizer.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+except Exception as exc:  # pragma: no cover - defensive fallback
+    logger.warning(
+        "Sentiment pipeline unavailable, using keyword heuristic: %s",
+        exc,
+    )
+    tokenizer = model = None
+    sentiment_pipeline = None
+
+
+def keyword_sentiment(text: str) -> tuple[str, float]:
+    """Estimate sentiment using simple keyword heuristics when ML models are unavailable."""
+
+    tokens = re.findall(r"[\w']+", text.lower())
+    pos_hits = sum(1 for token in tokens if token in _POSITIVE_TOKENS)
+    neg_hits = sum(1 for token in tokens if token in _NEGATIVE_TOKENS)
+    total_hits = pos_hits + neg_hits
+
+    if total_hits == 0:
+        return "NEUTRAL", 0.0
+
+    score = abs(pos_hits - neg_hits) / total_hits
+    label = "POSITIVE" if pos_hits >= neg_hits else "NEGATIVE"
+    return label, min(1.0, max(0.0, score))
+
+
+def _keyword_offensive_detection(text: str) -> tuple[bool, float]:
+    """Lightweight fallback for offensive content detection using keyword spotting."""
+
+    lowered = text.lower()
+    hits = sum(1 for keyword in _OFFENSIVE_KEYWORDS if keyword in lowered)
+    if profanity.contains_profanity(text):
+        hits += 1
+    if hits == 0:
+        return False, 0.0
+    score = min(1.0, 0.2 * hits)
+    return True, score
+
+
+def _resolve_sentiment(text: str) -> tuple[str, float]:
+    """Return sentiment label and score using the transformer pipeline or heuristics."""
+
+    if sentiment_pipeline is not None:
+        try:
+            result = sentiment_pipeline(text)[0]
+            return result["label"], float(result["score"])
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning(
+                "Sentiment pipeline failed, falling back to keyword heuristic: %s",
+                exc,
+            )
+    return keyword_sentiment(text)
 
 
 # ============================================
@@ -405,9 +503,17 @@ def is_content_offensive(text: str) -> tuple:
     Determines if the text is offensive using an AI model.
     Returns a tuple (is_offensive, score) where is_offensive is a boolean.
     """
-    result = offensive_classifier(text)[0]
-    is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
-    return is_offensive, result["score"]
+    if offensive_classifier is not None:
+        try:
+            result = offensive_classifier(text)[0]
+            is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
+            return is_offensive, float(result["score"])
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning(
+                "Offensive classifier failed, using keyword heuristic: %s",
+                exc,
+            )
+    return _keyword_offensive_detection(text)
 
 
 # ============================================
@@ -588,9 +694,7 @@ def analyze_user_behavior(user_history, content: str) -> float:
     Returns a relevance score.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]
-    sentiment = result["label"]
-    score = result["score"]
+    sentiment, score = _resolve_sentiment(content[:512])
     relevance_score = sum(
         1 for word in content.lower().split() if word in user_interests
     )

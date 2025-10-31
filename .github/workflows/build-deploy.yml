@@ -54,8 +54,19 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-large
     steps:
+      - name: Reclaim disk space on runner
+        shell: bash
+        run: |
+          echo "==> Removing unused SDKs and cached archives to free space"
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /home/linuxbrew/.linuxbrew
+          docker system prune --all --force --volumes || true
+          df -h
       - name: pulling git repo
         uses: actions/checkout@v2
 

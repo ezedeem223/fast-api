@@ -4,9 +4,9 @@ from datetime import (
     timedelta,
     timezone,
 )  # Added timezone for correct UTC usage
+import logging
 from . import models
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
 from .config import settings
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,18 +14,29 @@ import io
 import base64
 from .models import SearchStatistics, User
 from sqlalchemy.orm import Session
+from .utils import keyword_sentiment
 
 # NOTE: Ensure that get_db() is defined in your project or import it accordingly.
 # from .database import get_db
 
-# Initialize the tokenizer and model for sentiment analysis
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+logger = logging.getLogger(__name__)
+
+# Initialize the tokenizer and model for sentiment analysis with graceful fallback
+try:
+    tokenizer = AutoTokenizer.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+except Exception as exc:  # pragma: no cover - defensive fallback
+    logger.warning(
+        "Analytics sentiment pipeline unavailable, using keyword heuristic: %s",
+        exc,
+    )
+    tokenizer = model = None
+    sentiment_pipeline = None
 
 # ------------------------- Content Analysis Functions -------------------------
 
@@ -35,8 +46,17 @@ def analyze_sentiment(text):
     Analyze the sentiment of the given text using a pre-trained transformer model.
     Returns a dictionary with sentiment label and score.
     """
-    result = sentiment_pipeline(text)[0]
-    return {"sentiment": result["label"], "score": result["score"]}
+    if sentiment_pipeline is not None:
+        try:
+            result = sentiment_pipeline(text)[0]
+            return {"sentiment": result["label"], "score": float(result["score"])}
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning(
+                "Analytics sentiment pipeline failed, using keyword heuristic: %s",
+                exc,
+            )
+    label, score = keyword_sentiment(text)
+    return {"sentiment": label, "score": score}
 
 
 def suggest_improvements(text, sentiment):
