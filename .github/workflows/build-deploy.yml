@@ -54,7 +54,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04-large
     steps:
       - name: Reclaim disk space on runner
         shell: bash
