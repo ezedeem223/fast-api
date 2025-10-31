@@ -18,7 +18,7 @@ that physical or virtual machine to fix the issue—running the commands on your
 local development laptop will not free space on the runner. The repository now
 includes an automated cleanup step in `.github/workflows/build-deploy.yml` that
 prunes Docker caches and deletes stale runner logs before every build, and the
-workflow requests a larger GitHub-hosted runner (`ubuntu-latest-4-cores`) to
+workflow requests a larger GitHub-hosted runner (`ubuntu-latest-8-cores`) to
 increase available disk space. These safeguards lessen the chance of
 interruptions, but the step can only clean files that are accessible to the
 workflow user. When the underlying host's disk is already full, you still need
