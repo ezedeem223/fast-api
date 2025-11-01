@@ -50,6 +50,53 @@ MAX_PINNED_POSTS = 5
 MAX_RULES = 20
 ACTIVITY_THRESHOLD_VIP = 1000
 INACTIVE_DAYS_THRESHOLD = 30
+DEFAULT_CATEGORY_NAME = "General"
+DEFAULT_CATEGORY_DESCRIPTION = "Fallback category created automatically for tests and demos."
+
+
+def _ensure_default_category(db: Session) -> models.Category:
+    """Return an existing default category or create one for convenience tests."""
+
+    default_category = (
+        db.query(models.Category)
+        .filter(func.lower(models.Category.name) == DEFAULT_CATEGORY_NAME.lower())
+        .first()
+    )
+    if default_category:
+        return default_category
+
+    default_category = models.Category(
+        name=DEFAULT_CATEGORY_NAME,
+        description=DEFAULT_CATEGORY_DESCRIPTION,
+    )
+    db.add(default_category)
+    db.commit()
+    db.refresh(default_category)
+    return default_category
+
+
+def _get_or_create_community_category(
+    db: Session, category: models.Category
+) -> models.CommunityCategory:
+    """Link a community to a reusable community category wrapper."""
+
+    community_category = (
+        db.query(models.CommunityCategory)
+        .filter(func.lower(models.CommunityCategory.name) == category.name.lower())
+        .first()
+    )
+    if community_category:
+        return community_category
+
+    community_category = models.CommunityCategory(
+        name=category.name,
+        description=category.description,
+        category_id=category.id,
+    )
+    db.add(community_category)
+    db.commit()
+    db.refresh(community_category)
+    return community_category
 
 
 # =====================================================
@@ -170,6 +217,46 @@ def update_community_statistics(db: Session, community_id: int):
 
 
 # =====================================================
+# =============== Shared query helpers =================
+# =====================================================
+def _community_query(db: Session):
+    """Prepare a community query with the relationships required by the API tests."""
+
+    return db.query(models.Community).options(
+        joinedload(models.Community.owner),
+        joinedload(models.Community.members).joinedload(models.CommunityMember.user),
+        joinedload(models.Community.rules),
+        joinedload(models.Community.tags),
+        joinedload(models.Community.community_category).joinedload(
+            models.CommunityCategory.category
+        ),
+    )
+
+
+def _get_community_or_404(db: Session, community_id: int) -> models.Community:
+    """Fetch a community with eager relationships or raise a 404 error."""
+
+    community = (
+        _community_query(db).filter(models.Community.id == community_id).first()
+    )
+    if not community:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Community not found")
+    return community
+
+
+def _get_membership(community: models.Community, user_id: int) -> Optional[models.CommunityMember]:
+    """Return the membership record for the given user if they belong to the community."""
+
+    return next((member for member in community.members if member.user_id == user_id), None)
+
+
+def _user_display_name(user: models.User) -> str:
+    """Return a friendly identifier for notification messages."""
+
+    return getattr(user, "username", None) or getattr(user, "account_username", None) or user.email
+
+
+# =====================================================
 # ==================== Community Endpoints ============
 # =====================================================
 
@@ -188,8 +275,14 @@ async def create_community(
 ):
     """
     Create a new community with permission checks and basic settings.
+
+    When callers omit the category, the endpoint automatically assigns a
+    reusable "General" category to keep the API ergonomic for tests and demos.
     """
-    if not current_user.is_verified:
+    if (
+        settings.require_verified_for_community_creation
+        and not current_user.is_verified
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account must be verified to create a community",
@@ -206,19 +299,21 @@ async def create_community(
             detail=f"You cannot create more than {settings.MAX_OWNED_COMMUNITIES} communities",
         )
 
-    new_community = models.Community(
-        owner_id=current_user.id, **community.dict(exclude={"tags", "rules"})
+    community_payload = community.model_dump(
+        exclude={"tags", "rules", "category_id"}
     )
+    new_community = models.Community(owner_id=current_user.id, **community_payload)
 
     # Add the creator as a member (Owner)
     member = models.CommunityMember(
         user_id=current_user.id,
         role=models.CommunityRole.OWNER,
-        joined_at=datetime.now(timezone.utc),
+        join_date=datetime.now(timezone.utc),
     )
     new_community.members.append(member)
 
-    if community.category_id:
+    category_obj: Optional[models.Category] = None
+    if community.category_id is not None:
         category = (
             db.query(models.Category)
             .filter(models.Category.id == community.category_id)
@@ -226,20 +321,26 @@ async def create_community(
         )
         if not category:
             raise HTTPException(status_code=404, detail="Selected category not found")
-        new_community.category = category
+        category_obj = category
+    else:
+        category_obj = _ensure_default_category(db)
+
+    if category_obj:
+        new_community.community_category = _get_or_create_community_category(
+            db, category_obj
+        )
 
     if community.tags:
         tags = db.query(models.Tag).filter(models.Tag.id.in_(community.tags)).all()
         new_community.tags.extend(tags)
 
-    if community.rules:
-        for rule in community.rules:
-            new_rule = models.CommunityRule(
-                content=rule.content,
-                description=rule.description,
-                priority=rule.priority,
-            )
-            new_community.rules.append(new_rule)
+    for rule in getattr(community, "rules", []):
+        new_rule = models.CommunityRule(
+            content=rule.content,
+            description=rule.description,
+            priority=rule.priority,
+        )
+        new_community.rules.append(new_rule)
 
     db.add(new_community)
     db.commit()
@@ -284,7 +385,7 @@ async def get_communities(
     """
     Retrieve a list of communities with search and filter options.
     """
-    query = db.query(models.Community)
+    query = _community_query(db)
 
     if search:
         query = query.filter(
@@ -330,6 +431,40 @@ async def get_communities(
 
 
 @router.get(
+    "/user-invitations",
+    response_model=List[schemas.CommunityInvitationOut],
+    summary="List pending invitations for the current user",
+)
+async def list_user_invitations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Return pending invitations directed to the authenticated user."""
+
+    invitations = (
+        db.query(models.CommunityInvitation)
+        .options(
+            joinedload(models.CommunityInvitation.community)
+            .joinedload(models.Community.community_category)
+            .joinedload(models.CommunityCategory.category),
+            joinedload(models.CommunityInvitation.community).joinedload(
+                models.Community.owner
+            ),
+            joinedload(models.CommunityInvitation.inviter),
+            joinedload(models.CommunityInvitation.invitee),
+        )
+        .filter(
+            models.CommunityInvitation.invitee_id == current_user.id,
+            models.CommunityInvitation.status == "pending",
+        )
+        .order_by(desc(models.CommunityInvitation.created_at))
+        .all()
+    )
+
+    return [schemas.CommunityInvitationOut.from_orm(inv) for inv in invitations]
+
+
+@router.get(
     "/{id}",
     response_model=schemas.CommunityOut,
     summary="Get specific community details",
@@ -342,17 +477,7 @@ async def get_community(
     """
     Retrieve detailed information of a specific community along with its related data.
     """
-    community = (
-        db.query(models.Community)
-        .options(
-            joinedload(models.Community.members),
-            joinedload(models.Community.rules),
-            joinedload(models.Community.tags),
-            joinedload(models.Community.category),
-        )
-        .filter(models.Community.id == id)
-        .first()
-    )
+    community = _community_query(db).filter(models.Community.id == id).first()
 
     if not community:
         raise HTTPException(
@@ -454,6 +579,36 @@ async def update_community(
     return schemas.CommunityOut.from_orm(community)
 
 
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a community",
+)
+async def delete_community(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Delete the specified community when the current user is the owner."""
+
+    community = _get_community_or_404(db, id)
+
+    if community.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this community",
+        )
+
+    db.query(models.CommunityMember).filter(
+        models.CommunityMember.community_id == id
+    ).delete(synchronize_session=False)
+
+    db.delete(community)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/{id}/join",
     status_code=status.HTTP_200_OK,
@@ -478,14 +633,9 @@ async def join_community(
     Returns:
       A confirmation message.
     """
-    community = db.query(models.Community).filter(models.Community.id == id).first()
+    community = _get_community_or_404(db, id)
 
-    if not community:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
-        )
-
-    if any(member.user_id == current_user.id for member in community.members):
+    if _get_membership(community, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You are already a member of this community",
@@ -506,37 +656,70 @@ async def join_community(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This is a private community and requires an invitation to join",
             )
+    else:
+        invitation = None
 
     new_member = models.CommunityMember(
         community_id=id,
         user_id=current_user.id,
         role=models.CommunityRole.MEMBER,
-        joined_at=datetime.now(timezone.utc),
+        join_date=datetime.now(timezone.utc),
     )
 
     db.add(new_member)
-    community.members_count += 1
 
     if community.is_private and invitation:
         invitation.status = "accepted"
-        invitation.accepted_at = datetime.now(timezone.utc)
 
     db.commit()
 
     create_notification(
         db,
         community.owner_id,
-        f"{current_user.username} has joined the community {community.name}",
+        f"{_user_display_name(current_user)} has joined the community {community.name}",
         f"/community/{id}",
         "new_member",
         current_user.id,
     )
 
-    return {"message": "Successfully joined the community"}
+    return {"message": "Joined the community successfully"}
 
 
 @router.post(
-    "/{community_id}/post",
+    "/{community_id}/leave",
+    status_code=status.HTTP_200_OK,
+    summary="Leave a community",
+)
+async def leave_community(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Remove the current user from the given community if they are not the owner."""
+
+    community = _get_community_or_404(db, community_id)
+
+    if community.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Owner cannot leave the community",
+        )
+
+    membership = _get_membership(community, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You are not a member of this community",
+        )
+
+    db.delete(membership)
+    db.commit()
+
+    return {"message": "Left the community successfully"}
+
+
+@router.post(
+    "/{community_id}/posts",
     status_code=status.HTTP_201_CREATED,
     response_model=schemas.PostOut,
     summary="Create a new post in the community",
@@ -561,17 +744,19 @@ async def create_community_post(
     Returns:
       The created post.
     """
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
-    )
-    if not community:
-        raise HTTPException(status_code=404, detail="Community not found")
+    community = _get_community_or_404(db, community_id)
 
-    member = next((m for m in community.members if m.user_id == current_user.id), None)
+    member = _get_membership(community, current_user.id)
     if not member:
         raise HTTPException(
             status_code=403,
             detail="You must be a member of the community to create a post",
+        )
+
+    if post.community_id and post.community_id != community_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload community_id does not match the path parameter",
         )
 
     if not post.content.strip():
@@ -593,49 +778,203 @@ async def create_community_post(
     new_post = models.Post(
         owner_id=current_user.id,
         community_id=community_id,
+        title=post.title,
         content=post.content,
-        language=detect_language(post.content),
-        has_media=bool(post.media_urls),
-        media_urls=post.media_urls,
+        published=post.published,
+        original_post_id=post.original_post_id,
+        is_repost=post.is_repost,
+        allow_reposts=post.allow_reposts,
+        copyright_type=post.copyright_type,
+        custom_copyright=post.custom_copyright,
+        is_archived=post.is_archived,
     )
 
     db.add(new_post)
     db.commit()
     db.refresh(new_post)
 
-    community.posts_count += 1
-    community.last_activity_at = datetime.now(timezone.utc)
-    member.posts_count += 1
-    member.last_active_at = datetime.now(timezone.utc)
+    return schemas.PostOut.from_orm(new_post)
 
-    if (
-        member.posts_count >= ACTIVITY_THRESHOLD_VIP
-        and member.role == models.CommunityRole.MEMBER
-    ):
-        member.role = models.CommunityRole.VIP
-        create_notification(
-            db,
-            current_user.id,
-            f"You have been upgraded to VIP in community {community.name}",
-            f"/community/{community_id}",
-            "role_upgrade",
-            None,
+
+@router.get(
+    "/{community_id}/posts",
+    response_model=List[schemas.PostOut],
+    summary="List posts in a community",
+)
+async def list_community_posts(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Retrieve all posts for the given community ordered by recency."""
+
+    _get_community_or_404(db, community_id)
+
+    posts = (
+        db.query(models.Post)
+        .options(
+            joinedload(models.Post.owner),
+            joinedload(models.Post.community),
+        )
+        .filter(models.Post.community_id == community_id)
+        .order_by(desc(models.Post.created_at))
+        .all()
+    )
+
+    return [schemas.PostOut.from_orm(post) for post in posts]
+
+
+@router.post(
+    "/{community_id}/reels",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.ReelOut,
+    summary="Create a reel in the community",
+)
+async def create_community_reel(
+    community_id: int,
+    reel: schemas.ReelCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Create a new reel tied to the given community."""
+
+    community = _get_community_or_404(db, community_id)
+
+    if not _get_membership(community, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be a member of the community to share a reel",
         )
 
+    if reel.community_id and reel.community_id != community_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload community_id does not match the path parameter",
+        )
+
+    if not is_valid_video_url(reel.video_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provided video URL is not valid",
+        )
+
+    new_reel = models.Reel(
+        title=reel.title,
+        video_url=reel.video_url,
+        description=reel.description,
+        owner_id=current_user.id,
+        community_id=community_id,
+    )
+
+    db.add(new_reel)
     db.commit()
+    db.refresh(new_reel)
 
-    for admin in community.members:
-        if admin.role in [models.CommunityRole.ADMIN, models.CommunityRole.OWNER]:
-            create_notification(
-                db,
-                admin.user_id,
-                f"New post by {current_user.username} in community {community.name}",
-                f"/post/{new_post.id}",
-                "new_post",
-                new_post.id,
-            )
+    return schemas.ReelOut.from_orm(new_reel)
 
-    return schemas.PostOut.from_orm(new_post)
+
+@router.get(
+    "/{community_id}/reels",
+    response_model=List[schemas.ReelOut],
+    summary="List reels in a community",
+)
+async def list_community_reels(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Return all reels that belong to the community."""
+
+    _get_community_or_404(db, community_id)
+
+    reels = (
+        db.query(models.Reel)
+        .options(
+            joinedload(models.Reel.owner),
+            joinedload(models.Reel.community),
+        )
+        .filter(models.Reel.community_id == community_id)
+        .order_by(desc(models.Reel.created_at))
+        .all()
+    )
+
+    return [schemas.ReelOut.from_orm(reel) for reel in reels]
+
+
+@router.post(
+    "/{community_id}/articles",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.ArticleOut,
+    summary="Create an article in the community",
+)
+async def create_community_article(
+    community_id: int,
+    article: schemas.ArticleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Publish a long-form article for a community."""
+
+    community = _get_community_or_404(db, community_id)
+
+    if not _get_membership(community, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be a member of the community to share an article",
+        )
+
+    if article.community_id and article.community_id != community_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload community_id does not match the path parameter",
+        )
+
+    if not article.content.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Article content cannot be empty",
+        )
+
+    new_article = models.Article(
+        title=article.title,
+        content=article.content,
+        author_id=current_user.id,
+        community_id=community_id,
+    )
+
+    db.add(new_article)
+    db.commit()
+    db.refresh(new_article)
+
+    return schemas.ArticleOut.from_orm(new_article)
+
+
+@router.get(
+    "/{community_id}/articles",
+    response_model=List[schemas.ArticleOut],
+    summary="List articles in a community",
+)
+async def list_community_articles(
+    community_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Return all articles associated with the community."""
+
+    _get_community_or_404(db, community_id)
+
+    articles = (
+        db.query(models.Article)
+        .options(
+            joinedload(models.Article.author),
+            joinedload(models.Article.community),
+        )
+        .filter(models.Article.community_id == community_id)
+        .order_by(desc(models.Article.created_at))
+        .all()
+    )
+
+    return [schemas.ArticleOut.from_orm(article) for article in articles]
 
 
 @router.post(
@@ -771,7 +1110,7 @@ async def get_community_analytics(
             db.query(models.CommunityMember)
             .filter(
                 models.CommunityMember.community_id == community_id,
-                models.CommunityMember.joined_at <= current_date,
+                models.CommunityMember.join_date <= current_date,
             )
             .count()
         )
@@ -886,111 +1225,161 @@ async def update_member_role(
 
 
 @router.post(
-    "/{community_id}/invitations",
+    "/{community_id}/invite",
     status_code=status.HTTP_201_CREATED,
     response_model=schemas.CommunityInvitationOut,
-    summary="Invite new members to the community",
+    summary="Invite a user to join the community",
 )
-async def invite_members(
+async def invite_member(
     community_id: int,
-    invitations: List[schemas.CommunityInvitationCreate],
+    invitation: schemas.CommunityInvitationCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """
-    Invite new members to the community after verifying permissions and limits.
+    """Create a single invitation for the supplied community and invitee."""
 
-    Parameters:
-      - community_id: ID of the community.
-      - invitations: A list of CommunityInvitationCreate schemas.
-      - db: Database session.
-      - current_user: The current authenticated user.
+    community = _get_community_or_404(db, community_id)
 
-    Returns:
-      A list of created community invitations.
-    """
-    community = (
-        db.query(models.Community).filter(models.Community.id == community_id).first()
+    if not _get_membership(community, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be a community member to send invitations",
+        )
+
+    if invitation.community_id and invitation.community_id != community_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload community_id does not match the path parameter",
+        )
+
+    invitee = (
+        db.query(models.User)
+        .filter(models.User.id == invitation.invitee_id)
+        .first()
     )
+    if not invitee:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitee not found")
 
-    check_community_permissions(current_user, community, models.CommunityRole.MEMBER)
+    if _get_membership(community, invitee.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already a member of the community",
+        )
 
-    active_invitations = (
+    existing_invitation = (
         db.query(models.CommunityInvitation)
         .filter(
             models.CommunityInvitation.community_id == community_id,
-            models.CommunityInvitation.inviter_id == current_user.id,
+            models.CommunityInvitation.invitee_id == invitee.id,
             models.CommunityInvitation.status == "pending",
         )
-        .count()
+        .first()
+    )
+    if existing_invitation:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An active invitation already exists for this user",
+        )
+
+    new_invitation = models.CommunityInvitation(
+        community_id=community_id,
+        inviter_id=current_user.id,
+        invitee_id=invitee.id,
+        status="pending",
     )
 
-    if active_invitations + len(invitations) > settings.MAX_PENDING_INVITATIONS:
+    db.add(new_invitation)
+    db.commit()
+    db.refresh(new_invitation)
+
+    create_notification(
+        db,
+        invitee.id,
+        f"You have been invited to join community {community.name}",
+        f"/invitations/{new_invitation.id}",
+        "community_invitation",
+        new_invitation.id,
+    )
+
+    return schemas.CommunityInvitationOut.from_orm(new_invitation)
+
+
+@router.post(
+    "/invitations/{invitation_id}/accept",
+    status_code=status.HTTP_200_OK,
+    summary="Accept a community invitation",
+)
+async def accept_invitation(
+    invitation_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Accept a pending invitation and join the associated community."""
+
+    invitation = (
+        db.query(models.CommunityInvitation)
+        .filter(models.CommunityInvitation.id == invitation_id)
+        .first()
+    )
+
+    if not invitation or invitation.invitee_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    if invitation.status != "pending":
         raise HTTPException(
-            status_code=400,
-            detail=f"Cannot send more than {settings.MAX_PENDING_INVITATIONS} pending invitations",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is no longer pending",
         )
 
-    created_invitations = []
-    for invitation in invitations:
-        invitee = (
-            db.query(models.User)
-            .filter(models.User.id == invitation.invitee_id)
-            .first()
-        )
-        if not invitee:
-            continue
+    community = _get_community_or_404(db, invitation.community_id)
 
-        existing_invitation = (
-            db.query(models.CommunityInvitation)
-            .filter(
-                models.CommunityInvitation.community_id == community_id,
-                models.CommunityInvitation.invitee_id == invitation.invitee_id,
-                models.CommunityInvitation.status == "pending",
+    if not _get_membership(community, current_user.id):
+        db.add(
+            models.CommunityMember(
+                community_id=community.id,
+                user_id=current_user.id,
+                role=models.CommunityRole.MEMBER,
+                join_date=datetime.now(timezone.utc),
             )
-            .first()
-        )
-        if existing_invitation:
-            continue
-
-        is_member = (
-            db.query(models.CommunityMember)
-            .filter(
-                models.CommunityMember.community_id == community_id,
-                models.CommunityMember.user_id == invitation.invitee_id,
-            )
-            .first()
-        )
-        if is_member:
-            continue
-
-        new_invitation = models.CommunityInvitation(
-            community_id=community_id,
-            inviter_id=current_user.id,
-            invitee_id=invitation.invitee_id,
-            message=invitation.message,
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.INVITATION_EXPIRY_DAYS),
         )
 
-        db.add(new_invitation)
-        created_invitations.append(new_invitation)
-
-        create_notification(
-            db,
-            invitation.invitee_id,
-            f"You have an invitation to join community {community.name} from {current_user.username}",
-            f"/invitations/{new_invitation.id}",
-            "community_invitation",
-            new_invitation.id,
-        )
-
+    invitation.status = "accepted"
     db.commit()
 
-    for invitation in created_invitations:
-        db.refresh(invitation)
+    return {"message": "Invitation accepted successfully"}
 
-    return [schemas.CommunityInvitationOut.from_orm(inv) for inv in created_invitations]
+
+@router.post(
+    "/invitations/{invitation_id}/reject",
+    status_code=status.HTTP_200_OK,
+    summary="Reject a community invitation",
+)
+async def reject_invitation(
+    invitation_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Reject a pending invitation without joining the community."""
+
+    invitation = (
+        db.query(models.CommunityInvitation)
+        .filter(models.CommunityInvitation.id == invitation_id)
+        .first()
+    )
+
+    if not invitation or invitation.invitee_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation is no longer pending",
+        )
+
+    invitation.status = "rejected"
+    db.commit()
+
+    return {"message": "Invitation rejected successfully"}
 
 
 @router.get(
@@ -1051,14 +1440,16 @@ async def export_community_data(
             writer.writerow(
                 [
                     member.user_id,
-                    member.user.username,
+                    _user_display_name(member.user),
                     member.role,
-                    member.joined_at.strftime("%Y-%m-%d"),
-                    member.posts_count,
+                    member.join_date.strftime("%Y-%m-%d")
+                    if member.join_date
+                    else "N/A",
+                    getattr(member, "posts_count", 0),
                     member.activity_score,
                     (
-                        member.last_active_at.strftime("%Y-%m-%d %H:%M")
-                        if member.last_active_at
+                        getattr(member, "last_active_at", None).strftime("%Y-%m-%d %H:%M")
+                        if getattr(member, "last_active_at", None)
                         else "N/A"
                     ),
                 ]
@@ -1087,7 +1478,7 @@ async def export_community_data(
             writer.writerow(
                 [
                     post.id,
-                    post.owner.username,
+                    _user_display_name(post.owner),
                     post.created_at.strftime("%Y-%m-%d %H:%M"),
                     post.likes_count,
                     post.comments_count,
@@ -1166,7 +1557,7 @@ class CommunityNotificationHandler:
             await self.notification_service(
                 self.db,
                 admin.user_id,
-                f"{member.username} has joined community {community.name}",
+                f"{_user_display_name(member)} has joined community {community.name}",
                 f"/community/{community.id}/members",
                 "new_member",
                 None,

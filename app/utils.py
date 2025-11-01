@@ -25,18 +25,18 @@ from sklearn.naive_bayes import MultinomialNB
 import nltk
 from nltk.corpus import stopwords
 import joblib
-from functools import wraps, lru_cache
+from functools import wraps
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, desc, asc, or_
+from sqlalchemy import asc, desc, func, or_, text
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 from . import models, schemas
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 from .config import settings
 import secrets
 from cryptography.fernet import Fernet
 import time
 from collections import deque
-from datetime import datetime, timezone, date
+from datetime import date, datetime, timezone
 from typing import List, Optional
 import logging
 from sqlalchemy.exc import ProgrammingError
@@ -70,23 +70,57 @@ MIN_QUALITY_THRESHOLD = 50
 
 # Offensive content classifier initialization using Hugging Face model
 model_name = "cardiffnlp/twitter-roberta-base-offensive"
-offensive_classifier = pipeline(
-    "text-classification",
-    model=model_name,
-    device=0 if getattr(settings, "USE_GPU", False) else -1,
-)
+try:
+    offensive_classifier = pipeline(
+        "text-classification",
+        model=model_name,
+        device=0 if getattr(settings, "USE_GPU", False) else -1,
+    )
+except Exception as exc:
+    logger.warning(
+        "Unable to load Hugging Face offensive content classifier: %s", exc
+    )
+    offensive_classifier = None
 
 # Password hashing configuration using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-nltk.download("stopwords", quiet=True)
+
+try:
+    nltk.download("stopwords", quiet=True)
+    ENGLISH_STOPWORDS = list(stopwords.words("english"))
+except Exception as exc:
+    logger.warning("Falling back to a minimal English stopword list: %s", exc)
+    ENGLISH_STOPWORDS = [
+        "a",
+        "an",
+        "and",
+        "the",
+        "is",
+        "in",
+        "it",
+        "of",
+        "on",
+        "for",
+        "to",
+    ]
+
 profanity.load_censor_words()
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+
+try:
+    tokenizer = AutoTokenizer.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    sentiment_pipeline = pipeline(
+        "sentiment-analysis", model=model, tokenizer=tokenizer
+    )
+except Exception as exc:
+    logger.warning("Unable to load Hugging Face sentiment model: %s", exc)
+    tokenizer = None
+    model = None
+    sentiment_pipeline = None
 
 
 # ============================================
@@ -125,7 +159,7 @@ def train_content_classifier():
     """Trains a simple content classifier using dummy data. Replace dummy data with real data in production."""
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
     y = [0, 1, 0]
-    vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
+    vectorizer = CountVectorizer(stop_words=ENGLISH_STOPWORDS)
     X_vectorized = vectorizer.fit_transform(X)
     classifier = MultinomialNB()
     classifier.fit(X_vectorized, y)
@@ -165,12 +199,15 @@ def is_valid_image_url(url: str) -> bool:
 
 
 def is_valid_video_url(url: str) -> bool:
-    """Checks if the URL belongs to a supported video hosting service."""
+    """Perform a lightweight sanity check to ensure the URL is HTTP(S) based."""
+
     from urllib.parse import urlparse
 
     parsed_url = urlparse(url)
-    video_hosts = ["youtube.com", "vimeo.com", "dailymotion.com"]
-    return any(host in parsed_url.netloc for host in video_hosts)
+    if parsed_url.scheme not in {"http", "https"}:
+        return False
+
+    return bool(parsed_url.netloc)
 
 
 def analyze_sentiment(text: str) -> float:
@@ -405,9 +442,18 @@ def is_content_offensive(text: str) -> tuple:
     Determines if the text is offensive using an AI model.
     Returns a tuple (is_offensive, score) where is_offensive is a boolean.
     """
-    result = offensive_classifier(text)[0]
-    is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
-    return is_offensive, result["score"]
+    if offensive_classifier:
+        try:
+            result = offensive_classifier(text)[0]
+            is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
+            return is_offensive, result["score"]
+        except Exception as exc:
+            logger.warning("Offensive classifier failed, using fallback: %s", exc)
+
+    lowered = text.lower()
+    keywords = {"offensive", "hate", "abuse"}
+    score = 0.9 if any(word in lowered for word in keywords) else 0.1
+    return score > 0.5, score
 
 
 # ============================================
@@ -588,9 +634,20 @@ def analyze_user_behavior(user_history, content: str) -> float:
     Returns a relevance score.
     """
     user_interests = set(item.lower() for item in user_history)
-    result = sentiment_pipeline(content[:512])[0]
-    sentiment = result["label"]
-    score = result["score"]
+    if sentiment_pipeline:
+        try:
+            result = sentiment_pipeline(content[:512])[0]
+            sentiment = result["label"]
+            score = result["score"]
+        except Exception as exc:
+            logger.warning("Sentiment pipeline failed, using heuristic: %s", exc)
+            polarity = analyze_sentiment(content)
+            sentiment = "POSITIVE" if polarity >= 0 else "NEGATIVE"
+            score = abs(polarity)
+    else:
+        polarity = analyze_sentiment(content)
+        sentiment = "POSITIVE" if polarity >= 0 else "NEGATIVE"
+        score = abs(polarity)
     relevance_score = sum(
         1 for word in content.lower().split() if word in user_interests
     )
@@ -764,7 +821,6 @@ def handle_exceptions(func):
 # ============================================
 # Translation Utilities
 # ============================================
-@lru_cache(maxsize=1000)
 async def cached_translate_text(text: str, source_lang: str, target_lang: str):
     """
     Translates text using caching.
@@ -783,9 +839,12 @@ async def get_translated_content(content: str, user: "User", source_lang: str):
     Returns the translated content if the user's preferred language differs from the source language.
     """
     if user.auto_translate and user.preferred_language != source_lang:
-        return await cached_translate_text(
-            content, source_lang, user.preferred_language
-        )
+        try:
+            return await cached_translate_text(
+                content, source_lang, user.preferred_language
+            )
+        except NotImplementedError:
+            return content
     return content
 
 

@@ -43,13 +43,6 @@ async def create_user(
     إنشاء مستخدم جديد وإنشاء إشعار بالبريد الإلكتروني
     Create a new user and send an email notification.
     """
-    # Check if user already exists
-    existing_user = (
-        db.query(models.User).filter(models.User.email == user.email).first()
-    )
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
     # Hash the password
     hashed_password = utils.hash(user.password)
 
@@ -548,13 +541,15 @@ def change_password(
     تغيير كلمة المرور للمستخدم
     Change the user's password.
     """
-    if not utils.verify(password_change.current_password, current_user.password):
+    if not utils.verify(
+        password_change.current_password, current_user.hashed_password
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
         )
 
     hashed_password = utils.hash(password_change.new_password)
-    current_user.password = hashed_password
+    current_user.hashed_password = hashed_password
     db.commit()
     return {"message": "Password changed successfully"}
 

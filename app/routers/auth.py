@@ -64,7 +64,7 @@ def login(
     )
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
         )
 
     # Check account status
@@ -79,13 +79,13 @@ def login(
         )
 
     # Verify password
-    if not utils.verify(user_credentials.password, user.password):
+    if not utils.verify(user_credentials.password, user.hashed_password):
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
             user.account_locked_until = datetime.now(timezone.utc) + LOCKOUT_DURATION
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
         )
 
     # Reset failure counters
@@ -141,12 +141,19 @@ def complete_login(
     """
     user.last_login = datetime.now(timezone.utc)
 
+    client_host = "unknown"
+    user_agent = ""
+    if request is not None:
+        if request.client is not None:
+            client_host = request.client.host
+        user_agent = request.headers.get("user-agent", "")
+
     # Create a new session
     session = models.UserSession(
         user_id=user.id,
         session_id=str(uuid.uuid4()),
-        ip_address=request.client.host,
-        user_agent=request.headers.get("user-agent", ""),
+        ip_address=client_host,
+        user_agent=user_agent,
     )
     db.add(session)
     db.commit()
@@ -162,8 +169,8 @@ def complete_login(
         user.id,
         "login",
         {
-            "ip": request.client.host,
-            "user_agent": request.headers.get("user-agent", ""),
+            "ip": client_host,
+            "user_agent": user_agent,
         },
     )
 
@@ -171,8 +178,8 @@ def complete_login(
     background_tasks.add_task(
         send_login_notification,
         user.email,
-        request.client.host,
-        request.headers.get("user-agent", ""),
+        client_host,
+        user_agent,
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
@@ -334,7 +341,7 @@ async def reset_password(
         raise HTTPException(status_code=400, detail="رمز غير صالح أو منتهي الصلاحية")
 
     hashed_password = utils.hash(reset_data.new_password)
-    user.password = hashed_password
+    user.hashed_password = hashed_password
     user.reset_token = None
     user.reset_token_expires = None
     db.commit()
@@ -429,7 +436,7 @@ async def change_email(
     Change the user's email address.
     Verifies the current password and checks for uniqueness of the new email.
     """
-    if not utils.verify(email_change.password, current_user.password):
+    if not utils.verify(email_change.password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="كلمة المرور غير صحيحة")
     existing_user = (
         db.query(models.User)
