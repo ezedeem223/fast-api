@@ -34,6 +34,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from typing import List, Optional
 import os
 from pathlib import Path
+import inspect
 import requests
 import aiofiles
 from pydub import AudioSegment
@@ -209,7 +210,10 @@ async def get_translated_content_async(
     Asynchronously translate the provided content to the user's preferred language if needed.
     """
     if user.auto_translate and user.preferred_language != source_lang:
-        return await translate_text(content, source_lang, user.preferred_language)
+        translation = translate_text(content, source_lang, user.preferred_language)
+        if inspect.isawaitable(translation):
+            return await translation
+        return translation
     return content
 
 
@@ -269,7 +273,7 @@ async def get_post(
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {id} was not found",
+            detail=f"post with id: {id} was not found",
         )
 
     reaction_counts = (
@@ -582,7 +586,7 @@ def delete_post(
     if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {id} does not exist",
+            detail=f"post with id: {id} does not exist",
         )
     if post.owner_id != current_user.id:
         raise HTTPException(
@@ -611,7 +615,7 @@ def update_post(
     if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {id} does not exist",
+            detail=f"post with id: {id} does not exist",
         )
     if post.owner_id != current_user.id:
         raise HTTPException(
@@ -1253,7 +1257,7 @@ def archive_post(
     if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {id} does not exist",
+            detail=f"post with id: {id} does not exist",
         )
     if post.owner_id != current_user.id:
         raise HTTPException(
@@ -1315,7 +1319,7 @@ def export_post_as_pdf(
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Post with id: {id} not found",
+            detail=f"post with id: {id} not found",
         )
     pdf = create_pdf(post)
     if not pdf:

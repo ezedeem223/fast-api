@@ -1,25 +1,31 @@
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import create_engine, text
+from pathlib import Path
+
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.main import app
-from app.config import settings
 from app.database import get_db, Base
 from app.oauth2 import create_access_token
 from app import models
 import os
 
-# إعداد URL قاعدة بيانات الاختبار من المتغيرات البيئية أو استخدام قيمة افتراضية
-SQLALCHEMY_DATABASE_URL = (
-    f"postgresql://{settings.database_username}:"
-    f"{settings.database_password}@"
-    f"{settings.database_hostname}:"
-    f"{settings.database_port}/"
-    f"{settings.database_name}_test"
+# إعداد مسار قاعدة البيانات للاختبار باستخدام SQLite
+TEST_DB_PATH = Path("tests/test_app.db")
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL", f"sqlite:///{TEST_DB_PATH}"
 )
 
+
+def _create_engine(url: str):
+    if url.startswith("sqlite"):
+        TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        return create_engine(url, connect_args={"check_same_thread": False})
+    return create_engine(url, echo=False)
+
 # إنشاء محرك الاتصال بقاعدة بيانات الاختبار
-engine = create_engine(SQLALCHEMY_DATABASE_URL, echo=False)
+engine = _create_engine(SQLALCHEMY_DATABASE_URL)
 
 # تكوين الجلسة المحلية للاختبار
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -31,11 +37,9 @@ Base.metadata.create_all(bind=engine)
 # Fixture لإنشاء جلسة اختبار جديدة لكل اختبار
 @pytest.fixture(scope="function")
 def session():
-    # قبل كل اختبار: تفريغ بيانات الجداول باستخدام TRUNCATE لتفادي إعادة إنشاء الهيكل
-    with engine.connect() as connection:
-        table_names = ", ".join([tbl.name for tbl in Base.metadata.sorted_tables])
-        connection.execute(text(f"TRUNCATE {table_names} RESTART IDENTITY CASCADE"))
-        connection.commit()
+    # قبل كل اختبار: إعادة إنشاء الجداول لضمان بيئة نظيفة
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
         yield db

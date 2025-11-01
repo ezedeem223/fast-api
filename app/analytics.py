@@ -5,38 +5,35 @@ from datetime import (
     timezone,
 )  # Added timezone for correct UTC usage
 from . import models
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from .config import settings
+import base64
+import io
+import logging
+
 import matplotlib.pyplot as plt
 import seaborn as sns
-import io
-import base64
-from .models import SearchStatistics, User
 from sqlalchemy.orm import Session
+from textblob import TextBlob
 
-# NOTE: Ensure that get_db() is defined in your project or import it accordingly.
-# from .database import get_db
+from .config import settings
+from .database import get_db
+from .models import SearchStatistics, User
 
-# Initialize the tokenizer and model for sentiment analysis
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+logger = logging.getLogger(__name__)
 
 # ------------------------- Content Analysis Functions -------------------------
 
 
-def analyze_sentiment(text):
-    """
-    Analyze the sentiment of the given text using a pre-trained transformer model.
-    Returns a dictionary with sentiment label and score.
-    """
-    result = sentiment_pipeline(text)[0]
-    return {"sentiment": result["label"], "score": result["score"]}
+def analyze_sentiment(text: str):
+    """Analyze the sentiment of the given text using TextBlob as a lightweight fallback."""
+
+    try:
+        polarity = TextBlob(text).sentiment.polarity
+    except Exception as exc:
+        logger.warning("Sentiment analysis failed, defaulting to neutral: %s", exc)
+        polarity = 0.0
+
+    sentiment = "POSITIVE" if polarity >= 0 else "NEGATIVE"
+    return {"sentiment": sentiment, "score": abs(polarity)}
 
 
 def suggest_improvements(text, sentiment):

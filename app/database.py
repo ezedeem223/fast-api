@@ -1,19 +1,31 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+
 from .config import settings
 
-# Configure the database connection URL using settings.
-SQLALCHEMY_DATABASE_URL = (
-    f"postgresql://{settings.database_username}:{settings.database_password}"
-    f"@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"
-)
 
-# Create the SQLAlchemy engine with a connection pool.
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    pool_size=100,  # Number of connections in the pool.
-    max_overflow=200,  # Additional connections allowed beyond the pool size.
-)
+# Configure the database connection URL using settings, with graceful fallbacks for tests.
+SQLALCHEMY_DATABASE_URL = settings.database_url
+
+
+def _build_engine():
+    """Create the SQLAlchemy engine with sensible defaults for both Postgres and SQLite."""
+
+    if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+        return create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            connect_args={"check_same_thread": False},
+        )
+
+    return create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        pool_size=20,
+        max_overflow=20,
+    )
+
+
+# Create the SQLAlchemy engine.
+engine = _build_engine()
 
 # Create a session factory for generating database sessions.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -20,7 +20,6 @@ from sqlalchemy import (
     Float,
     Table,
     JSON,
-    ARRAY,
     LargeBinary,
     Interval,
     Time,
@@ -32,8 +31,25 @@ from sqlalchemy.sql import func
 from .database import Base
 import enum
 from datetime import date, timedelta
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy.ext.mutable import MutableList
+
+try:
+    from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB, TSVECTOR as PG_TSVECTOR
+except ImportError:  # pragma: no cover - fallback when dialect is unavailable
+    PG_JSONB = None
+    PG_TSVECTOR = None
+
+from .config import settings
+
+MutableJSONList = MutableList.as_mutable(JSON)
+
+if settings.database_url.startswith("sqlite"):
+    JSONType = JSON
+    TSVECTORType = Text
+else:
+    JSONType = PG_JSONB or JSON
+    TSVECTORType = PG_TSVECTOR or Text
 
 # -------------------------
 # Association Tables
@@ -373,7 +389,9 @@ class User(Base):
     email = Column(String, nullable=False, unique=True)
     hashed_password = Column(String, nullable=False)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
     )
     phone_number = Column(String)
     is_verified = Column(Boolean, default=False)
@@ -396,10 +414,10 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     failed_login_attempts = Column(Integer, default=0)
     account_locked_until = Column(DateTime(timezone=True), nullable=True)
-    skills = Column(ARRAY(String), nullable=True)
-    interests = Column(ARRAY(String), nullable=True)
-    ui_settings = Column(JSONB, default={})
-    notifications_settings = Column(JSONB, default={})
+    skills = Column(MutableJSONList, nullable=True, default=list)
+    interests = Column(MutableJSONList, nullable=True, default=list)
+    ui_settings = Column(JSONType, default={})
+    notifications_settings = Column(JSONType, default={})
     user_type = Column(
         SQLAlchemyEnum(UserType, name="user_type_enum"), default=UserType.PERSONAL
     )
@@ -427,7 +445,7 @@ class User(Base):
     interaction_count = Column(Integer, default=0)
     followers_count = Column(Integer, default=0)
     following_count = Column(Integer, default=0)
-    followers_growth = Column(ARRAY(Integer), default=list)
+    followers_growth = Column(MutableJSONList, default=list)
     comment_count = Column(Integer, default=0)
     warning_count = Column(Integer, default=0)
     last_warning_date = Column(DateTime(timezone=True), nullable=True)
@@ -615,13 +633,13 @@ class SocialMediaPost(Base):
     title = Column(String, nullable=True)
     content = Column(Text, nullable=False)
     platform_post_id = Column(String, nullable=True)
-    media_urls = Column(ARRAY(String), nullable=True)
+    media_urls = Column(MutableJSONList, nullable=True, default=list)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     status = Column(SQLAlchemyEnum(PostStatus), default=PostStatus.DRAFT)
     error_message = Column(Text, nullable=True)
     # Renamed column to avoid conflict with reserved keyword.
-    post_metadata = Column(JSONB, default={})
-    engagement_stats = Column(JSONB, default={})
+    post_metadata = Column(JSONType, default={})
+    engagement_stats = Column(JSONType, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -770,9 +788,12 @@ class Post(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
+    language = Column(String, nullable=False, default="en")
     published = Column(Boolean, server_default="True", nullable=False)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
     )
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -815,13 +836,13 @@ class Post(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)
     is_flagged = Column(Boolean, default=False)
     flag_reason = Column(String, nullable=True)
-    search_vector = Column(TSVECTOR)
+    search_vector = Column(TSVECTORType)
     share_scope = Column(String, default="public")  # Options: public, community, group
     shared_with_community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
     )
     score = Column(Float, default=0.0, index=True)
-    sharing_settings = Column(JSONB, default={})  # Advanced sharing settings
+    sharing_settings = Column(JSONType, default={})  # Advanced sharing settings
 
     __table_args__ = (
         Index("idx_post_search_vector", search_vector, postgresql_using="gin"),
@@ -864,6 +885,17 @@ class Post(Base):
         cascade="all, delete-orphan",
     )
 
+    @property
+    def privacy_level(self) -> PrivacyLevel:
+        """Map the share scope to the schema's privacy enum."""
+
+        scope_map = {
+            "public": PrivacyLevel.PUBLIC,
+            "community": PrivacyLevel.PRIVATE,
+            "group": PrivacyLevel.PRIVATE,
+        }
+        return scope_map.get(self.share_scope or "public", PrivacyLevel.PUBLIC)
+
 
 class NotificationPreferences(Base):
     """
@@ -878,7 +910,7 @@ class NotificationPreferences(Base):
     in_app_notifications = Column(Boolean, default=True)
     quiet_hours_start = Column(Time, nullable=True)
     quiet_hours_end = Column(Time, nullable=True)
-    categories_preferences = Column(JSONB, default={})
+    categories_preferences = Column(JSONType, default={})
     notification_frequency = Column(
         String, default="realtime"
     )  # Options: realtime, hourly, daily, weekly
@@ -1039,7 +1071,7 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    notification_metadata = Column(JSONB, default={})
+    notification_metadata = Column(JSONType, default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -1050,14 +1082,14 @@ class Notification(Base):
     importance_level = Column(Integer, default=1)
     seen_at = Column(DateTime(timezone=True), nullable=True)
     interaction_count = Column(Integer, default=0)
-    custom_data = Column(JSONB, default={})
-    device_info = Column(JSONB, nullable=True)
+    custom_data = Column(JSONType, default={})
+    device_info = Column(JSONType, nullable=True)
     notification_channel = Column(String, default="in_app")
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
-    delivery_tracking = Column(JSONB, default={})
+    delivery_tracking = Column(JSONType, default={})
     retry_strategy = Column(
         String, nullable=True
     )  # خيارات مثل "exponential" أو "linear"
@@ -1122,7 +1154,7 @@ class NotificationDeliveryAttempt(Base):
     delivery_channel = Column(String, nullable=False)
     response_time = Column(Float)  # In seconds
     # Renamed column to avoid reserved keyword conflict.
-    attempt_metadata = Column(JSONB, default={})
+    attempt_metadata = Column(JSONType, default={})
 
     notification = relationship("Notification", back_populates="delivery_attempts_rel")
 
@@ -1148,8 +1180,8 @@ class NotificationAnalytics(Base):
     last_delivery_attempt = Column(DateTime(timezone=True), onupdate=func.now())
     successful_delivery = Column(Boolean, default=False)
     delivery_channel = Column(String)
-    device_info = Column(JSONB, default={})
-    performance_metrics = Column(JSONB, default={})
+    device_info = Column(JSONType, default={})
+    performance_metrics = Column(JSONType, default={})
 
     notification = relationship("Notification", back_populates="analytics")
 
@@ -1281,7 +1313,7 @@ class AmenhotepChatAnalytics(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
-    topics_discussed = Column(ARRAY(String), default=list)
+    topics_discussed = Column(MutableJSONList, default=list)
     session_duration = Column(Integer)  # in seconds
     satisfaction_score = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1416,7 +1448,7 @@ class Report(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     status = Column(
         SQLAlchemyEnum(ReportStatus, name="report_status_enum"),
@@ -1451,7 +1483,7 @@ class Follow(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     is_mutual = Column(Boolean, default=False)
 
@@ -1516,7 +1548,7 @@ class Message(Base):
     conversation_id = Column(String, index=True)
     read_at = Column(TIMESTAMP(timezone=True), nullable=True)
     timestamp = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     link_preview = Column(JSON, nullable=True)
     language = Column(String, nullable=False, default="en")
@@ -1602,7 +1634,7 @@ class Community(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(String, nullable=True)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
@@ -1628,7 +1660,12 @@ class Community(Base):
 
     # العلاقات الأخرى (لا تغيير)
     owner = relationship("User", back_populates="owned_communities")
-    members = relationship("CommunityMember", back_populates="community")
+    members = relationship(
+        "CommunityMember",
+        back_populates="community",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     posts = relationship(
         "Post",
         back_populates="community",
@@ -1734,7 +1771,7 @@ class CommunityMember(Base):
         default=CommunityRole.MEMBER,
     )
     join_date = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     activity_score = Column(Integer, default=0)
 
@@ -1778,13 +1815,13 @@ class CommunityRule(Base):
     )
     rule = Column(String, nullable=False)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     updated_at = Column(
         TIMESTAMP(timezone=True),
         nullable=False,
-        server_default=text("now()"),
-        onupdate=text("now()"),
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
     )
 
     community = relationship("Community", back_populates="rules")
@@ -1823,7 +1860,7 @@ class Reel(Base):
     video_url = Column(String, nullable=False)
     description = Column(String)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     owner_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -1846,7 +1883,7 @@ class Article(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     author_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -1869,7 +1906,7 @@ class Block(Base):
     blocker_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     blocked_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     created_at = Column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     duration = Column(Integer, nullable=True)
     duration_unit = Column(Enum(BlockDuration), nullable=True)

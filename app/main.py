@@ -60,7 +60,7 @@ from .notifications import (
 )  # Added NotificationService
 from app.utils import train_content_classifier, create_default_categories
 from .celery_worker import celery_app
-from .analytics import model, tokenizer, clean_old_statistics
+from .analytics import clean_old_statistics
 from app.routers.search import update_search_suggestions
 from .utils import (
     update_search_vector,
@@ -300,7 +300,17 @@ def update_all_communities_statistics():
 
 # Create a single scheduler instance and add all scheduled jobs
 scheduler = BackgroundScheduler()
-scheduler.add_job(clean_old_statistics, "cron", hour=0, args=[next(get_db())])
+
+
+def _scheduled_clean_old_statistics():
+    db = SessionLocal()
+    try:
+        clean_old_statistics(db)
+    finally:
+        db.close()
+
+
+scheduler.add_job(_scheduled_clean_old_statistics, "cron", hour=0)
 scheduler.add_job(update_all_communities_statistics, "cron", hour=0)  # Defined below
 scheduler.start()
 

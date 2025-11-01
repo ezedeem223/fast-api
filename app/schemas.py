@@ -18,6 +18,7 @@ from pydantic import (
     constr,
     HttpUrl,
     Field,
+    computed_field,
 )
 from datetime import datetime, date, timedelta, time
 from typing import Optional, List, Dict, Tuple, Union, Any, ForwardRef
@@ -696,6 +697,7 @@ class UserBase(BaseModel):
 class PostBase(BaseModel):
     title: str
     content: str
+    language: str = "en"
     published: bool = True
     original_post_id: Optional[int] = None
     is_repost: bool = False
@@ -1224,7 +1226,7 @@ CommunityOutRef = ForwardRef("CommunityOut")
 
 
 class CommunityCreate(CommunityBase):
-    category_id: int
+    category_id: Optional[int] = None
     tags: List[int] = []
 
 
@@ -1485,30 +1487,30 @@ class Post(PostBase):
 
 
 class PostOut(Post):
-    community: Optional[CommunityOutRef]
+    community: Optional[CommunityOutRef] = None
     privacy_level: PrivacyLevel
     reactions: List[Reaction] = []
     reaction_counts: List[ReactionCount] = []
     has_best_answer: bool = False
     category: Optional[PostCategory] = None
     hashtags: List[Hashtag] = []
-    repost_count: int
+    repost_count: int = 0
     original_post: Optional["PostOut"] = None
-    sentiment: Optional[str]
-    sentiment_score: Optional[float]
-    content_suggestion: Optional[str]
-    mentioned_users: List[UserOut]
-    is_audio_post: bool
-    audio_url: Optional[str]
-    is_poll: bool
-    poll_data: Optional["PollData"]
-    copyright_type: CopyrightType
-    custom_copyright: Optional[str]
-    is_archived: bool
-    archived_at: Optional[datetime]
-    media_url: Optional[str]
-    media_type: Optional[str]
-    media_text: Optional[str]
+    sentiment: Optional[str] = None
+    sentiment_score: Optional[float] = None
+    content_suggestion: Optional[str] = None
+    mentioned_users: List[UserOut] = []
+    is_audio_post: bool = False
+    audio_url: Optional[str] = None
+    is_poll: bool = False
+    poll_data: Optional["PollData"] = None
+    copyright_type: CopyrightType = CopyrightType.ALL_RIGHTS_RESERVED
+    custom_copyright: Optional[str] = None
+    is_archived: bool = False
+    archived_at: Optional[datetime] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
+    media_text: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1753,10 +1755,17 @@ class CommunityMemberUpdate(CommunityMemberBase):
 
 
 class CommunityMemberOut(CommunityMemberBase):
+    user_id: int
     user: UserOut
     join_date: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field(return_type=int)
+    def id(self) -> int:
+        """Expose the member's user id for lightweight membership assertions."""
+
+        return self.user_id
 
 
 # ================================================================

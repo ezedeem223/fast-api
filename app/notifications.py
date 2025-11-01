@@ -100,15 +100,62 @@ def handle_async_errors(func):
 # ============================================
 # Email Notification Function
 # ============================================
-@handle_async_errors
-async def send_email_notification(message: MessageSchema) -> None:
-    """
-    Sends an email notification using the fastapi_mail instance (fm).
+async def _dispatch_email(message: MessageSchema) -> None:
+    """Send an e-mail message using FastMail if it is configured."""
 
-    Raises an exception if sending fails.
+    if not message.recipients:
+        logger.info("Skipping email send because no recipients were provided.")
+        return
+
+    if fm is None:
+        logger.info("FastMail client is not configured; email send skipped.")
+        return
+
+    try:
+        await fm.send_message(message)
+        logger.info("Email notification sent successfully")
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error(f"Error sending email notification: {exc}")
+
+
+@handle_async_errors
+async def send_email_notification(
+    message: MessageSchema | None = None,
+    *,
+    background_tasks: BackgroundTasks | None = None,
+    to: list[str] | None = None,
+    recipients: list[str] | None = None,
+    subject: str | None = None,
+    body: str | None = None,
+    subtype: str = "html",
+) -> None:
+    """Send an email notification.
+
+    The function supports both direct :class:`MessageSchema` instances and keyword
+    arguments used throughout the routers (``to``, ``subject``, ``body``). When a
+    background task is provided, the email dispatch will be scheduled instead of
+    awaited immediately.
     """
-    await fm.send_message(message)
-    logger.info("Email notification sent successfully")
+
+    if to is not None and not isinstance(to, list):
+        to = [to]
+    recipients = recipients or to
+    if message is None:
+        message = MessageSchema(
+            subject=subject or "Notification",
+            recipients=recipients or [],
+            body=body or "",
+            subtype=subtype,
+        )
+
+    if background_tasks is not None:
+        def _schedule_email(msg: MessageSchema) -> None:
+            asyncio.create_task(_dispatch_email(msg))
+
+        background_tasks.add_task(_schedule_email, message)
+        return
+
+    await _dispatch_email(message)
 
 
 # ============================================
