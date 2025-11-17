@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 import json
 
-from .. import database, models, oauth2, schemas
-from ..config import settings
-from ..database import get_db
+from .. import models, oauth2, schemas
+from app.core.config import settings
+from app.core.database import get_db
 
 router = APIRouter(tags=["Social Authentication"])
 

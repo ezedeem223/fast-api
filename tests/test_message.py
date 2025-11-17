@@ -1,6 +1,6 @@
 import pytest
 from app import models, schemas, oauth2
-from app.database import get_db
+from app.core.database import get_db
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from fastapi import UploadFile

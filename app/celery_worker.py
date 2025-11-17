@@ -7,10 +7,17 @@ from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.config import settings  # استخدام الإعدادات بالحروف الكبيرة كما هو معرف
-from app.database import SessionLocal
-from app import models
-from app.utils import is_content_offensive
+from app.core.config import settings  # استخدام الإعدادات بالحروف الكبيرة كما هو معرف
+from app.core.database import SessionLocal
+from app import models as legacy_models
+from app.modules.notifications import models as notification_models
+from app.modules.notifications.tasks import (
+    cleanup_old_notifications_task,
+    process_scheduled_notifications_task,
+    deliver_notification_task as notification_delivery_handler,
+    send_push_notification_task as notification_push_handler,
+)
+from app.modules.utils.content import is_content_offensive
 
 # إزالة الاستيراد الثابت لدالة send_notifications_and_share لتفادي دائرة الاستيراد
 # from .routers.post import send_notifications_and_share
@@ -27,7 +34,7 @@ celery_app = Celery(
 
 # ------------------------- Email Configuration -------------------------
 # استخدام إعدادات البريد الإلكتروني من ملف config.py
-from app.config import fm  # fm معرف في config.py
+from app.core.config import fm  # fm معرف في config.py
 
 email_conf = settings.mail_config
 fm = FastMail(email_conf)
@@ -80,20 +87,7 @@ def cleanup_old_notifications():
     """
     db: Session = SessionLocal()
     try:
-        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-        db.query(models.Notification).filter(
-            models.Notification.is_read == True,
-            models.Notification.created_at < thirty_days_ago,
-            models.Notification.is_archived == False,
-        ).update({"is_archived": True})
-
-        ninety_days_ago = datetime.utcnow() - timedelta(days=90)
-        db.query(models.Notification).filter(
-            models.Notification.created_at < ninety_days_ago,
-            models.Notification.is_archived == True,
-        ).update({"is_deleted": True})
-
-        db.commit()
+        cleanup_old_notifications_task(db)
     finally:
         db.close()
 
@@ -107,19 +101,9 @@ def process_scheduled_notifications():
     """
     db: Session = SessionLocal()
     try:
-        now = datetime.utcnow()
-        scheduled_notifications = (
-            db.query(models.Notification)
-            .filter(
-                models.Notification.scheduled_for <= now,
-                models.Notification.is_delivered == False,
-            )
-            .all()
+        process_scheduled_notifications_task(
+            db, enqueue_delivery=lambda notification_id: deliver_notification.delay(notification_id)
         )
-        for notification in scheduled_notifications:
-            deliver_notification.delay(notification.id)
-            notification.is_delivered = True
-        db.commit()
     finally:
         db.close()
 
@@ -133,24 +117,14 @@ def deliver_notification(notification_id: int):
     """
     db: Session = SessionLocal()
     try:
-        notification = db.query(models.Notification).get(notification_id)
-        if not notification:
-            return
-
-        user_prefs = (
-            db.query(models.NotificationPreferences)
-            .filter(models.NotificationPreferences.user_id == notification.user_id)
-            .first()
-        )
-        if not user_prefs:
-            return
-
-        if user_prefs.email_notifications:
-            send_email_task.delay(
+        notification_delivery_handler(
+            db,
+            notification_id,
+            email_sender=lambda notification: send_email_task.delay(
                 [notification.user.email], "New Notification", notification.content
-            )
-        if user_prefs.push_notifications:
-            send_push_notification.delay(notification_id)
+            ),
+            push_sender=lambda notif_id: send_push_notification.delay(notif_id),
+        )
     finally:
         db.close()
 
@@ -163,33 +137,7 @@ def send_push_notification(notification_id: int):
     """
     db: Session = SessionLocal()
     try:
-        notification = db.query(models.Notification).get(notification_id)
-        if not notification:
-            return
-
-        devices = (
-            db.query(models.UserDevice)
-            .filter(
-                models.UserDevice.user_id == notification.user_id,
-                models.UserDevice.is_active == True,
-            )
-            .all()
-        )
-        for device in devices:
-            message = messaging.Message(
-                notification=messaging.Notification(
-                    title="New Notification", body=notification.content
-                ),
-                data={
-                    "notification_id": str(notification.id),
-                    "type": notification.notification_type,
-                    "link": notification.link or "",
-                },
-                token=device.fcm_token,
-            )
-            messaging.send(message)
-    except Exception as e:
-        print(f"Error sending push notification: {str(e)}")
+        notification_push_handler(db, notification_id)
     finally:
         db.close()
 
@@ -202,16 +150,16 @@ def update_notification_analytics():
     """
     db: Session = SessionLocal()
     try:
-        users = db.query(models.User).all()
+        users = db.query(legacy_models.User).all()
         for user in users:
             analytics = calculate_user_notification_analytics(db, user.id)
             user_analytics = (
-                db.query(models.NotificationAnalytics)
-                .filter(models.NotificationAnalytics.user_id == user.id)
+                db.query(notification_models.NotificationAnalytics)
+                .filter(notification_models.NotificationAnalytics.user_id == user.id)
                 .first()
             )
             if not user_analytics:
-                user_analytics = models.NotificationAnalytics(user_id=user.id)
+                user_analytics = notification_models.NotificationAnalytics(user_id=user.id)
                 db.add(user_analytics)
             user_analytics.engagement_rate = analytics["engagement_rate"]
             user_analytics.response_time = analytics["response_time"]
@@ -252,7 +200,7 @@ def check_old_posts_content():
     """
     db: Session = SessionLocal()
     try:
-        old_posts = db.query(models.Post).filter(models.Post.is_flagged == False).all()
+        old_posts = db.query(legacy_models.Post).filter(legacy_models.Post.is_flagged == False).all()
         for post in old_posts:
             is_offensive, confidence = is_content_offensive(post.content)
             if is_offensive:
@@ -271,10 +219,10 @@ def unblock_user(blocker_id: int, blocked_id: int):
     db: Session = SessionLocal()
     try:
         block = (
-            db.query(models.Block)
+            db.query(legacy_models.Block)
             .filter(
-                models.Block.blocker_id == blocker_id,
-                models.Block.blocked_id == blocked_id,
+                legacy_models.Block.blocker_id == blocker_id,
+                legacy_models.Block.blocked_id == blocked_id,
             )
             .first()
         )
@@ -282,8 +230,8 @@ def unblock_user(blocker_id: int, blocked_id: int):
             db.delete(block)
             db.commit()
 
-            blocker = db.query(models.User).filter(models.User.id == blocker_id).first()
-            blocked = db.query(models.User).filter(models.User.id == blocked_id).first()
+            blocker = db.query(legacy_models.User).filter(legacy_models.User.id == blocker_id).first()
+            blocked = db.query(legacy_models.User).filter(legacy_models.User.id == blocked_id).first()
             if blocker and blocked:
                 send_email_task.delay(
                     [blocked.email],
@@ -302,15 +250,15 @@ def clean_expired_blocks():
     db: Session = SessionLocal()
     try:
         expired_blocks = (
-            db.query(models.Block).filter(models.Block.ends_at < datetime.now()).all()
+            db.query(legacy_models.Block).filter(legacy_models.Block.ends_at < datetime.now()).all()
         )
         for block in expired_blocks:
             db.delete(block)
             blocker = (
-                db.query(models.User).filter(models.User.id == block.blocker_id).first()
+                db.query(legacy_models.User).filter(legacy_models.User.id == block.blocker_id).first()
             )
             blocked = (
-                db.query(models.User).filter(models.User.id == block.blocked_id).first()
+                db.query(legacy_models.User).filter(legacy_models.User.id == block.blocked_id).first()
             )
             if blocker and blocked:
                 send_email_task.delay(
@@ -343,17 +291,17 @@ def calculate_ban_effectiveness():
         yesterday = today - timedelta(days=1)
 
         yesterday_stats = (
-            db.query(models.BanStatistics)
-            .filter(models.BanStatistics.date == yesterday)
+            db.query(legacy_models.BanStatistics)
+            .filter(legacy_models.BanStatistics.date == yesterday)
             .first()
         )
         if yesterday_stats:
             total_content = db.query(
-                func.count(models.Post.id) + func.count(models.Comment.id)
+                func.count(legacy_models.Post.id) + func.count(legacy_models.Comment.id)
             ).scalar()
             reported_content = (
-                db.query(func.count(models.Report.id))
-                .filter(models.Report.created_at >= yesterday)
+                db.query(func.count(legacy_models.Report.id))
+                .filter(legacy_models.Report.created_at >= yesterday)
                 .scalar()
             )
             effectiveness = (
@@ -373,8 +321,8 @@ def remove_expired_bans():
     db: Session = SessionLocal()
     try:
         expired_bans = (
-            db.query(models.User)
-            .filter(models.User.current_ban_end < datetime.now())
+            db.query(legacy_models.User)
+            .filter(legacy_models.User.current_ban_end < datetime.now())
             .all()
         )
         for user in expired_bans:
@@ -391,8 +339,8 @@ def reset_report_counters():
     """
     db: Session = SessionLocal()
     try:
-        db.query(models.User).update(
-            {models.User.total_reports: 0, models.User.valid_reports: 0}
+        db.query(legacy_models.User).update(
+            {legacy_models.User.total_reports: 0, legacy_models.User.valid_reports: 0}
         )
         db.commit()
     finally:
@@ -406,11 +354,11 @@ def schedule_post_publication(post_id: int):
     """
     db: Session = SessionLocal()
     try:
-        post = db.query(models.Post).filter(models.Post.id == post_id).first()
+        post = db.query(legacy_models.Post).filter(legacy_models.Post.id == post_id).first()
         if post and not post.is_published:
             post.is_published = True
             db.commit()
-            user = db.query(models.User).filter(models.User.id == post.owner_id).first()
+            user = db.query(legacy_models.User).filter(legacy_models.User.id == post.owner_id).first()
             # لتفادي دائرة الاستيراد، نستورد دالة send_notifications_and_share محلياً
             from app.routers.post import send_notifications_and_share
 

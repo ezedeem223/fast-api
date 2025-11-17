@@ -9,7 +9,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from datetime import datetime
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.core.database import get_db
 from ..notifications import ConnectionManager
 
 router = APIRouter(prefix="/screen-share", tags=["Screen Share"])

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.core.database import get_db
 from sqlalchemy import func
 
 router = APIRouter(prefix="/hashtags", tags=["Hashtags"])

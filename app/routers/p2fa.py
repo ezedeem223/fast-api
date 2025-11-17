@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 import pyotp
 import logging
 from typing import Optional
-from .. import models, database, oauth2, schemas
-from ..utils import generate_qr_code
+from .. import models, oauth2, schemas
+from app.core.database import get_db
+from app.modules.utils.files import generate_qr_code
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class TwoFactorAuth:
 @router.post("/enable", response_model=schemas.Enable2FAResponse)
 async def enable_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ) -> schemas.Enable2FAResponse:
     """
     Enable two-factor authentication for the current user.
@@ -91,7 +92,7 @@ async def enable_2fa(
 @router.post("/disable")
 async def disable_2fa(
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     Disable two-factor authentication for the current user.
@@ -126,7 +127,7 @@ async def disable_2fa(
 async def verify_2fa(
     otp: schemas.Verify2FARequest,
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ) -> schemas.Verify2FAResponse:
     """
     Verify the provided OTP for two-factor authentication.

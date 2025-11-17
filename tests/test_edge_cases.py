@@ -1,14 +1,9 @@
-import pytest
-from app import schemas
-from .conftest import authorized_client, client, test_user, test_posts
-from sqlalchemy.exc import IntegrityError
-
-
 def test_create_post_with_empty_title(authorized_client):
     res = authorized_client.post(
         "/posts/", json={"title": "", "content": "Test content"}
     )
-    assert res.status_code == 403  # Changed from 422 to 403
+    assert res.status_code == 422
+    assert res.json()["detail"][0]["type"] == "string_too_short"
 
 
 def test_create_post_with_long_title(authorized_client):
@@ -16,21 +11,21 @@ def test_create_post_with_long_title(authorized_client):
     res = authorized_client.post(
         "/posts/", json={"title": long_title, "content": "Test content"}
     )
-    assert res.status_code == 403  # Changed from 422 to 403
+    assert res.status_code == 422
+    assert res.json()["detail"][0]["type"] == "string_too_long"
 
 
 def test_create_post_with_empty_content(authorized_client):
     res = authorized_client.post("/posts/", json={"title": "Test title", "content": ""})
-    assert res.status_code == 403  # Changed from 422 to 403
+    assert res.status_code == 422
+    assert res.json()["detail"] == "Content cannot be empty"
 
 
 def test_delete_nonexistent_post(authorized_client):
     res = authorized_client.delete("/posts/9999")
     assert res.status_code == 404
-    assert (
-        "post with id" in res.json()["detail"]
-        and "does not exist" in res.json()["detail"]
-    )
+    detail = res.json()["detail"].lower()
+    assert "post with id" in detail and "does not exist" in detail
 
 
 def test_unauthorized_user_access_protected_route(client):
@@ -71,17 +66,16 @@ def test_delete_other_user_post(authorized_client, test_posts, test_user2):
 def test_get_nonexistent_post(authorized_client):
     res = authorized_client.get("/posts/9999")
     assert res.status_code == 404
-    assert (
-        "post with id" in res.json()["detail"]
-        and "was not found" in res.json()["detail"]
-    )
+    detail = res.json()["detail"].lower()
+    assert "post with id" in detail and "was not found" in detail
 
 
 def test_create_duplicate_user(client, test_user):
-    with pytest.raises(IntegrityError):
-        client.post(
-            "/users/", json={"email": test_user["email"], "password": "newpassword123"}
-        )
+    res = client.post(
+        "/users/", json={"email": test_user["email"], "password": "newpassword123"}
+    )
+    assert res.status_code == 400
+    assert "email already registered" in res.json()["detail"].lower()
 
 
 def test_create_post_with_invalid_json(authorized_client):

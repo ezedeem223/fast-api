@@ -7,8 +7,8 @@
 # # from linkedin_api import Linkedin
 
 # # Import your configuration settings (Assuming you have a config module)
-# from ..config import settings
-# from ..database import get_db
+# from app.core.config import settings
+# from app.core.database import get_db
 # from .. import models, schemas, oauth2
 
 # # Import for periodic tasks

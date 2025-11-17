@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from authlib.integrations.starlette_client import OAuth
 from sqlalchemy.orm import Session
-from .. import database, models, oauth2
-from app.config import settings
+from .. import models, oauth2
+from app.core.database import get_db
+from app.core.config import settings
 
 router = APIRouter(tags=["OAuth"])
 
@@ -39,7 +40,7 @@ async def auth_google(request: Request):
 
 @router.get("/google/callback")
 async def auth_google_callback(
-    request: Request, db: Session = Depends(database.get_db)
+    request: Request, db: Session = Depends(get_db)
 ):
     """
     Handle the callback from Google OAuth, create a new user if not existing, and generate an access token.

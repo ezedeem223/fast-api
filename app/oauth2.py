@@ -9,16 +9,16 @@ It integrates with IP management utilities for enhanced security and performs pr
 # ============================================
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from . import schemas, database, models
 from sqlalchemy.orm import Session
 from fastapi import Depends, status, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
-from .config import settings
+from app.core.config import settings
 import logging
 from typing import Optional
-from .database import get_db
-from .models import User, UserRole
-from .utils import get_client_ip, is_ip_banned, detect_ip_evasion
+from . import schemas
+from app.core.database import get_db
+from app.modules.users.models import User, UserRole, TokenBlacklist
+from app.modules.utils.network import get_client_ip, is_ip_banned, detect_ip_evasion
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -143,7 +143,7 @@ def verify_access_token(token: str, credentials_exception):
 # ============================================
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     request: Request = None,
 ):
     """
@@ -183,14 +183,14 @@ def get_current_user(
         raise credentials_exception
 
     try:
-        user = db.query(models.User).filter(models.User.id == token_data.id).first()
+        user = db.query(User).filter(User.id == token_data.id).first()
         if user is None:
             raise credentials_exception
 
         # Check if the token is blacklisted
         blacklisted_token = (
-            db.query(models.TokenBlacklist)
-            .filter(models.TokenBlacklist.token == token)
+            db.query(TokenBlacklist)
+            .filter(TokenBlacklist.token == token)
             .first()
         )
         if blacklisted_token:
@@ -238,7 +238,7 @@ def get_current_admin(
     - Raises HTTPException if the user does not have admin privileges.
     """
     user = get_current_user(token, db)
-    if user.role != models.UserRole.ADMIN:
+    if user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
         )

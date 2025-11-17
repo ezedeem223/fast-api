@@ -1,6 +1,4 @@
 from fastapi import (
-    FastAPI,
-    Response,
     status,
     HTTPException,
     Depends,
@@ -10,27 +8,29 @@ from fastapi import (
     File,
     Query,
 )
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, desc, asc
-from datetime import timedelta, datetime, date
-import pyotp
-from typing import List, Optional
-from pydantic import HttpUrl
+from sqlalchemy.orm import Session
+from typing import List
 
 # Importing local modules
-from .. import models, schemas, utils, oauth2, crypto
+from .. import models, schemas, oauth2
 from app.modules.users import UserService
-from app.modules.users.models import User, UserActivity, UserSession, UserStatistics
-from ..database import get_db
+from app.modules.users.models import User
+from app.core.database import get_db
 from ..notifications import send_email_notification
 from ..cache import cache
-from ..utils import log_user_event
+from app.modules.utils.events import log_user_event
 from ..i18n import (
     ALL_LANGUAGES,
     get_translated_content,
 )  # Assuming get_translated_content is defined here
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+def get_user_service(db: Session = Depends(get_db)) -> UserService:
+    """Provide a UserService instance for route handlers."""
+    return UserService(db)
+
 
 # --- User Endpoints ---
 
@@ -39,13 +39,12 @@ router = APIRouter(prefix="/users", tags=["Users"])
 async def create_user(
     background_tasks: BackgroundTasks,
     user: schemas.UserCreate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     إنشاء مستخدم جديد وإنشاء إشعار بالبريد الإلكتروني
     Create a new user and send an email notification.
     """
-    service = UserService(db)
     new_user = service.create_user(user)
 
     # Send email notification asynchronously
@@ -63,7 +62,7 @@ async def create_user(
 @cache(expire=300)
 async def get_user_followers(
     user_id: int,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
     sort_by: schemas.SortOption = Query(schemas.SortOption.DATE),
     order: str = Query("desc", enum=["asc", "desc"]),
@@ -74,7 +73,6 @@ async def get_user_followers(
     الحصول على قائمة المتابعين مع إمكانية الفرز
     Retrieve a list of followers with sorting options.
     """
-    service = UserService(db)
     _, followers, total_count = service.get_user_followers(
         user_id=user_id,
         requesting_user=current_user,
@@ -104,42 +102,39 @@ async def get_user_followers(
 )
 async def update_followers_settings(
     settings: schemas.UserFollowersSettings,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث إعدادات رؤية المتابعين
     Update user's followers settings.
     """
-    service = UserService(db)
     return service.update_followers_settings(current_user, settings)
 
 
 @router.put("/public-key", response_model=schemas.UserOut)
 def update_public_key(
     key_update: schemas.UserPublicKeyUpdate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث المفتاح العام للمستخدم
     Update the user's public key.
     """
-    service = UserService(db)
     return service.update_public_key(current_user, key_update)
 
 
 @router.get("/{id}", response_model=schemas.UserOut)
 def get_user(
     id: int,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     الحصول على بيانات المستخدم حسب المعرف
     Get user details by ID.
     """
-    service = UserService(db)
     user = service.get_user_or_404(id)
 
     # Check privacy settings for profile
@@ -161,13 +156,12 @@ async def verify_user(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     رفع وثيقة التحقق وتفعيل الحساب
     Upload verification document and verify the user.
     """
-    service = UserService(db)
     file_location = service.verify_user_document(current_user, file)
 
     await send_email_notification(
@@ -181,7 +175,7 @@ async def verify_user(
 
 @router.get("/my-content", response_model=schemas.UserContentOut)
 async def get_user_content(
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -190,287 +184,133 @@ async def get_user_content(
     الحصول على محتوى المستخدم (المنشورات، التعليقات، المقالات، والفيديوهات القصيرة)
     Retrieve the user's content including posts, comments, articles, and reels.
     """
-    # Ensure the user is authenticated
-    if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this content",
-        )
-
-    # Query posts with privacy considerations
-    posts_query = db.query(models.Post).filter(models.Post.owner_id == current_user.id)
-    if current_user.privacy_level == models.PrivacyLevel.CUSTOM:
-        allowed_users = current_user.custom_privacy.get("allowed_users", [])
-        posts_query = posts_query.filter(
-            or_(
-                models.Post.privacy_level == models.PrivacyLevel.PUBLIC,
-                models.Post.id.in_(allowed_users),
-            )
-        )
-    elif current_user.privacy_level == models.PrivacyLevel.PUBLIC:
-        posts_query = posts_query.filter(
-            models.Post.privacy_level == models.PrivacyLevel.PUBLIC
-        )
-    # If PRIVATE, show all posts of the user (no filtering needed)
-
-    posts = (
-        posts_query.options(joinedload(models.Post.owner))
-        .order_by(models.Post.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    # Query comments, articles, and reels similarly
-    comments = (
-        db.query(models.Comment)
-        .filter(models.Comment.owner_id == current_user.id)
-        .options(joinedload(models.Comment.post))
-        .order_by(models.Comment.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    articles = (
-        db.query(models.Article)
-        .filter(models.Article.author_id == current_user.id)
-        .options(joinedload(models.Article.author))
-        .order_by(models.Article.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    reels = (
-        db.query(models.Reel)
-        .filter(models.Reel.owner_id == current_user.id)
-        .options(joinedload(models.Reel.owner))
-        .order_by(models.Reel.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    return schemas.UserContentOut(
-        posts=[schemas.PostOut.from_orm(post) for post in posts],
-        comments=[schemas.Comment.from_orm(comment) for comment in comments],
-        articles=[schemas.ArticleOut.from_orm(article) for article in articles],
-        reels=[schemas.ReelOut.from_orm(reel) for reel in reels],
-    )
+    return service.get_user_content(current_user, skip, limit)
 
 
 @router.put("/profile", response_model=schemas.UserProfileOut)
 def update_user_profile(
     profile_update: schemas.UserProfileUpdate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث الملف الشخصي للمستخدم
     Update the user's profile.
     """
-    for key, value in profile_update.dict(exclude_unset=True).items():
-        setattr(current_user, key, value)
-
-    db.commit()
-    db.refresh(current_user)
-    log_user_event(db, current_user.id, "update_profile")
-
-    return get_user_profile(current_user.id, db)
+    updated_profile = service.update_profile(current_user, profile_update)
+    log_user_event(service.db, current_user.id, "update_profile")
+    return updated_profile
 
 
 @router.put("/privacy", response_model=schemas.UserOut)
 def update_privacy_settings(
     privacy_settings: schemas.UserPrivacyUpdate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث إعدادات الخصوصية للمستخدم
     Update the user's privacy settings.
     """
-    if (
-        privacy_settings.privacy_level == schemas.PrivacyLevel.CUSTOM
-        and not privacy_settings.custom_privacy
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Custom privacy settings required for CUSTOM privacy level",
-        )
-
-    current_user.privacy_level = privacy_settings.privacy_level
-    if privacy_settings.custom_privacy:
-        current_user.custom_privacy = privacy_settings.custom_privacy
-
-    db.commit()
-    db.refresh(current_user)
-    return current_user
+    return service.update_privacy_settings(current_user, privacy_settings)
 
 
 @router.get("/profile/{user_id}", response_model=schemas.UserProfileOut)
 async def get_user_profile(
     user_id: int,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     الحصول على الملف الشخصي للمستخدم مع ترجمة الـ bio (في حال تفعيل الترجمة)
     Get the user profile and translate bio if needed.
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Translate bio if necessary (assuming get_translated_content is an async function)
-    user.bio = await get_translated_content(user.bio, current_user, user.language)
-
-    post_count = (
-        db.query(func.count(models.Post.id))
-        .filter(models.Post.owner_id == user_id)
-        .scalar()
-    )
-    follower_count = (
-        db.query(func.count(models.Follow.follower_id))
-        .filter(models.Follow.followed_id == user_id)
-        .scalar()
-    )
-    following_count = (
-        db.query(func.count(models.Follow.followed_id))
-        .filter(models.Follow.follower_id == user_id)
-        .scalar()
-    )
-    community_count = (
-        db.query(func.count(models.CommunityMember.user_id))
-        .filter(models.CommunityMember.user_id == user_id)
-        .scalar()
-    )
-    media_count = (
-        db.query(func.count(models.Post.id))
-        .filter(
-            models.Post.owner_id == user_id,
-            or_(
-                models.Post.content.like("%image%"), models.Post.content.like("%video%")
-            ),
-        )
-        .scalar()
-    )
+    user, metrics = service.get_profile_overview(user_id)
+    translated_bio = await get_translated_content(user.bio, current_user, user.language)
 
     return schemas.UserProfileOut(
         id=user.id,
         email=user.email,
         profile_image=user.profile_image,
-        bio=user.bio,
+        bio=translated_bio,
         location=user.location,
         website=user.website,
         joined_at=user.joined_at,
-        post_count=post_count,
-        follower_count=follower_count,
-        following_count=following_count,
-        community_count=community_count,
-        media_count=media_count,
+        post_count=metrics["post_count"],
+        follower_count=metrics["follower_count"],
+        following_count=metrics["following_count"],
+        community_count=metrics["community_count"],
+        media_count=metrics["media_count"],
     )
 
 
 @router.get("/profile/{user_id}/posts", response_model=List[schemas.PostOut])
 def get_user_posts(
-    user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    skip: int = 0,
+    limit: int = 10,
 ):
     """
     الحصول على منشورات المستخدم حسب المعرف
     Get posts of a user by user ID.
     """
-    posts = (
-        db.query(models.Post)
-        .filter(models.Post.owner_id == user_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [schemas.PostOut.from_orm(post) for post in posts]
+    return service.get_user_posts(user_id, skip, limit)
 
 
 @router.get("/profile/{user_id}/articles", response_model=List[schemas.ArticleOut])
 def get_user_articles(
-    user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    skip: int = 0,
+    limit: int = 10,
 ):
     """
     الحصول على مقالات المستخدم حسب المعرف
     Get articles of a user by user ID.
     """
-    articles = (
-        db.query(models.Article)
-        .filter(models.Article.author_id == user_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [schemas.ArticleOut.from_orm(article) for article in articles]
+    return service.get_user_articles(user_id, skip, limit)
 
 
 @router.get("/profile/{user_id}/media", response_model=List[schemas.PostOut])
 def get_user_media(
-    user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    skip: int = 0,
+    limit: int = 10,
 ):
     """
     الحصول على وسائط المستخدم (صور وفيديوهات)
     Get media posts of a user by user ID.
     """
-    media = (
-        db.query(models.Post)
-        .filter(
-            models.Post.owner_id == user_id,
-            or_(
-                models.Post.content.like("%image%"), models.Post.content.like("%video%")
-            ),
-        )
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [schemas.PostOut.from_orm(item) for item in media]
+    return service.get_user_media(user_id, skip, limit)
 
 
 @router.get("/profile/{user_id}/likes", response_model=List[schemas.PostOut])
 def get_user_likes(
-    user_id: int, db: Session = Depends(get_db), skip: int = 0, limit: int = 10
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    skip: int = 0,
+    limit: int = 10,
 ):
     """
     الحصول على المشاركات التي أعجب بها المستخدم
     Get posts liked by the user.
     """
-    liked_posts = (
-        db.query(models.Post)
-        .join(models.Vote)
-        .filter(models.Vote.user_id == user_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return [schemas.PostOut.from_orm(post) for post in liked_posts]
+    return service.get_user_likes(user_id, skip, limit)
 
 
 @router.post("/profile/image")
 async def upload_profile_image(
     file: UploadFile = File(...),
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     رفع صورة الملف الشخصي للمستخدم
     Upload the user's profile image.
     """
-    if file.content_type not in ["image/jpeg", "image/png"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file type. Only JPEG and PNG are allowed.",
-        )
-
-    file_location = f"static/profile_images/{current_user.id}_{file.filename}"
-    with open(file_location, "wb+") as file_object:
-        file_object.write(file.file.read())
-
-    current_user.profile_image = file_location
-    db.commit()
-
+    service.upload_profile_image(current_user, file)
     return {"info": "Profile image uploaded successfully."}
 
 
@@ -478,106 +318,68 @@ async def upload_profile_image(
 def change_password(
     password_change: schemas.PasswordChange,
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     تغيير كلمة المرور للمستخدم
     Change the user's password.
     """
-    if not utils.verify(password_change.current_password, current_user.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
-        )
-
-    hashed_password = utils.hash(password_change.new_password)
-    current_user.password = hashed_password
-    db.commit()
-    return {"message": "Password changed successfully"}
+    return service.change_password(current_user, password_change)
 
 
 @router.post("/enable-2fa", response_model=schemas.Enable2FAResponse)
 def enable_2fa(
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     تفعيل المصادقة الثنائية (2FA)
     Enable Two-Factor Authentication.
     """
-    if current_user.otp_secret:
-        raise HTTPException(status_code=400, detail="2FA is already enabled")
-
-    secret = pyotp.random_base32()
-    current_user.otp_secret = secret
-    db.commit()
-
-    return {"otp_secret": secret}
+    return service.enable_2fa(current_user)
 
 
 @router.post("/verify-2fa")
 def verify_2fa(
     otp: str,
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     التحقق من رمز المصادقة الثنائية
     Verify the Two-Factor Authentication code.
     """
-    if not current_user.otp_secret:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="2FA is not enabled for this user.",
-        )
-
-    totp = pyotp.TOTP(current_user.otp_secret)
-    if not totp.verify(otp):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP"
-        )
-
-    return {"message": "2FA verified successfully"}
+    return service.verify_2fa(current_user, otp)
 
 
 @router.post("/disable-2fa")
 def disable_2fa(
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     تعطيل المصادقة الثنائية (2FA)
     Disable Two-Factor Authentication.
     """
-    if not current_user.otp_secret:
-        raise HTTPException(status_code=400, detail="2FA is not enabled")
-
-    current_user.otp_secret = None
-    db.commit()
-
-    return {"message": "2FA disabled successfully"}
+    return service.disable_2fa(current_user)
 
 
 @router.post("/logout-all-devices")
 def logout_all_devices(
     current_user: User = Depends(oauth2.get_current_user),
     current_session: str = Depends(oauth2.get_current_session),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     تسجيل الخروج من جميع الأجهزة الأخرى
     Log out the user from all other devices.
     """
-    db.query(UserSession).filter(
-        UserSession.user_id == current_user.id,
-        UserSession.session_id != current_session,
-    ).delete()
-    db.commit()
-    return {"message": "Logged out from all other devices"}
+    return service.logout_other_sessions(current_user, current_session)
 
 
 @router.get("/suggested-follows", response_model=List[schemas.UserOut])
 def get_suggested_follows(
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
     limit: int = 10,
 ):
@@ -585,54 +387,12 @@ def get_suggested_follows(
     الحصول على اقتراحات للمتابعة بناءً على الاهتمامات والاتصالات المشتركة
     Get suggested users to follow based on shared interests and connections.
     """
-    if not current_user.interests:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User has no interests set"
-        )
-
-    # Users with similar interests
-    similar_interests = (
-        db.query(User.id)
-        .filter(User.id != current_user.id)
-        .filter(User.interests.overlap(current_user.interests))
-        .subquery()
-    )
-
-    # Users followed by those the current user follows
-    followed_by_current_user = (
-        db.query(models.Follow.followed_id)
-        .filter(models.Follow.follower_id == current_user.id)
-        .subquery()
-    )
-    followers_of_followed = (
-        db.query(models.Follow.follower_id)
-        .filter(models.Follow.followed_id.in_(followed_by_current_user))
-        .subquery()
-    )
-
-    suggested_users = (
-        db.query(User)
-        .outerjoin(similar_interests, User.id == similar_interests.c.id)
-        .outerjoin(
-            followers_of_followed, User.id == followers_of_followed.c.follower_id
-        )
-        .filter(User.id != current_user.id)
-        .filter(~User.id.in_(followed_by_current_user))
-        .group_by(User.id)
-        .order_by(
-            func.count(similar_interests.c.id).desc(),
-            func.count(followers_of_followed.c.follower_id).desc(),
-        )
-        .limit(limit)
-        .all()
-    )
-
-    return suggested_users
+    return service.get_suggested_follows(current_user, limit)
 
 
 @router.get("/analytics", response_model=schemas.UserAnalytics)
 async def get_user_analytics(
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
     days: int = Query(30, ge=1, le=365),
 ):
@@ -640,119 +400,63 @@ async def get_user_analytics(
     الحصول على إحصائيات المستخدم خلال فترة محددة
     Get user analytics for a specified period.
     """
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days)
-
-    daily_stats = (
-        db.query(UserStatistics)
-        .filter(
-            UserStatistics.user_id == current_user.id,
-            UserStatistics.date.between(start_date, end_date),
-        )
-        .all()
-    )
-
-    totals = (
-        db.query(
-            func.sum(UserStatistics.post_count).label("total_posts"),
-            func.sum(UserStatistics.comment_count).label("total_comments"),
-            func.sum(UserStatistics.like_count).label("total_likes"),
-            func.sum(UserStatistics.view_count).label("total_views"),
-        )
-        .filter(UserStatistics.user_id == current_user.id)
-        .first()
-    )
-
-    return schemas.UserAnalytics(
-        total_posts=totals.total_posts or 0,
-        total_comments=totals.total_comments or 0,
-        total_likes=totals.total_likes or 0,
-        total_views=totals.total_views or 0,
-        daily_statistics=daily_stats,
-    )
+    return service.get_user_analytics(current_user, days)
 
 
 @router.get("/settings", response_model=schemas.UserSettings)
 async def get_user_settings(
     current_user: User = Depends(oauth2.get_current_user),
+    service: UserService = Depends(get_user_service),
 ):
     """
     الحصول على إعدادات المستخدم (واجهة المستخدم وإشعارات)
     Get user settings (UI and notification settings).
     """
-    return schemas.UserSettings(
-        ui_settings=schemas.UISettings(**current_user.ui_settings),
-        notifications_settings=schemas.NotificationsSettings(
-            **current_user.notifications_settings
-        ),
-    )
+    return service.get_user_settings(current_user)
 
 
 @router.put("/settings", response_model=schemas.UserSettings)
 async def update_user_settings(
     settings: schemas.UserSettingsUpdate,
     current_user: User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ):
     """
     تحديث إعدادات المستخدم (واجهة المستخدم وإشعارات)
     Update the user's settings.
     """
-    if settings.ui_settings:
-        current_user.ui_settings.update(settings.ui_settings.dict(exclude_unset=True))
-    if settings.notifications_settings:
-        current_user.notifications_settings.update(
-            settings.notifications_settings.dict(exclude_unset=True)
-        )
-
-    db.commit()
-    db.refresh(current_user)
-
-    return schemas.UserSettings(
-        ui_settings=schemas.UISettings(**current_user.ui_settings),
-        notifications_settings=schemas.NotificationsSettings(
-            **current_user.notifications_settings
-        ),
-    )
+    return service.update_user_settings(current_user, settings)
 
 
 @router.put("/block-settings", response_model=schemas.UserOut)
 async def update_block_settings(
     settings: schemas.BlockSettings,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث إعدادات الحظر للمستخدم
     Update the user's block settings.
     """
-    current_user.default_block_type = settings.default_block_type
-    db.commit()
-    db.refresh(current_user)
-    return current_user
+    return service.update_block_settings(current_user, settings)
 
 
 @router.put("/settings/reposts", response_model=schemas.UserOut)
 def update_repost_settings(
     settings: schemas.UserUpdate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث إعدادات إعادة النشر للمستخدم
     Update the user's repost settings.
     """
-    if settings.allow_reposts is not None:
-        current_user.allow_reposts = settings.allow_reposts
-        db.commit()
-        db.refresh(current_user)
-
-    return current_user
+    return service.update_repost_settings(current_user, settings)
 
 
 @router.get("/notifications", response_model=List[schemas.NotificationOut])
 def get_user_notifications(
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
     skip: int = 0,
     limit: int = 10,
@@ -761,16 +465,7 @@ def get_user_notifications(
     الحصول على إشعارات المستخدم
     Retrieve the user's notifications.
     """
-    notifications = (
-        db.query(models.Notification)
-        .filter(models.Notification.user_id == current_user.id)
-        .order_by(desc(models.Notification.created_at))
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    return notifications
+    return service.get_user_notifications(current_user, skip, limit)
 
 
 @router.put(
@@ -778,85 +473,53 @@ def get_user_notifications(
 )
 def mark_notification_as_read(
     notification_id: int,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تعليم إشعار كمقروء
     Mark a specific notification as read.
     """
-    notification = (
-        db.query(models.Notification)
-        .filter(
-            models.Notification.id == notification_id,
-            models.Notification.user_id == current_user.id,
-        )
-        .first()
-    )
-
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    notification.is_read = True
-    db.commit()
-    db.refresh(notification)
-
-    return notification
+    return service.mark_notification_as_read(notification_id, current_user)
 
 
-def log_user_activity(db: Session, user_id: int, activity_type: str, details: dict):
-    """
-    تسجيل نشاط المستخدم في قاعدة البيانات
-    Log the user's activity.
-    """
-    activity = UserActivity(
-        user_id=user_id, activity_type=activity_type, details=details
-    )
-    db.add(activity)
-    db.commit()
 
 
 @router.post("/users/{user_id}/suspend")
-def suspend_user(user_id: int, days: int, db: Session = Depends(get_db)):
+def suspend_user(
+    user_id: int,
+    days: int,
+    service: UserService = Depends(get_user_service),
+):
     """
     تعليق حساب المستخدم لمدة محددة
     Suspend the user for a specified number of days.
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_suspended = True
-    user.suspension_end_date = datetime.utcnow() + timedelta(days=days)
-    db.commit()
-    return {"message": "User suspended successfully"}
+    return service.suspend_user(user_id, days)
 
 
 @router.post("/users/{user_id}/unsuspend")
-def unsuspend_user(user_id: int, db: Session = Depends(get_db)):
+def unsuspend_user(
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+):
     """
     رفع تعليق حساب المستخدم
     Unsuspend the user.
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.is_suspended = False
-    user.suspension_end_date = None
-    db.commit()
-    return {"message": "User unsuspended successfully"}
+    return service.unsuspend_user(user_id)
 
 
 @router.put("/users/me/language")
 def update_user_language(
     language: schemas.UserLanguageUpdate,
-    db: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
     """
     تحديث لغة المستخدم وخيارات الترجمة التلقائية
     Update the user's preferred language and auto-translate settings.
     """
-    service = UserService(db)
     return service.update_language_preferences(current_user, language)
 
 
@@ -867,3 +530,4 @@ def get_language_options():
     Get available language options.
     """
     return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]
+

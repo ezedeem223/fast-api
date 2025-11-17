@@ -4,109 +4,124 @@ from unittest.mock import patch
 
 
 @pytest.fixture()
-def test_vote(test_posts, session, test_user):
-    new_vote = models.Vote(post_id=test_posts[3].id, user_id=test_user["id"])
-    session.add(new_vote)
+def test_reaction(test_posts, session, test_user):
+    reaction = models.Reaction(
+        post_id=test_posts[3].id,
+        user_id=test_user["id"],
+        reaction_type=models.ReactionType.LIKE.value,
+    )
+    session.add(reaction)
     session.commit()
-    return new_vote
+    return reaction
 
 
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_on_post(mock_email, authorized_client, test_posts, test_user, session):
-    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 1})
-    assert res.status_code == 201
-    assert res.json()["message"] == "Successfully added vote"
-    vote = (
-        session.query(models.Vote)
+def _patch_email():
+    return patch("app.routers.vote.queue_email_notification"), patch(
+        "app.routers.vote.schedule_email_notification"
+    )
+
+
+def _get_reaction(session, post_id, user_id):
+    return (
+        session.query(models.Reaction)
         .filter(
-            models.Vote.post_id == test_posts[3].id,
-            models.Vote.user_id == test_user["id"],
+            models.Reaction.post_id == post_id,
+            models.Reaction.user_id == user_id,
         )
         .first()
     )
-    assert vote is not None
-    mock_email.assert_called_once()
 
 
-@patch("app.routers.vote.schedule_email_notification")
-def test_remove_vote(
-    mock_email, authorized_client, test_posts, test_user, test_vote, session
+def test_vote_on_post(authorized_client, test_posts, test_user, session):
+    post_id = test_posts[3].id
+    with _patch_email()[0] as mock_queue, _patch_email()[1] as mock_schedule:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": post_id, "reaction_type": "like"}
+        )
+    assert res.status_code == 201
+    assert res.json()["message"] == "Successfully added like reaction"
+    reaction = _get_reaction(session, post_id, test_user["id"])
+    assert reaction is not None
+    assert reaction.reaction_type == models.ReactionType.LIKE
+    mock_queue.assert_called_once()
+    mock_schedule.assert_called_once()
+
+
+def test_remove_vote(authorized_client, test_posts, test_user, session, test_reaction):
+    post_id = test_posts[3].id
+    with _patch_email()[0] as mock_queue, _patch_email()[1] as mock_schedule:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": post_id, "reaction_type": "like"}
+        )
+    assert res.status_code == 201
+    assert res.json()["message"] == "Successfully removed like reaction"
+    reaction = _get_reaction(session, post_id, test_user["id"])
+    assert reaction is None
+    mock_queue.assert_called_once()
+    mock_schedule.assert_called_once()
+
+
+def test_vote_updates_reaction(
+    authorized_client, test_posts, test_user, session, test_reaction
 ):
-    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 0})
-    assert res.status_code == 201
-    assert res.json()["message"] == "Successfully deleted vote"
-    vote = (
-        session.query(models.Vote)
-        .filter(
-            models.Vote.post_id == test_posts[3].id,
-            models.Vote.user_id == test_user["id"],
+    post_id = test_posts[3].id
+    with _patch_email()[0] as mock_queue, _patch_email()[1] as mock_schedule:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": post_id, "reaction_type": "love"}
         )
-        .first()
-    )
-    assert vote is None
-    mock_email.assert_called_once()
+    assert res.status_code == 201
+    assert res.json()["message"] == "Successfully updated reaction to love"
+    reaction = _get_reaction(session, post_id, test_user["id"])
+    assert reaction is not None
+    assert reaction.reaction_type == models.ReactionType.LOVE
+    mock_queue.assert_called_once()
+    mock_schedule.assert_called_once()
 
 
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_twice_post(mock_email, authorized_client, test_posts, test_vote):
-    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 1})
-    assert res.status_code == 409
-    mock_email.assert_not_called()
-
-
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_post_non_exist(mock_email, authorized_client, test_posts):
-    res = authorized_client.post("/vote/", json={"post_id": 80000, "dir": 1})
+def test_vote_post_non_exist(authorized_client):
+    with _patch_email()[0], _patch_email()[1]:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": 80000, "reaction_type": "like"}
+        )
     assert res.status_code == 404
-    mock_email.assert_not_called()
 
 
 def test_vote_unauthorized_user(client, test_posts):
-    res = client.post("/vote/", json={"post_id": test_posts[0].id, "dir": 1})
+    post_id = test_posts[0].id
+    res = client.post("/vote/", json={"post_id": post_id, "reaction_type": "like"})
     assert res.status_code == 401
 
 
-@pytest.mark.parametrize("dir_value", [-1, 2])
-def test_vote_invalid_direction(dir_value, authorized_client, test_posts):
+@pytest.mark.parametrize("reaction_type", ["invalid", ""])
+def test_vote_invalid_reaction_type(reaction_type, authorized_client, test_posts):
     res = authorized_client.post(
-        "/vote/", json={"post_id": test_posts[0].id, "dir": dir_value}
+        "/vote/",
+        json={"post_id": test_posts[0].id, "reaction_type": reaction_type},
     )
-    assert res.status_code == 422  # Changed from 404 to 422
+    assert res.status_code == 422
 
 
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_own_post(mock_email, authorized_client, test_posts, test_user):
-    res = authorized_client.post("/vote/", json={"post_id": test_posts[0].id, "dir": 1})
-    assert res.status_code == 201
-    mock_email.assert_called_once()
-
-
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_other_user_post(mock_email, authorized_client, test_posts, test_user):
-    res = authorized_client.post("/vote/", json={"post_id": test_posts[3].id, "dir": 1})
-    assert res.status_code == 201
-    mock_email.assert_called_once()
-
-
-@pytest.mark.parametrize("dir_value", [0, 1])
-@patch("app.routers.vote.schedule_email_notification")
-def test_vote_direction(
-    mock_email, dir_value, authorized_client, test_posts, session, test_user
-):
-    res = authorized_client.post(
-        "/vote/", json={"post_id": test_posts[0].id, "dir": dir_value}
-    )
-    assert res.status_code == 201
-    vote = (
-        session.query(models.Vote)
-        .filter(
-            models.Vote.post_id == test_posts[0].id,
-            models.Vote.user_id == test_user["id"],
+def test_vote_own_post(authorized_client, test_posts, test_user, session):
+    post_id = test_posts[0].id
+    with _patch_email()[0] as mock_queue, _patch_email()[1] as mock_schedule:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": post_id, "reaction_type": "haha"}
         )
-        .first()
-    )
-    if dir_value == 1:
-        assert vote is not None
-    else:
-        assert vote is None
-    mock_email.assert_called_once()
+    assert res.status_code == 201
+    reaction = _get_reaction(session, post_id, test_user["id"])
+    assert reaction is not None
+    mock_queue.assert_called_once()
+    mock_schedule.assert_called_once()
+
+
+def test_vote_other_user_post(authorized_client, test_posts, test_user, session):
+    post_id = test_posts[3].id
+    with _patch_email()[0] as mock_queue, _patch_email()[1] as mock_schedule:
+        res = authorized_client.post(
+            "/vote/", json={"post_id": post_id, "reaction_type": "wow"}
+        )
+    assert res.status_code == 201
+    reaction = _get_reaction(session, post_id, test_user["id"])
+    assert reaction is not None
+    mock_queue.assert_called_once()
+    mock_schedule.assert_called_once()

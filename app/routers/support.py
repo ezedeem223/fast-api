@@ -4,7 +4,7 @@ from typing import List
 
 # Import project modules
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.core.database import get_db
 
 router = APIRouter(prefix="/support", tags=["Support"])
 

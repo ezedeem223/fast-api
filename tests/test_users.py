@@ -1,7 +1,7 @@
 import pytest
 from jose import jwt
 from app import schemas
-from app.config import settings
+from app.core.config import settings
 from app.models import User
 from app.oauth2 import create_access_token
 from datetime import datetime, timedelta

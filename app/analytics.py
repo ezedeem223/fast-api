@@ -6,26 +6,30 @@ from datetime import (
 )  # Added timezone for correct UTC usage
 from . import models
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from .config import settings
+from app.core.config import settings
+from app.core.database import get_db
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
 import base64
-from .models import SearchStatistics, User
+from .models import SearchStatistics
+from app.modules.users.models import User, UserEvent
 from sqlalchemy.orm import Session
 
-# NOTE: Ensure that get_db() is defined in your project or import it accordingly.
-# from .database import get_db
+_PIPELINE_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
+_sentiment_pipeline = None
+model = None
 
-# Initialize the tokenizer and model for sentiment analysis
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+
+def _get_sentiment_pipeline():
+    global _sentiment_pipeline, model
+    if _sentiment_pipeline is None:
+        tokenizer = AutoTokenizer.from_pretrained(_PIPELINE_NAME)
+        model = AutoModelForSequenceClassification.from_pretrained(_PIPELINE_NAME)
+        _sentiment_pipeline = pipeline(
+            "sentiment-analysis", model=model, tokenizer=tokenizer
+        )
+    return _sentiment_pipeline
 
 # ------------------------- Content Analysis Functions -------------------------
 
@@ -35,7 +39,8 @@ def analyze_sentiment(text):
     Analyze the sentiment of the given text using a pre-trained transformer model.
     Returns a dictionary with sentiment label and score.
     """
-    result = sentiment_pipeline(text)[0]
+    pipeline_instance = _get_sentiment_pipeline()
+    result = pipeline_instance(text)[0]
     return {"sentiment": result["label"], "score": result["score"]}
 
 
@@ -74,14 +79,12 @@ def get_user_activity(db: Session, user_id: int, days: int = 30):
     start_date = end_date - timedelta(days=days)
 
     activities = (
-        db.query(
-            models.UserEvent.event_type, func.count(models.UserEvent.id).label("count")
-        )
+        db.query(UserEvent.event_type, func.count(UserEvent.id).label("count"))
         .filter(
-            models.UserEvent.user_id == user_id,
-            models.UserEvent.created_at.between(start_date, end_date),
+            UserEvent.user_id == user_id,
+            UserEvent.created_at.between(start_date, end_date),
         )
-        .group_by(models.UserEvent.event_type)
+        .group_by(UserEvent.event_type)
         .all()
     )
     return {activity.event_type: activity.count for activity in activities}
@@ -105,8 +108,8 @@ def get_problematic_users(db: Session, threshold: int = 5):
     )
 
     return (
-        db.query(models.User)
-        .join(subquery, models.User.id == subquery.c.reported_user_id)
+        db.query(User)
+        .join(subquery, User.id == subquery.c.reported_user_id)
         .filter(subquery.c.report_count >= threshold)
         .all()
     )
@@ -284,12 +287,12 @@ def update_conversation_statistics(
             models.Message.conversation_id == conversation_id,
             models.Message.id != new_message.id,
         )
-        .order_by(models.Message.created_at.desc())
+        .order_by(models.Message.timestamp.desc())
         .first()
     )
 
     if last_message:
-        time_diff = (new_message.created_at - last_message.created_at).total_seconds()
+        time_diff = (new_message.timestamp - last_message.timestamp).total_seconds()
         stats.total_response_time += time_diff
         stats.total_responses += 1
         stats.average_response_time = stats.total_response_time / stats.total_responses

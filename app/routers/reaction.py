@@ -4,7 +4,7 @@ from sqlalchemy import func
 from typing import List
 
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.core.database import get_db
 
 router = APIRouter(prefix="/reactions", tags=["Reactions"])
 

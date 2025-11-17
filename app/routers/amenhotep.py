@@ -15,7 +15,7 @@ import logging
 
 # Local imports
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.core.database import get_db
 from ..ai_chat.amenhotep import AmenhotepAI
 
 # =====================================================

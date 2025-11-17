@@ -4,12 +4,16 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func, case, text
 from .. import models, schemas, oauth2
-from ..database import get_db
-from ..notifications import (
+from app.modules.notifications.models import (
+    NotificationCategory,
+    NotificationPriority,
+)
+from app.core.database import get_db
+from app.modules.notifications.service import (
     NotificationService,
     NotificationManager,
-    NotificationAnalytics,
 )
+from app.modules.notifications.analytics import NotificationAnalyticsService
 from app.firebase_config import send_push_notification  # Firebase push notifications
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -25,8 +29,8 @@ async def get_notifications(
     limit: int = Query(50, le=100),
     include_read: bool = False,
     include_archived: bool = False,
-    category: Optional[models.NotificationCategory] = None,
-    priority: Optional[models.NotificationPriority] = None,
+    category: Optional[NotificationCategory] = None,
+    priority: Optional[NotificationPriority] = None,
 ):
     """
     الحصول على قائمة الإشعارات للمستخدم الحالي
@@ -163,7 +167,7 @@ async def get_notification_statistics(
     الحصول على إحصائيات الإشعارات
     Retrieve notification statistics for a specified period.
     """
-    analytics = NotificationAnalytics(db)
+    analytics = NotificationAnalyticsService(db)
     return await analytics.get_user_statistics(current_user.id, days)
 
 
@@ -177,7 +181,7 @@ async def get_notification_analytics(
     الحصول على تحليلات متقدمة للإشعارات (للمسؤولين فقط)
     Get advanced analytics for notifications (admin only).
     """
-    analytics = NotificationAnalytics(db)
+    analytics = NotificationAnalyticsService(db)
     return await analytics.get_detailed_analytics(days)
 
 
@@ -324,8 +328,8 @@ class CommentNotificationHandler:
                 user_id=post.owner_id,
                 content=f"{comment.owner.username} commented on your post",
                 notification_type="new_comment",
-                priority=models.NotificationPriority.MEDIUM,
-                category=models.NotificationCategory.SOCIAL,
+                priority=NotificationPriority.MEDIUM,
+                category=NotificationCategory.SOCIAL,
                 link=f"/post/{post.id}#comment-{comment.id}",
             )
 
@@ -341,7 +345,7 @@ class CommentNotificationHandler:
                     user_id=parent_comment.owner_id,
                     content=f"{comment.owner.username} replied to your comment",
                     notification_type="comment_reply",
-                    priority=models.NotificationPriority.MEDIUM,
-                    category=models.NotificationCategory.SOCIAL,
+                    priority=NotificationPriority.MEDIUM,
+                    category=NotificationCategory.SOCIAL,
                     link=f"/post/{post.id}#comment-{comment.id}",
                 )

@@ -41,6 +41,10 @@ from app.modules.notifications.schemas import (
 )
 from app.modules.posts import ReactionType
 from app.modules.posts.schemas import (
+    Hashtag,
+    HashtagBase,
+    HashtagCreate,
+    HashtagStatistics,
     Comment,
     CommentBase,
     CommentCreate,
@@ -76,6 +80,95 @@ from app.modules.posts.schemas import (
     SocialPostOut,
     PostSearch,
 )
+from app.modules.messaging import MessageType
+from app.modules.messaging.schemas import (
+    ConversationStatistics,
+    ConversationStatisticsBase,
+    ConversationStatisticsCreate,
+    LinkPreview,
+    Message,
+    MessageAttachment,
+    MessageAttachmentBase,
+    MessageAttachmentCreate,
+    MessageBase,
+    MessageCreate,
+    MessageOut,
+    MessageSearch,
+    MessageSearchResponse,
+    MessageUpdate,
+    ScreenShareEnd,
+    ScreenShareSessionOut,
+    ScreenShareStart,
+    ScreenShareUpdate,
+    SortOrder,
+)
+from app.modules.moderation.schemas import (
+    AppealStatus,
+    BanCreate,
+    BanReasonOut,
+    BanStatisticsOverview,
+    BanTypeDistribution,
+    BannedWordBase,
+    BannedWordCreate,
+    BannedWordOut,
+    BannedWordUpdate,
+    BlockAppealCreate,
+    BlockAppealOut,
+    BlockAppealReview,
+    BlockCreate,
+    BlockLogCreate,
+    BlockLogOut,
+    BlockOut,
+    BlockSettings,
+    BlockStatistics,
+    BlockTypeEnum,
+    BlockedUserOut,
+    CallCreate,
+    CallOut,
+    CallStatus,
+    CallType,
+    CallUpdate,
+    EffectivenessTrend,
+    IPBanBase,
+    IPBanCreate,
+    IPBanOut,
+    Report,
+    ReportBase,
+    ReportCreate,
+    ReportOut,
+    ReportReview,
+    ReportStatus,
+    ReportUpdate,
+    WarningCreate,
+    WordSeverity,
+)
+from app.modules.search.schemas import (
+    AdvancedSearchQuery,
+    AdvancedSearchResponse,
+    SearchParams,
+    SearchResponse,
+    SearchStatOut,
+    SearchStatistics,
+    SearchStatisticsBase,
+    SearchStatisticsCreate,
+    SearchSuggestionOut,
+)
+from app.modules.stickers.schemas import (
+    Sticker,
+    StickerBase,
+    StickerCategory,
+    StickerCategoryBase,
+    StickerCategoryCreate,
+    StickerCreate,
+    StickerPack,
+    StickerPackBase,
+    StickerPackCreate,
+    StickerPackWithStickers,
+    StickerReport,
+    StickerReportBase,
+    StickerReportCreate,
+)
+from app.modules.support.schemas import Ticket, TicketCreate, TicketResponse
 from app.modules.users.schemas import (
     EmailChange,
     EmailSchema,
@@ -127,7 +220,6 @@ from app.modules.users.schemas import (
 # ================================================================
 
 
-
 # ================================================================
 # Following and User Listing Schemas
 # Schemas to represent following lists and user-related information.
@@ -141,42 +233,14 @@ from app.modules.users.schemas import (
 
 # ================================================================
 # Hashtag Models
-# Schemas for creating and representing hashtags and their statistics.
+# Re-exported from app.modules.posts.schemas for backwards compatibility.
 # ================================================================
-class HashtagBase(BaseModel):
-    name: str
-
-
-class HashtagCreate(HashtagBase):
-    pass
-
-
-class Hashtag(HashtagBase):
-    id: int
-    followers_count: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Hashtag statistics model
-class HashtagStatistics(BaseModel):
-    post_count: int
-    follower_count: int
-    engagement_rate: float
 
 
 # ================================================================
 # Search and Sorting Models
-# Schemas used for search parameters and sorting options.
+# Re-exported from app.modules.search.schemas for backwards compatibility.
 # ================================================================
-# Parameters used for search queries
-class SearchParams(BaseModel):
-    query: str
-    sort_by: SortOption = SortOption.RELEVANCE
-
-
-# Settings for user followers display and sorting
-
 # ================================================================
 # Screen Share and Appeal Models
 # Schemas related to screen sharing sessions and appeal processes.
@@ -187,184 +251,10 @@ class VerificationStatus(str, Enum):
     REJECTED = "rejected"
 
 
-
-class ScreenShareStart(BaseModel):
-    call_id: int
-
-
-# Model for ending a screen share session
-class ScreenShareEnd(BaseModel):
-    session_id: int
-
-
-# Update model for screen sharing (status and error message)
-class ScreenShareUpdate(BaseModel):
-    status: ScreenShareStatus
-    error_message: Optional[str] = None
-
-
-# Output model for screen share session details
-class ScreenShareSessionOut(BaseModel):
-    id: int
-    call_id: int
-    sharer_id: int
-    start_time: datetime
-    end_time: Optional[datetime]
-    status: ScreenShareStatus
-    error_message: Optional[str]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # ================================================================
 # Ban, Block, and Appeal Models
-# Schemas for managing banned words, block appeals, and IP bans.
+# Re-exported from app.modules.moderation.schemas.
 # ================================================================
-class AppealStatus(str, Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-
-
-class WordSeverity(str, Enum):
-    warn = "warn"
-    ban = "ban"
-
-
-# Base model for banned words
-class BannedWordBase(BaseModel):
-    word: str
-    severity: WordSeverity = WordSeverity.warn
-
-
-class BannedWordCreate(BannedWordBase):
-    pass
-
-
-class BannedWordUpdate(BaseModel):
-    word: Optional[str] = None
-    severity: Optional[WordSeverity] = None
-
-
-class BannedWordOut(BannedWordBase):
-    id: int
-    created_by: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Models for block appeals
-class BlockAppealCreate(BaseModel):
-    block_id: int
-    reason: str
-
-
-class BlockAppealOut(BaseModel):
-    id: int
-    block_id: int
-    user_id: int
-    reason: str
-    status: AppealStatus
-    created_at: datetime
-    reviewed_at: Optional[datetime] = None
-    reviewer_id: Optional[int] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BlockStatistics(BaseModel):
-    total_blocks: int
-    active_blocks: int
-    expired_blocks: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BlockAppealReview(BaseModel):
-    status: AppealStatus
-
-
-# IP ban models
-class IPBanBase(BaseModel):
-    ip_address: str
-    reason: Optional[str] = None
-    expires_at: Optional[datetime] = None
-
-
-class IPBanCreate(IPBanBase):
-    pass
-
-
-class IPBanOut(IPBanBase):
-    id: int
-    banned_at: datetime
-    created_by: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Block models and logs
-class CallType(str, Enum):
-    AUDIO = "audio"
-    VIDEO = "video"
-
-
-class CallStatus(str, Enum):
-    PENDING = "pending"
-    ONGOING = "ongoing"
-    ENDED = "ended"
-
-
-class CallCreate(BaseModel):
-    receiver_id: int
-    call_type: CallType
-
-
-class CallUpdate(BaseModel):
-    status: CallStatus
-    current_screen_share_id: Optional[int] = None
-
-
-class CallOut(BaseModel):
-    id: int
-    caller_id: int
-    receiver_id: int
-    call_type: CallType
-    status: CallStatus
-    start_time: datetime
-    end_time: Optional[datetime] = None
-    current_screen_share: Optional[ScreenShareSessionOut] = None
-    quality_score: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AdvancedSearchQuery(BaseModel):
-    keyword: str
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    categories: Optional[List[int]] = None
-    author_id: Optional[int] = None
-    search_in: List[str] = Field(default=["title", "content", "comments"])
-
-
-# ================================================================
-# Message and Notification Related Models
-# Schemas for messages, notifications, and related attachments.
-# ================================================================
-class MessageType(str, Enum):
-    TEXT = "text"
-    IMAGE = "image"
-    FILE = "file"
-    STICKER = "sticker"
-
-
-class SortOrder(str, Enum):
-    ASC = "asc"
-    DESC = "desc"
-
-
 # Business registration model
 class BusinessRegistration(BaseModel):
     business_name: str
@@ -380,103 +270,11 @@ class FollowStatistics(BaseModel):
     interaction_rate: float
 
 
-# Block duration and type models
-class BlockDuration(str, Enum):
-    HOURS = "hours"
-    DAYS = "days"
-    WEEKS = "weeks"
-
-
-class BlockTypeEnum(str, Enum):
-    FULL = "full"
-    PARTIAL_COMMENT = "partial_comment"
-    PARTIAL_MESSAGE = "partial_message"
-
-
-class BlockCreate(BaseModel):
-    blocked_id: int
-    duration: Optional[int] = Field(None, ge=1)
-    duration_unit: Optional[BlockDuration] = None
-    block_type: BlockTypeEnum = BlockTypeEnum.FULL
-
-
-class BlockSettings(BaseModel):
-    default_block_type: BlockTypeEnum
-
-
-class BlockOut(BaseModel):
-    blocker_id: int
-    blocked_id: int
-    created_at: datetime
-    ends_at: Optional[datetime] = None
-    block_type: BlockTypeEnum
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class BlockLogCreate(BaseModel):
-    blocked_id: int
-    block_type: BlockTypeEnum
-    reason: Optional[str] = None
-
-
-class BlockLogOut(BaseModel):
-    id: int
-    blocker_id: int
-    blocked_id: int
-    block_type: BlockTypeEnum
-    reason: Optional[str]
-    created_at: datetime
-    ended_at: Optional[datetime]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Ban statistics models
-class BanStatisticsOverview(BaseModel):
-    total_bans: int
-    ip_bans: int
-    word_bans: int
-    user_bans: int
-    average_effectiveness: float
-
-
-class BanReasonOut(BaseModel):
-    reason: str
-    count: int
-    last_used: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class EffectivenessTrend(BaseModel):
-    date: date
-    effectiveness: float
-
-
-class BanTypeDistribution(BaseModel):
-    ip_bans: int
-    word_bans: int
-    user_bans: int
-
-
 # Copyright types for posts
 class CopyrightType(str, Enum):
     ALL_RIGHTS_RESERVED = "all_rights_reserved"
     CREATIVE_COMMONS = "creative_commons"
     PUBLIC_DOMAIN = "public_domain"
-
-
-# Model for blocked user details
-class BlockedUserOut(BaseModel):
-    id: int
-    username: str
-    email: str
-    block_type: BlockTypeEnum
-    reason: Optional[str]
-    blocked_since: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================
@@ -522,103 +320,11 @@ class BusinessTransactionOut(BaseModel):
 # ================================================================
 
 
-
-
-
-
 # ================================================================
 # Search and Ticket Models
-# Schemas for handling search statistics and support tickets.
+# Search schemas are provided by app.modules.search.schemas.
+# Support ticket schemas are provided by app.modules.support.schemas.
 # ================================================================
-class SearchStatOut(BaseModel):
-    query: str
-    count: int
-    last_searched: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-
-class SearchResponse(BaseModel):
-    results: List["PostOut"]
-    spell_suggestion: str
-    search_suggestions: List[str]
-
-
-class TicketCreate(BaseModel):
-    subject: str
-    description: str
-
-
-class TicketResponse(BaseModel):
-    id: int
-    content: str
-    created_at: datetime
-    user: "UserOut"
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class Ticket(BaseModel):
-    id: int
-    subject: str
-    description: str
-    status: str  # Could be further defined (e.g., TicketStatus enum)
-    created_at: datetime
-    updated_at: datetime
-    responses: List[TicketResponse]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# ================================================================
-# Warning and Ban Models for Users
-# Schemas for user warnings and bans.
-# ================================================================
-class WarningCreate(BaseModel):
-    reason: str
-
-
-class BanCreate(BaseModel):
-    reason: str
-
-
-
-
-# ================================================================
-# Base Models for Users, Posts, Comments, and Reports
-# Core schemas for users, posts, comments, and report functionalities.
-# ================================================================
-
-class ReportBase(BaseModel):
-    reason: constr(min_length=1)
-    report_reason: Optional[str] = None
-    ai_detected: bool = False
-    ai_confidence: Optional[float] = None
-
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
-    @model_validator(mode="after")
-    def _sync_report_reason(self):
-        sanitized = self.reason.strip()
-        if not sanitized:
-            raise ValueError("Report reason cannot be empty")
-        self.reason = sanitized
-        if not self.report_reason:
-            self.report_reason = sanitized
-        return self
-
-
-class ReportCreate(ReportBase):
-    post_id: Optional[int] = None
-    comment_id: Optional[int] = None
-
-    @model_validator(mode="after")
-    def _validate_target(self):
-        has_post = self.post_id is not None
-        has_comment = self.comment_id is not None
-        if has_post == has_comment:
-            raise ValueError("Provide either post_id or comment_id to submit a report")
-        return self
-
 
 
 # Models for encrypted calls (voice/video)
@@ -644,24 +350,6 @@ class EncryptedCallOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Models for search statistics of messages
-class SearchStatisticsBase(BaseModel):
-    query: str
-    count: int
-    last_searched: datetime
-
-
-class SearchStatisticsCreate(SearchStatisticsBase):
-    pass
-
-
-class SearchStatistics(SearchStatisticsBase):
-    id: int
-    user_id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # ================================================================
 # Article, Community, and Reel Models (Content Models)
 # Schemas for articles, communities, and reels content.
@@ -676,17 +364,18 @@ from app.modules.community.schemas import (
     CommunityActivityAnalytics,
     CommunityBase,
     CommunityContentAnalysis,
-    CommunityCreate,
+    CommunityCreate as CommunityCreateBase,
     CommunityEngagementAnalytics,
     CommunityGrowthAnalytics,
     CommunityInvitationBase,
     CommunityInvitationCreate,
     CommunityInvitationOut,
+    CommunityInvitationResponse,
     CommunityMemberBase,
     CommunityMemberCreate,
     CommunityMemberOut,
     CommunityMemberUpdate,
-    CommunityOut,
+    CommunityOut as CommunityOutBase,
     CommunityOutRef,
     CommunityOverview,
     CommunityOverviewAnalytics,
@@ -699,7 +388,17 @@ from app.modules.community.schemas import (
     CommunityStatisticsBase,
     CommunityStatisticsCreate,
     CommunityUpdate,
+    CommunityInvitationResponse,
 )
+
+
+# Extend community create schema locally to keep legacy rule payload support.
+class CommunityCreate(CommunityCreateBase):
+    rules: Optional[List["CommunityRuleCreate"]] = Field(default_factory=list)
+
+
+class CommunityOut(CommunityOutBase):
+    category: Optional["Category"] = None
 
 
 class ReelBase(BaseModel):
@@ -813,13 +512,16 @@ class SocialAccountOut(SocialAccountBase):
 
 # User settings models
 
+# ================================================================
+# Warning and Ban Models for Users
+# Re-exported from app.modules.moderation.schemas.
+# ================================================================
+
 
 # ================================================================
 # User Models
 # Schemas for user creation, update, and output.
 # ================================================================
-
-
 
 
 class InitialKeyExchange(BaseModel):
@@ -887,188 +589,26 @@ class VotersListOut(BaseModel):
 # Community Models
 # Schemas for community creation, update, and details.
 # ================================================================
-
-class CommunityCreate(CommunityBase):
-    category_id: Optional[int] = None
-    tags: List[int] = []
-    rules: Optional[List["CommunityRuleCreate"]] = None
-
-
-class CommunityUpdate(BaseModel):
-    name: Optional[constr(min_length=1)] = None
-    description: Optional[str] = None
-    category_id: Optional[int] = None
-    tags: Optional[List[int]] = None
-
-
-class CommunityOut(CommunityBase):
-    id: int
-    created_at: datetime
-    owner_id: int
-    owner: UserOut
-    member_count: int
-    members: List["CommunityMemberOut"]
-    rules: List["CommunityRuleOut"] = []
-    category: Optional["Category"] = None
-    tags: List["Tag"]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-
+#
+# All community domain schemas are re-exported from app.modules.community.schemas.
+#
 class TranslationRequest(BaseModel):
     text: str
     source_lang: str
     target_lang: str
 
 
-
-
-class CategoryBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-
-
-class CategoryCreate(CategoryBase):
-    name: str
-    description: Optional[str] = None
-
-
-class CategoryOut(CategoryCreate):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class Category(CategoryBase):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class SearchSuggestionOut(BaseModel):
-    term: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AdvancedSearchResponse(BaseModel):
-    total: int
-    posts: List["PostOut"]
-
-
 # Post category schemas live in app.modules.posts.schemas.
 PostCategorySchema = PostCategory
-
-
-class TagBase(BaseModel):
-    name: str
-
-
-class TagCreate(TagBase):
-    pass
-
-
-class Tag(TagBase):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommunityStatisticsBase(BaseModel):
-    date: date
-    member_count: int
-    post_count: int
-    comment_count: int
-    active_users: int
-    total_reactions: int
-    average_posts_per_user: float
-
-
-class CommunityStatisticsCreate(CommunityStatisticsBase):
-    pass
-
-
-class CommunityStatistics(CommunityStatisticsBase):
-    id: int
-    community_id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommunityOverview(BaseModel):
-    id: int
-    name: str
-    description: str
-    member_count: int
-    is_active: bool
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommunityRuleBase(BaseModel):
-    rule: str
-
-
-class CommunityRuleCreate(CommunityRuleBase):
-    pass
-
-
-class CommunityRuleUpdate(CommunityRuleBase):
-    pass
-
-
-class CommunityRuleOut(CommunityRuleBase):
-    id: int
-    community_id: int
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================
 # Community Analytics Models
 # Schemas for analyzing community performance and engagement.
 # ================================================================
-class CommunityOverviewAnalytics(BaseModel):
-    total_members: int
-    active_members: int
-    total_posts: int
-    total_comments: int
-
-
-class CommunityActivityAnalytics(BaseModel):
-    date: str
-    posts: int
-    comments: int
-    active_users: int
-
-
-class CommunityEngagementAnalytics(BaseModel):
-    avg_likes_per_post: float
-    avg_comments_per_post: float
-    total_shares: int
-
-
-class CommunityContentAnalysis(BaseModel):
-    type: str
-    count: int
-    avg_engagement: float
-
-
-class CommunityGrowthAnalytics(BaseModel):
-    date: str
-    members: int
-
-
-class CommunityAnalytics(BaseModel):
-    overview: CommunityOverviewAnalytics
-    activity: List[CommunityActivityAnalytics]
-    engagement: CommunityEngagementAnalytics
-    content_analysis: List[CommunityContentAnalysis]
-    growth: List[CommunityGrowthAnalytics]
+#
+# See app.modules.community.schemas for analytics-specific schemas.
+#
 
 
 class EncryptedSessionCreate(BaseModel):
@@ -1103,127 +643,10 @@ class EncryptedSessionUpdate(BaseModel):
 # Schemas for creating, editing, and representing comments.
 # ================================================================
 # ================================================================
-# Report Models
-# Schemas for creating and reviewing reports on content.
-# ================================================================
-class Report(ReportBase):
-    id: int
-    post_id: Optional[int]
-    comment_id: Optional[int]
-    reported_user_id: Optional[int]
-    reporter_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ReportReview(BaseModel):
-    is_valid: bool
-
-
-
-class ReportUpdate(BaseModel):
-    status: "ReportStatus"
-    resolution_notes: Optional[str] = None
-
-
-class ReportOut(Report):
-    status: "ReportStatus"
-    reviewed_by: Optional[int]
-    resolution_notes: Optional[str]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# ================================================================
 # Message Models
-# Schemas for message creation, update, and conversation details.
+# Schemas for message creation, update, and conversation details are
+# re-exported from app.modules.messaging.schemas for compatibility.
 # ================================================================
-class MessageCreate(MessageBase):
-    receiver_id: int = Field(alias="recipient_id")
-    attachments: List[MessageAttachmentCreate] = Field(default_factory=list)
-    sticker_id: Optional[int] = None
-
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
-
-class Message(MessageBase):
-    id: int
-    sender_id: int
-    receiver_id: int
-    encrypted_content: str  # Encrypted content
-    timestamp: datetime
-    replied_to: Optional["Message"] = None
-    quoted_message: Optional["Message"] = None
-    is_edited: bool = False
-    conversation_id: str
-    link_preview: Optional["LinkPreview"] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ConversationStatisticsBase(BaseModel):
-    total_messages: int
-    total_time: int
-    last_message_at: datetime
-
-
-class ConversationStatisticsCreate(ConversationStatisticsBase):
-    conversation_id: str
-    user1_id: int
-    user2_id: int
-
-
-class ConversationStatistics(ConversationStatisticsBase):
-    id: int
-    conversation_id: str
-    user1_id: int
-    user2_id: int
-    total_files: int
-    total_emojis: int
-    total_stickers: int
-    average_response_time: float
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class LinkPreview(BaseModel):
-    title: str
-    description: Optional[str] = None
-    image: Optional[str] = None
-    url: str
-
-
-# ================================================================
-# Community Member and Role Models
-# Schemas for managing community memberships and roles.
-# ================================================================
-class CommunityRole(str, Enum):
-    OWNER = "owner"
-    ADMIN = "admin"
-    MODERATOR = "moderator"
-    VIP = "vip"
-    MEMBER = "member"
-
-
-class CommunityMemberBase(BaseModel):
-    role: CommunityRole
-    activity_score: int
-
-
-class CommunityMemberCreate(CommunityMemberBase):
-    user_id: int
-
-
-class CommunityMemberUpdate(CommunityMemberBase):
-    pass
-
-
-class CommunityMemberOut(CommunityMemberBase):
-    user: UserOut
-    join_date: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================
@@ -1278,36 +701,6 @@ class ReelOut(Reel):
 # Community Invitation Models
 # Schemas for handling community invitations.
 # ================================================================
-class CommunityInvitationBase(BaseModel):
-    community_id: int
-    invitee_id: int
-
-
-class CommunityInvitationCreate(CommunityInvitationBase):
-    pass
-
-
-class CommunityInvitationOut(BaseModel):
-    id: int
-    community_id: int
-    inviter_id: int
-    invitee_id: int
-    status: str
-    created_at: datetime
-    community: CommunityOutRef
-    inviter: UserOut
-    invitee: UserOut
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommunityInvitationResponse(BaseModel):
-    accept: bool = Field(
-        ...,
-        description="Set to true to accept the invitation, false to decline it.",
-    )
-
-
 # ================================================================
 # 2FA Models
 # Schemas for two-factor authentication processes.
@@ -1329,89 +722,47 @@ class Verify2FAResponse(BaseModel):
 # Schemas for managing user sessions and authentication tokens.
 # ================================================================
 
-class ReportStatus(str, Enum):
-    PENDING = "pending"
-    REVIEWED = "reviewed"
-    RESOLVED = "resolved"
-
-
-
-
-
-
-
 
 # ================================================================
 # Sticker Models
-# Schemas for creating and managing stickers and sticker packs.
+# Re-exported from app.modules.stickers.schemas.
 # ================================================================
-class StickerPackBase(BaseModel):
+
+
+# Category schemas remain local because app.modules.community does not expose them.
+class CategoryBase(BaseModel):
     name: str
+    description: Optional[str] = None
 
 
-class StickerPackCreate(StickerPackBase):
-    pass
-
-
-class StickerPack(StickerPackBase):
-    id: int
-    creator_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class StickerBase(BaseModel):
+class CategoryCreate(CategoryBase):
     name: str
-    image_url: str
+    description: Optional[str] = None
 
 
-class StickerCreate(StickerBase):
-    pack_id: int
-    category_ids: List[int]
-
-
-class Sticker(StickerBase):
-    id: int
-    pack_id: int
-    created_at: datetime
-    approved: bool
-    categories: List["StickerCategory"]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class StickerPackWithStickers(StickerPack):
-    stickers: List[Sticker]
-
-
-class StickerCategoryBase(BaseModel):
-    name: str
-
-
-class StickerCategoryCreate(StickerCategoryBase):
-    pass
-
-
-class StickerCategory(StickerCategoryBase):
+class CategoryOut(CategoryCreate):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class StickerReportBase(BaseModel):
-    sticker_id: int
-    reason: str
+class Category(CategoryBase):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class StickerReportCreate(StickerReportBase):
+class TagBase(BaseModel):
+    name: str
+
+
+class TagCreate(TagBase):
     pass
 
 
-class StickerReport(StickerReportBase):
+class Tag(TagBase):
     id: int
-    reporter_id: int
-    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1428,6 +779,14 @@ Post.model_rebuild()
 PostOut.model_rebuild()
 Comment.model_rebuild()
 CommunityInvitationOut.model_rebuild()
+UserContentOut.model_rebuild(
+    _types_namespace={
+        "PostComment": Comment,
+        "PostOut": PostOut,
+        "ArticleOut": ArticleOut,
+        "ReelOut": ReelOut,
+    }
+)
 
 # ================================================================
 # Example Instance for Testing
@@ -1502,8 +861,3 @@ if __name__ == "__main__":
         print("PostOut instance:", post_example)
     except Exception as e:
         print("Validation error:", e)
-
-
-
-
-

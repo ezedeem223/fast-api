@@ -15,8 +15,10 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 # Local imports
-from .. import models, database, oauth2, schemas, utils
+from .. import models, oauth2, schemas
+from app.core.database import get_db
 from ..celery_worker import celery_app, unblock_user
+from app.modules.utils.moderation import log_event
 
 # =====================================================
 # =============== Global Variables ====================
@@ -32,7 +34,7 @@ router = APIRouter(prefix="/block", tags=["Block"])
 def block_user(
     block: schemas.BlockCreate,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -105,7 +107,7 @@ def block_user(
         )
 
     # Log the event using utils
-    utils.log_event(
+    log_event(
         db,
         "block_user",
         {"blocker_id": current_user.id, "blocked_id": block.blocked_id},
@@ -117,7 +119,7 @@ def block_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def manual_unblock_user(
     user_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -160,7 +162,7 @@ def manual_unblock_user(
     db.delete(block)
     db.commit()
 
-    utils.log_event(
+    log_event(
         db,
         "manual_unblock_user",
         {"blocker_id": current_user.id, "blocked_id": user_id},
@@ -171,7 +173,7 @@ def manual_unblock_user(
 @router.get("/{user_id}", response_model=schemas.BlockOut)
 def get_block_info(
     user_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -202,7 +204,7 @@ def get_block_info(
 
 @router.get("/logs", response_model=List[schemas.BlockLogOut])
 def get_block_logs(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -233,7 +235,7 @@ def get_block_logs(
 
 @router.get("/current", response_model=List[schemas.BlockedUserOut])
 def get_currently_blocked_users(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -266,7 +268,7 @@ def get_currently_blocked_users(
 
 @router.get("/statistics", response_model=schemas.BlockStatistics)
 def get_block_statistics(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -308,7 +310,7 @@ def get_block_statistics(
 )
 def create_block_appeal(
     appeal: schemas.BlockAppealCreate,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -351,7 +353,7 @@ def create_block_appeal(
     db.add(new_appeal)
     db.commit()
     db.refresh(new_appeal)
-    utils.log_event(
+    log_event(
         db,
         "create_block_appeal",
         {"user_id": current_user.id, "block_id": appeal.block_id},
@@ -361,7 +363,7 @@ def create_block_appeal(
 
 @router.get("/appeals", response_model=List[schemas.BlockAppealOut])
 def get_block_appeals(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -389,7 +391,7 @@ def get_block_appeals(
 def review_block_appeal(
     appeal_id: int,
     review: schemas.BlockAppealReview,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -420,7 +422,7 @@ def review_block_appeal(
             db.delete(block)
     db.commit()
     db.refresh(appeal)
-    utils.log_event(
+    log_event(
         db,
         "review_block_appeal",
         {

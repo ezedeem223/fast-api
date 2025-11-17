@@ -5,7 +5,9 @@ from datetime import timedelta
 
 # Import project modules
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.modules.community import CommunityMember, CommunityRole
+from app.modules.community.schemas import CommunityMemberOut, CommunityMemberUpdate
+from app.core.database import get_db
 
 router = APIRouter(prefix="/moderator", tags=["Moderator"])
 
@@ -59,12 +61,12 @@ async def get_community_reports(
     """
     # التحقق من صلاحية المشرف في المجتمع
     moderator_role = (
-        db.query(models.CommunityMember)
+        db.query(CommunityMember)
         .filter(
-            models.CommunityMember.user_id == current_moderator.id,
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.role.in_(
-                [models.CommunityRole.MODERATOR, models.CommunityRole.ADMIN]
+            CommunityMember.user_id == current_moderator.id,
+            CommunityMember.community_id == community_id,
+            CommunityMember.role.in_(
+                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
             ),
         )
         .first()
@@ -116,12 +118,12 @@ async def update_report(
 
     # التحقق من صلاحية المشرف في المجتمع الخاص بالمنشور
     moderator_role = (
-        db.query(models.CommunityMember)
+        db.query(CommunityMember)
         .filter(
-            models.CommunityMember.user_id == current_moderator.id,
-            models.CommunityMember.community_id == post.community_id,
-            models.CommunityMember.role.in_(
-                [models.CommunityRole.MODERATOR, models.CommunityRole.ADMIN]
+            CommunityMember.user_id == current_moderator.id,
+            CommunityMember.community_id == post.community_id,
+            CommunityMember.role.in_(
+                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
             ),
         )
         .first()
@@ -143,7 +145,7 @@ async def update_report(
 
 
 @router.get(
-    "/community/{community_id}/members", response_model=List[schemas.CommunityMemberOut]
+    "/community/{community_id}/members", response_model=List[CommunityMemberOut]
 )
 async def get_community_members(
     community_id: int,
@@ -159,18 +161,18 @@ async def get_community_members(
         current_moderator (models.User): المشرف الحالي.
 
     Returns:
-        List[schemas.CommunityMemberOut]: قائمة أعضاء المجتمع.
+        List[CommunityMemberOut]: قائمة أعضاء المجتمع.
 
     Raises:
         HTTPException: إذا لم يكن المشرف مخولاً للوصول للمجتمع.
     """
     moderator_role = (
-        db.query(models.CommunityMember)
+        db.query(CommunityMember)
         .filter(
-            models.CommunityMember.user_id == current_moderator.id,
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.role.in_(
-                [models.CommunityRole.MODERATOR, models.CommunityRole.ADMIN]
+            CommunityMember.user_id == current_moderator.id,
+            CommunityMember.community_id == community_id,
+            CommunityMember.role.in_(
+                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
             ),
         )
         .first()
@@ -179,20 +181,20 @@ async def get_community_members(
         raise HTTPException(status_code=403, detail="Not authorized for this community")
 
     return (
-        db.query(models.CommunityMember)
-        .filter(models.CommunityMember.community_id == community_id)
+        db.query(CommunityMember)
+        .filter(CommunityMember.community_id == community_id)
         .all()
     )
 
 
 @router.put(
     "/community/{community_id}/member/{user_id}/role",
-    response_model=schemas.CommunityMemberOut,
+    response_model=CommunityMemberOut,
 )
 async def update_member_role(
     community_id: int,
     user_id: int,
-    role_update: schemas.CommunityMemberUpdate,  # تم استبدال CommunityMemberRoleUpdate بـ CommunityMemberUpdate
+    role_update: CommunityMemberUpdate,  # تم استبدال CommunityMemberRoleUpdate بـ CommunityMemberUpdate
     db: Session = Depends(get_db),
     current_moderator: models.User = Depends(get_current_moderator),
 ):
@@ -202,23 +204,23 @@ async def update_member_role(
     Parameters:
         community_id (int): رقم تعريف المجتمع.
         user_id (int): رقم تعريف العضو الذي سيتم تحديث دوره.
-        role_update (schemas.CommunityMemberUpdate): بيانات الدور الجديد.
+        role_update (CommunityMemberUpdate): بيانات الدور الجديد.
         db (Session): جلسة قاعدة البيانات.
         current_moderator (models.User): المشرف الحالي.
 
     Returns:
-        schemas.CommunityMemberOut: السجل المحدث للعضو.
+        CommunityMemberOut: السجل المحدث للعضو.
 
     Raises:
         HTTPException: في حال عدم توفر الصلاحيات أو عدم العثور على العضو.
     """
     # فقط المسؤول (Admin) يمكنه تغيير الأدوار في المجتمع.
     moderator_role = (
-        db.query(models.CommunityMember)
+        db.query(CommunityMember)
         .filter(
-            models.CommunityMember.user_id == current_moderator.id,
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.role == models.CommunityRole.ADMIN,
+            CommunityMember.user_id == current_moderator.id,
+            CommunityMember.community_id == community_id,
+            CommunityMember.role == CommunityRole.ADMIN,
         )
         .first()
     )
@@ -228,10 +230,10 @@ async def update_member_role(
         )
 
     member = (
-        db.query(models.CommunityMember)
+        db.query(CommunityMember)
         .filter(
-            models.CommunityMember.community_id == community_id,
-            models.CommunityMember.user_id == user_id,
+            CommunityMember.community_id == community_id,
+            CommunityMember.user_id == user_id,
         )
         .first()
     )

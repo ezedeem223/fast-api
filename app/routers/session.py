@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from .. import models, schemas, oauth2, crypto
-from ..database import get_db
+from app.core.database import get_db
 
 router = APIRouter(prefix="/sessions", tags=["Encrypted Sessions"])
 

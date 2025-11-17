@@ -6,8 +6,8 @@ from datetime import date, timedelta
 
 # Import project modules
 from .. import models, schemas, oauth2
-from ..database import get_db
-from ..utils import get_user_vote_analytics
+from app.core.database import get_db
+from app.modules.utils.analytics import get_user_vote_analytics
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
 

@@ -5,16 +5,17 @@ from datetime import datetime
 from sqlalchemy import or_, and_, func
 import json
 
-from .. import models, database, schemas, oauth2
-from ..database import get_db
-from ..utils import (
+from .. import models, schemas, oauth2
+from app.core.database import get_db
+from app.modules.utils.search import (
     search_posts,
     get_spell_suggestions,
     format_spell_suggestions,
     sort_search_results,
-    analyze_user_behavior,
 )
-from ..schemas import SearchParams, SearchResponse, SortOption
+from app.modules.utils.analytics import analyze_user_behavior
+from app.modules.search import SearchParams, SearchResponse, SearchStatOut
+from app.modules.users.schemas import SortOption
 from ..analytics import (
     record_search_query,
     get_popular_searches,
@@ -57,8 +58,11 @@ async def search(
     suggestions = get_spell_suggestions(search_params.query)
     spell_suggestion = format_spell_suggestions(search_params.query, suggestions)
 
-    results = search_posts(search_params.query, db)
-    sorted_results = sort_search_results(results, search_params.sort_by, db)
+    query = search_posts(search_params.query, db)
+    sorted_query = sort_search_results(
+        query, search_params.sort_by, search_text=search_params.query
+    )
+    results = sorted_query.all()
 
     # Get search suggestions from popular and user history
     popular_searches = get_popular_searches(db, limit=3)
@@ -68,7 +72,7 @@ async def search(
     )
 
     search_response = {
-        "results": sorted_results,
+        "results": results,
         "spell_suggestion": spell_suggestion,
         "search_suggestions": search_suggestions,
     }
@@ -133,7 +137,7 @@ async def advanced_search(
         .all()
     )
 
-    return {"total": total, "posts": [schemas.PostOut.from_orm(post) for post in posts]}
+    return {"total": total, "posts": [schemas.PostOut.model_validate(post) for post in posts]}
 
 
 @router.get("/categories", response_model=List[schemas.Category])
@@ -179,7 +183,7 @@ async def autocomplete(
         .all()
     )
 
-    result = [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
+    result = [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]
     database.settings.redis_client.setex(
         cache_key, 300, json.dumps([s.dict() for s in result])
     )
@@ -292,7 +296,7 @@ async def smart_search(
     update_search_statistics(db, current_user.id, query)
 
     return [
-        schemas.PostOut.from_orm(post)
+        schemas.PostOut.model_validate(post)
         for post, _ in scored_results[skip : skip + limit]
     ]
 
@@ -339,4 +343,4 @@ def update_search_suggestions(db: Session):
         .limit(10)
         .all()
     )
-    return [schemas.SearchSuggestionOut.from_orm(s) for s in suggestions]
+    return [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]

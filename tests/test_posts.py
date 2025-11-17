@@ -1,6 +1,6 @@
 import pytest
 from app import schemas, models
-from app.config import settings
+from app.core.config import settings
 from datetime import datetime
 
 
@@ -46,9 +46,9 @@ def test_get_all_posts(authorized_client, test_posts):
 def test_get_one_post(authorized_client, test_posts):
     res = authorized_client.get(f"/posts/{test_posts[0].id}")
     post = schemas.PostOut(**res.json())
-    assert post.post.id == test_posts[0].id
-    assert post.post.content == test_posts[0].content
-    assert post.post.title == test_posts[0].title
+    assert post.id == test_posts[0].id
+    assert post.content == test_posts[0].content
+    assert post.title == test_posts[0].title
 
 
 def test_get_one_post_not_exist(authorized_client, test_posts):

@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.modules.posts import PostCategory
+from app.core.database import get_db
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
@@ -32,7 +33,7 @@ def create_category(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can create categories")
 
-    new_category = models.PostCategory(**category.dict())
+    new_category = PostCategory(**category.model_dump())
     db.add(new_category)
     db.commit()
     db.refresh(new_category)
@@ -65,14 +66,14 @@ def update_category(
         raise HTTPException(status_code=403, detail="Only admins can update categories")
 
     db_category = (
-        db.query(models.PostCategory)
-        .filter(models.PostCategory.id == category_id)
+        db.query(PostCategory)
+        .filter(PostCategory.id == category_id)
         .first()
     )
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    for key, value in category.dict().items():
+    for key, value in category.model_dump().items():
         setattr(db_category, key, value)
 
     db.commit()
@@ -104,8 +105,8 @@ def delete_category(
         raise HTTPException(status_code=403, detail="Only admins can delete categories")
 
     db_category = (
-        db.query(models.PostCategory)
-        .filter(models.PostCategory.id == category_id)
+        db.query(PostCategory)
+        .filter(PostCategory.id == category_id)
         .first()
     )
     if not db_category:
@@ -128,8 +129,8 @@ def get_categories(db: Session = Depends(get_db)):
         List[schemas.PostCategory]: A list of all main categories.
     """
     categories = (
-        db.query(models.PostCategory)
-        .filter(models.PostCategory.parent_id == None)
+        db.query(PostCategory)
+        .filter(PostCategory.parent_id == None)
         .all()
     )
     return categories

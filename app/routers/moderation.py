@@ -4,8 +4,10 @@ from typing import List
 from datetime import timedelta
 
 # Import project modules
-from .. import database, models, schemas, oauth2, utils
-from ..moderation import warn_user, ban_user, process_report
+from .. import models, schemas, oauth2
+from app.core.database import get_db
+from app.modules.moderation.service import warn_user, ban_user, process_report
+from app.modules.utils.analytics import update_ban_statistics
 
 # Configure the moderation router
 router = APIRouter(prefix="/moderation", tags=["Moderation"])
@@ -19,7 +21,7 @@ REPORT_WINDOW = timedelta(days=30)  # Time window to consider reports
 def warn_user_route(
     user_id: int,
     warning: schemas.WarningCreate,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -48,7 +50,7 @@ def warn_user_route(
 def ban_user_route(
     user_id: int,
     ban: schemas.BanCreate,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -77,7 +79,7 @@ def ban_user_route(
 def review_report(
     report_id: int,
     review: schemas.ReportReview,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -105,7 +107,7 @@ def review_report(
 @router.post("/ip", status_code=status.HTTP_201_CREATED)
 def ban_ip(
     ip_ban: schemas.IPBanCreate,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -143,14 +145,14 @@ def ban_ip(
     db.refresh(new_ban)
 
     # Update ban statistics using utility function
-    utils.update_ban_statistics(db, "ip", ip_ban.reason, 1.0)
+    update_ban_statistics(db, "ip", ip_ban.reason, 1.0)
 
     return new_ban
 
 
 @router.get("/ip", response_model=List[schemas.IPBanOut])
 def get_banned_ips(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
@@ -175,7 +177,7 @@ def get_banned_ips(
 @router.delete("/ip/{ip_address}", status_code=status.HTTP_204_NO_CONTENT)
 def unban_ip(
     ip_address: str,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """

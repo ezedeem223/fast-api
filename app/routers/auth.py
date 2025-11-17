@@ -6,6 +6,8 @@ This module provides endpoints for authentication and session management.
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -18,10 +20,12 @@ from fastapi_mail import FastMail, MessageSchema
 from pydantic import EmailStr
 
 # Local imports
-from .. import database, schemas, models, utils, oauth2
-from ..config import settings
+from .. import schemas, models, oauth2
+from app.core.database import get_db
+from app.core.config import settings
 from ..notifications import send_login_notification, send_email_notification
-from ..utils import log_user_event
+from app.modules.utils.events import log_user_event
+from app.modules.utils.security import hash as hash_password, verify
 
 # =====================================================
 # =============== Global Constants ====================
@@ -40,7 +44,7 @@ TOKEN_EXPIRY = timedelta(hours=1)
 @router.post("/login", response_model=schemas.Token)
 def login(
     user_credentials: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
@@ -64,12 +68,12 @@ def login(
     )
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
         )
 
     # Check account status
     if user.is_suspended:
-        raise HTTPException(status_code=403, detail="الحساب موقوف")
+        raise HTTPException(status_code=403, detail="Account is suspended")
     if user.account_locked_until and user.account_locked_until > datetime.now(
         timezone.utc
     ):
@@ -79,13 +83,13 @@ def login(
         )
 
     # Verify password
-    if not utils.verify(user_credentials.password, user.password):
+    if not verify(user_credentials.password, user.hashed_password):
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= MAX_LOGIN_ATTEMPTS:
             user.account_locked_until = datetime.now(timezone.utc) + LOCKOUT_DURATION
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="بيانات الاعتماد غير صالحة"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials"
         )
 
     # Reset failure counters
@@ -107,7 +111,7 @@ def login(
 def login_2fa(
     user_id: int,
     otp: schemas.Verify2FARequest,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
@@ -168,11 +172,17 @@ def complete_login(
     )
 
     # Send login notification asynchronously
+    ip_address = request.client.host if request and request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "") if request else ""
+
+    def _schedule_login_notification(email: str, ip: str, agent: str) -> None:
+        asyncio.run(send_login_notification(email, ip, agent))
+
     background_tasks.add_task(
-        send_login_notification,
+        _schedule_login_notification,
         user.email,
-        request.client.host,
-        request.headers.get("user-agent", ""),
+        ip_address,
+        user_agent,
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
@@ -180,7 +190,7 @@ def complete_login(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 def logout(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     token: str = Depends(oauth2.oauth2_scheme),
 ):
@@ -209,9 +219,9 @@ def logout(
             db.delete(session)
             db.commit()
         else:
-            utils.log_user_event(db, current_user.id, "logout_session_not_found")
+            log_user_event(db, current_user.id, "logout_session_not_found")
 
-        utils.log_user_event(db, current_user.id, "logout")
+        log_user_event(db, current_user.id, "logout")
 
         # Add token to blacklist
         blacklist_token = models.TokenBlacklist(token=token, user_id=current_user.id)
@@ -221,7 +231,7 @@ def logout(
         return {"message": "تم تسجيل الخروج بنجاح"}
 
     except Exception as e:
-        utils.log_user_event(db, current_user.id, "logout_error", {"error": str(e)})
+        log_user_event(db, current_user.id, "logout_error", {"error": str(e)})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="حدث خطأ أثناء تسجيل الخروج",
@@ -232,7 +242,7 @@ def logout(
 def logout_all_devices(
     current_user: models.User = Depends(oauth2.get_current_user),
     current_session: str = Depends(oauth2.get_current_session),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Logout from all devices except the current session.
@@ -249,7 +259,7 @@ def logout_all_devices(
 @router.post("/invalidate-all-sessions")
 async def invalidate_all_sessions(
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Invalidate (delete) all sessions for the current user.
@@ -273,7 +283,7 @@ def create_password_reset_token(email: str) -> str:
 @router.post("/reset-password-request")
 async def reset_password_request(
     email: schemas.EmailSchema,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
@@ -307,7 +317,7 @@ async def reset_password_request(
 @router.post("/reset-password")
 async def reset_password(
     reset_data: schemas.PasswordReset,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Reset the user's password after verifying the reset token.
@@ -333,8 +343,8 @@ async def reset_password(
     ):
         raise HTTPException(status_code=400, detail="رمز غير صالح أو منتهي الصلاحية")
 
-    hashed_password = utils.hash(reset_data.new_password)
-    user.password = hashed_password
+    hashed_password = hash_password(reset_data.new_password)
+    user.hashed_password = hashed_password
     user.reset_token = None
     user.reset_token_expires = None
     db.commit()
@@ -344,7 +354,7 @@ async def reset_password(
 
 
 @router.post("/refresh-token", response_model=schemas.Token)
-async def refresh_token(refresh_token: str, db: Session = Depends(database.get_db)):
+async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
     """
     Refresh the access token using the provided refresh token.
     """
@@ -367,7 +377,7 @@ async def refresh_token(refresh_token: str, db: Session = Depends(database.get_d
 
 
 @router.post("/verify-email")
-async def verify_email(token: str, db: Session = Depends(database.get_db)):
+async def verify_email(token: str, db: Session = Depends(get_db)):
     """
     Verify the user's email address using a token.
     """
@@ -395,7 +405,7 @@ async def verify_email(token: str, db: Session = Depends(database.get_db)):
 async def resend_verification_email(
     email: schemas.EmailSchema,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Resend the email verification link if the account exists and is not verified.
@@ -423,13 +433,13 @@ async def resend_verification_email(
 async def change_email(
     email_change: schemas.EmailChange,
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Change the user's email address.
     Verifies the current password and checks for uniqueness of the new email.
     """
-    if not utils.verify(email_change.password, current_user.password):
+    if not verify(email_change.password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="كلمة المرور غير صحيحة")
     existing_user = (
         db.query(models.User)
@@ -454,7 +464,7 @@ async def change_email(
 @router.post("/sessions/active", response_model=List[schemas.UserSessionOut])
 async def get_active_sessions(
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Retrieve a list of active sessions for the current user.
@@ -472,7 +482,7 @@ async def get_active_sessions(
 async def end_session(
     session_id: str,
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     End a specific session by session ID.
@@ -539,12 +549,12 @@ async def check_password_strength(password: str):
 async def set_security_questions(
     questions: schemas.SecurityQuestionsSet,
     current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Set security questions for the user by encrypting the answers.
     """
-    encrypted_answers = {q.question: utils.hash(q.answer) for q in questions.questions}
+    encrypted_answers = {q.question: hash_password(q.answer) for q in questions.questions}
     current_user.security_questions = encrypted_answers
     db.commit()
     log_user_event(db, current_user.id, "security_questions_set")
@@ -555,7 +565,7 @@ async def set_security_questions(
 async def verify_security_questions(
     answers: List[schemas.SecurityQuestionAnswer],
     email: EmailStr,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(get_db),
 ):
     """
     Verify the answers to the security questions.
@@ -569,7 +579,7 @@ async def verify_security_questions(
     correct_answers = 0
     for answer in answers:
         stored_answer = user.security_questions.get(answer.question)
-        if stored_answer and utils.verify(answer.answer, stored_answer):
+        if stored_answer and verify(answer.answer, stored_answer):
             correct_answers += 1
     if correct_answers < len(answers):
         raise HTTPException(status_code=400, detail="بعض الإجابات غير صحيحة")

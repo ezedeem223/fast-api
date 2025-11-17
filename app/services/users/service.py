@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
-from fastapi import HTTPException, status, UploadFile
-from sqlalchemy import asc, desc, or_
+import pyotp
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app import models, schemas, utils, notifications
-from app.modules.users.models import User
+from app import models, schemas
 from app.i18n import ALL_LANGUAGES
+from app.modules.users.models import User, UserActivity, UserSession, UserStatistics
+from app.modules.utils.security import hash as hash_password, verify
 
 
 class UserService:
@@ -25,7 +28,8 @@ class UserService:
         existing = self.db.query(User).filter(User.email == payload.email).first()
         if existing:
             raise HTTPException(status_code=400, detail="Email already registered")
-        hashed_password = utils.hash(payload.password)
+
+        hashed_password = hash_password(payload.password)
         new_user = User(
             email=payload.email,
             hashed_password=hashed_password,
@@ -46,6 +50,26 @@ class UserService:
         self.db.refresh(current_user)
         return schemas.UserProfileOut.from_orm(current_user)
 
+    def update_privacy_settings(
+        self, current_user: User, privacy_settings: schemas.UserPrivacyUpdate
+    ) -> User:
+        if (
+            privacy_settings.privacy_level == schemas.PrivacyLevel.CUSTOM
+            and not privacy_settings.custom_privacy
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Custom privacy settings required for CUSTOM privacy level",
+            )
+
+        current_user.privacy_level = privacy_settings.privacy_level
+        if privacy_settings.custom_privacy:
+            current_user.custom_privacy = privacy_settings.custom_privacy
+
+        self.db.commit()
+        self.db.refresh(current_user)
+        return current_user
+
     def update_public_key(
         self, current_user: User, update: schemas.UserPublicKeyUpdate
     ) -> User:
@@ -56,9 +80,10 @@ class UserService:
 
     def update_language_preferences(
         self, current_user: User, language: schemas.UserLanguageUpdate
-    ) -> dict:
+    ) -> Dict[str, str]:
         if language.preferred_language not in ALL_LANGUAGES:
             raise HTTPException(status_code=400, detail="Invalid language code")
+
         current_user.preferred_language = language.preferred_language
         current_user.auto_translate = language.auto_translate
         self.db.commit()
@@ -83,16 +108,32 @@ class UserService:
     ) -> Tuple[User, List[models.Follow], int]:
         user = self.get_user_or_404(user_id)
         self._ensure_followers_visibility(user, requesting_user)
+
         query = (
             self.db.query(models.Follow)
             .join(User, User.id == models.Follow.follower_id)
             .filter(models.Follow.followed_id == user_id)
         )
+
         order_column = self._resolve_followers_sort_column(sort_by)
         query = query.order_by(desc(order_column) if order == "desc" else asc(order_column))
+
         total = query.count()
         followers = query.offset(skip).limit(limit).all()
         return user, followers, total
+
+    def update_followers_settings(
+        self, current_user: User, settings: schemas.UserFollowersSettings
+    ) -> schemas.UserFollowersSettings:
+        current_user.followers_visibility = settings.followers_visibility
+        current_user.followers_custom_visibility = (
+            settings.followers_custom_visibility or {}
+        )
+        current_user.followers_sort_preference = (
+            settings.followers_sort_preference or current_user.followers_sort_preference
+        )
+        self.db.commit()
+        return settings
 
     def _ensure_followers_visibility(self, target: User, requester: User) -> None:
         if target.followers_visibility == "private" and target.id != requester.id:
@@ -100,6 +141,7 @@ class UserService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Followers list is private",
             )
+
         if target.followers_visibility == "custom" and target.id != requester.id:
             allowed = (target.followers_custom_visibility or {}).get(
                 "allowed_users", []
@@ -119,39 +161,45 @@ class UserService:
         }
         return mapping.get(sort_by, models.Follow.created_at)
 
-    def update_followers_settings(
-        self, current_user: User, settings: schemas.UserFollowersSettings
-    ) -> schemas.UserFollowersSettings:
-        current_user.followers_visibility = settings.followers_visibility
-        current_user.followers_custom_visibility = (
-            settings.followers_custom_visibility or {}
-        )
-        current_user.followers_sort_preference = (
-            settings.followers_sort_preference or current_user.followers_sort_preference
-        )
-        self.db.commit()
-        return settings
-
-    # ----- Verification -----
+    # ----- Verification & media -----
     def verify_user_document(self, current_user: User, file: UploadFile) -> str:
         if file.content_type not in {"image/jpeg", "image/png", "application/pdf"}:
             raise HTTPException(status_code=400, detail="Unsupported file type.")
+
         file_location = Path("static") / file.filename
         file_location.parent.mkdir(parents=True, exist_ok=True)
         with file_location.open("wb+") as buffer:
             buffer.write(file.file.read())
+
         current_user.verification_document = str(file_location)
         current_user.is_verified = True
         self.db.commit()
         return str(file_location)
 
+    def upload_profile_image(self, current_user: User, file: UploadFile) -> str:
+        if file.content_type not in {"image/jpeg", "image/png"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Only JPEG and PNG are allowed.",
+            )
+
+        directory = Path("static/profile_images")
+        directory.mkdir(parents=True, exist_ok=True)
+        file_location = directory / f"{current_user.id}_{file.filename}"
+
+        with file_location.open("wb+") as file_object:
+            file_object.write(file.file.read())
+
+        current_user.profile_image = str(file_location)
+        self.db.commit()
+        self.db.refresh(current_user)
+        return current_user.profile_image
+
     # ----- Content aggregation -----
     def get_user_content(
         self, current_user: User, skip: int, limit: int
     ) -> schemas.UserContentOut:
-        posts_query = self.db.query(models.Post).filter(
-            models.Post.owner_id == current_user.id
-        )
+        posts_query = self.db.query(models.Post).filter(models.Post.owner_id == current_user.id)
         if current_user.privacy_level == models.PrivacyLevel.CUSTOM:
             allowed = current_user.custom_privacy.get("allowed_users", [])
             posts_query = posts_query.filter(
@@ -208,10 +256,101 @@ class UserService:
             reels=[schemas.ReelOut.from_orm(reel) for reel in reels],
         )
 
+    def get_user_posts(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+        posts = (
+            self.db.query(models.Post)
+            .filter(models.Post.owner_id == user_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return [schemas.PostOut.from_orm(post) for post in posts]
+
+    def get_user_articles(
+        self, user_id: int, skip: int, limit: int
+    ) -> List[schemas.ArticleOut]:
+        articles = (
+            self.db.query(models.Article)
+            .filter(models.Article.author_id == user_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return [schemas.ArticleOut.from_orm(article) for article in articles]
+
+    def get_user_media(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+        media = (
+            self.db.query(models.Post)
+            .filter(
+                models.Post.owner_id == user_id,
+                or_(
+                    models.Post.content.like("%image%"),
+                    models.Post.content.like("%video%"),
+                ),
+            )
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return [schemas.PostOut.from_orm(item) for item in media]
+
+    def get_user_likes(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+        liked_posts = (
+            self.db.query(models.Post)
+            .join(models.Vote)
+            .filter(models.Vote.user_id == user_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return [schemas.PostOut.from_orm(post) for post in liked_posts]
+
+    def get_profile_overview(self, user_id: int) -> Tuple[User, Dict[str, int]]:
+        user = self.get_user_or_404(user_id)
+        metrics = {
+            "post_count": (
+                self.db.query(func.count(models.Post.id))
+                .filter(models.Post.owner_id == user_id)
+                .scalar()
+                or 0
+            ),
+            "follower_count": (
+                self.db.query(func.count(models.Follow.follower_id))
+                .filter(models.Follow.followed_id == user_id)
+                .scalar()
+                or 0
+            ),
+            "following_count": (
+                self.db.query(func.count(models.Follow.followed_id))
+                .filter(models.Follow.follower_id == user_id)
+                .scalar()
+                or 0
+            ),
+            "community_count": (
+                self.db.query(func.count(models.CommunityMember.user_id))
+                .filter(models.CommunityMember.user_id == user_id)
+                .scalar()
+                or 0
+            ),
+            "media_count": (
+                self.db.query(func.count(models.Post.id))
+                .filter(
+                    models.Post.owner_id == user_id,
+                    or_(
+                        models.Post.content.like("%image%"),
+                        models.Post.content.like("%video%"),
+                    ),
+                )
+                .scalar()
+                or 0
+            ),
+        }
+        return user, metrics
+
     # ----- Notifications -----
     def get_user_notifications(
         self, current_user: User, skip: int, limit: int
-    ) -> list[models.Notification]:
+    ) -> List[models.Notification]:
         return (
             self.db.query(models.Notification)
             .filter(models.Notification.user_id == current_user.id)
@@ -239,24 +378,210 @@ class UserService:
         self.db.refresh(notification)
         return notification
 
-    # ----- Suspension -----
-    def suspend_user(self, user_id: int, days: int) -> dict:
+    # ----- Security & sessions -----
+    def change_password(
+        self, current_user: User, password_change: schemas.PasswordChange
+    ) -> Dict[str, str]:
+        if not verify(password_change.current_password, current_user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
+            )
+
+        current_user.hashed_password = hash_password(password_change.new_password)
+        self.db.commit()
+        return {"message": "Password changed successfully"}
+
+    def enable_2fa(self, current_user: User) -> Dict[str, str]:
+        if current_user.otp_secret:
+            raise HTTPException(status_code=400, detail="2FA is already enabled")
+
+        secret = pyotp.random_base32()
+        current_user.otp_secret = secret
+        current_user.is_2fa_enabled = False
+        self.db.commit()
+        return {"otp_secret": secret}
+
+    def verify_2fa(self, current_user: User, otp: str) -> Dict[str, str]:
+        if not current_user.otp_secret:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="2FA is not enabled for this user.",
+            )
+
+        totp = pyotp.TOTP(current_user.otp_secret)
+        if not totp.verify(otp):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP"
+            )
+
+        current_user.is_2fa_enabled = True
+        self.db.commit()
+        return {"message": "2FA verified successfully"}
+
+    def disable_2fa(self, current_user: User) -> Dict[str, str]:
+        if not current_user.otp_secret:
+            raise HTTPException(status_code=400, detail="2FA is not enabled")
+
+        current_user.otp_secret = None
+        current_user.is_2fa_enabled = False
+        self.db.commit()
+        return {"message": "2FA disabled successfully"}
+
+    def logout_other_sessions(self, current_user: User, current_session: str) -> Dict[str, str]:
+        (
+            self.db.query(UserSession)
+            .filter(
+                UserSession.user_id == current_user.id,
+                UserSession.session_id != current_session,
+            )
+            .delete(synchronize_session=False)
+        )
+        self.db.commit()
+        return {"message": "Logged out from all other devices"}
+
+    # ----- Discovery -----
+    def get_suggested_follows(self, current_user: User, limit: int) -> List[User]:
+        if not current_user.interests:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User has no interests set",
+            )
+
+        similar_interests = (
+            self.db.query(User.id)
+            .filter(User.id != current_user.id)
+            .filter(User.interests.overlap(current_user.interests))
+            .subquery()
+        )
+
+        followed_by_current_user = (
+            self.db.query(models.Follow.followed_id)
+            .filter(models.Follow.follower_id == current_user.id)
+            .subquery()
+        )
+
+        followers_of_followed = (
+            self.db.query(models.Follow.follower_id)
+            .filter(models.Follow.followed_id.in_(followed_by_current_user))
+            .subquery()
+        )
+
+        suggested_users = (
+            self.db.query(User)
+            .outerjoin(similar_interests, User.id == similar_interests.c.id)
+            .outerjoin(
+                followers_of_followed, User.id == followers_of_followed.c.follower_id
+            )
+            .filter(User.id != current_user.id)
+            .filter(~User.id.in_(followed_by_current_user))
+            .group_by(User.id)
+            .order_by(
+                func.count(similar_interests.c.id).desc(),
+                func.count(followers_of_followed.c.follower_id).desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+        return suggested_users
+
+    # ----- Analytics -----
+    def get_user_analytics(self, current_user: User, days: int) -> schemas.UserAnalytics:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+
+        daily_stats = (
+            self.db.query(UserStatistics)
+            .filter(
+                UserStatistics.user_id == current_user.id,
+                UserStatistics.date.between(start_date, end_date),
+            )
+            .all()
+        )
+
+        totals = (
+            self.db.query(
+                func.sum(UserStatistics.post_count).label("total_posts"),
+                func.sum(UserStatistics.comment_count).label("total_comments"),
+                func.sum(UserStatistics.like_count).label("total_likes"),
+                func.sum(UserStatistics.view_count).label("total_views"),
+            )
+            .filter(UserStatistics.user_id == current_user.id)
+            .first()
+        )
+
+        return schemas.UserAnalytics(
+            total_posts=(totals.total_posts if totals else 0) or 0,
+            total_comments=(totals.total_comments if totals else 0) or 0,
+            total_likes=(totals.total_likes if totals else 0) or 0,
+            total_views=(totals.total_views if totals else 0) or 0,
+            daily_statistics=daily_stats,
+        )
+
+    # ----- Settings -----
+    def get_user_settings(self, current_user: User) -> schemas.UserSettings:
+        return schemas.UserSettings(
+            ui_settings=schemas.UISettings(**(current_user.ui_settings or {})),
+            notifications_settings=schemas.NotificationsSettings(
+                **(current_user.notifications_settings or {})
+            ),
+        )
+
+    def update_user_settings(
+        self, current_user: User, settings: schemas.UserSettingsUpdate
+    ) -> schemas.UserSettings:
+        if settings.ui_settings:
+            if current_user.ui_settings is None:
+                current_user.ui_settings = {}
+            current_user.ui_settings.update(
+                settings.ui_settings.model_dump(exclude_unset=True)
+            )
+        if settings.notifications_settings:
+            if current_user.notifications_settings is None:
+                current_user.notifications_settings = {}
+            current_user.notifications_settings.update(
+                settings.notifications_settings.model_dump(exclude_unset=True)
+            )
+
+        self.db.commit()
+        self.db.refresh(current_user)
+        return self.get_user_settings(current_user)
+
+    def update_block_settings(
+        self, current_user: User, settings: schemas.BlockSettings
+    ) -> User:
+        current_user.default_block_type = settings.default_block_type
+        self.db.commit()
+        self.db.refresh(current_user)
+        return current_user
+
+    def update_repost_settings(
+        self, current_user: User, settings: schemas.UserUpdate
+    ) -> User:
+        if settings.allow_reposts is not None:
+            current_user.allow_reposts = settings.allow_reposts
+            self.db.commit()
+            self.db.refresh(current_user)
+        return current_user
+
+    # ----- Enforcement -----
+    def suspend_user(self, user_id: int, days: int) -> Dict[str, str]:
         user = self.get_user_or_404(user_id)
         user.is_suspended = True
-        user.suspension_end_date = utils.utcnow() + timedelta(days=days)
+        user.suspension_end_date = datetime.now(timezone.utc) + timedelta(days=days)
         self.db.commit()
         return {"message": "User suspended successfully"}
 
-    def unsuspend_user(self, user_id: int) -> dict:
+    def unsuspend_user(self, user_id: int) -> Dict[str, str]:
         user = self.get_user_or_404(user_id)
         user.is_suspended = False
         user.suspension_end_date = None
         self.db.commit()
         return {"message": "User unsuspended successfully"}
 
-    # Utility logging hook
-    def log_activity(self, user_id: int, activity_type: str, details: dict) -> None:
-        activity = models.UserActivity(
+    # ----- Logging -----
+    def log_activity(self, user_id: int, activity_type: str, details: Dict) -> None:
+        activity = UserActivity(
             user_id=user_id, activity_type=activity_type, details=details
         )
         self.db.add(activity)

@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 import aiohttp
-from ..config import settings
+from app.core.config import settings
 
 
 class AmenhotepAI:

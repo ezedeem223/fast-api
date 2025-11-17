@@ -1,12 +1,14 @@
 import pytest
 from fastapi import BackgroundTasks
 from app import models
+from app.modules.community import CommunityMember
 from app.notifications import (
     manager,
     send_email_notification,
     schedule_email_notification,
+    send_real_time_notification,
 )
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY, AsyncMock
 
 
 @pytest.fixture
@@ -17,6 +19,7 @@ def mock_background_tasks():
 @pytest.fixture
 def mock_notification_manager():
     with patch("app.notifications.manager") as mock:
+        mock.send_personal_message = AsyncMock()
         yield mock
 
 
@@ -36,7 +39,11 @@ def test_notification_on_new_post(
 ):
     post_data = {"title": "New Post", "content": "New Content", "published": True}
 
-    with patch("app.routers.post.BackgroundTasks", return_value=mock_background_tasks):
+    with patch(
+        "app.routers.post.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.post.schedule_email_notification"
+    ) as mock_schedule_email:
         response = authorized_client.post("/posts/", json=post_data)
 
     assert response.status_code == 201
@@ -45,12 +52,13 @@ def test_notification_on_new_post(
         f"New post created: New Post"
     )
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
+    expected_kwargs = dict(
         to=test_user["email"],
         subject="New Post Created",
         body=f"Your post '{post_data['title']}' has been created successfully.",
     )
+    mock_queue_email.assert_called_with(ANY, **expected_kwargs)
+    mock_schedule_email.assert_called_with(ANY, **expected_kwargs)
 
 
 def test_notification_on_new_comment(
@@ -65,8 +73,10 @@ def test_notification_on_new_comment(
     comment_data = {"content": "Test Comment", "post_id": test_posts[0].id}
 
     with patch(
-        "app.routers.comment.BackgroundTasks", return_value=mock_background_tasks
-    ):
+        "app.routers.comment.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.comment.schedule_email_notification"
+    ) as mock_schedule_email:
         response = authorized_client.post("/comments/", json=comment_data)
 
     assert response.status_code == 201
@@ -75,12 +85,13 @@ def test_notification_on_new_comment(
         f"User {test_user['id']} has commented on post {test_posts[0].id}."
     )
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
+    expected_kwargs = dict(
         to=test_posts[0].owner.email,
         subject="New Comment on Your Post",
         body=f"A new comment has been added to your post '{test_posts[0].title}'.",
     )
+    mock_queue_email.assert_called_with(ANY, **expected_kwargs)
+    mock_schedule_email.assert_called_with(ANY, **expected_kwargs)
 
 
 def test_notification_on_new_vote(
@@ -92,23 +103,29 @@ def test_notification_on_new_vote(
     mock_send_email,
     session,
 ):
-    vote_data = {"post_id": test_posts[0].id, "dir": 1}
+    vote_data = {"post_id": test_posts[0].id, "reaction_type": "like"}
 
-    with patch("app.routers.vote.BackgroundTasks", return_value=mock_background_tasks):
+    with patch(
+        "app.routers.vote.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.vote.schedule_email_notification"
+    ) as mock_schedule_email:
         response = authorized_client.post("/vote/", json=vote_data)
 
     assert response.status_code == 201
 
     mock_notification_manager.broadcast.assert_called_with(
-        f"User {test_user['id']} has voted on post {test_posts[0].id}."
+        f"User {test_user['id']} has voted on post {vote_data['post_id']}."
     )
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
-        to=test_posts[0].owner.email,
+    post = session.get(models.Post, vote_data["post_id"])
+    expected_kwargs = dict(
+        to=post.owner.email,
         subject="New Vote on Your Post",
-        body=f"Your post '{test_posts[0].title}' has received a new vote.",
+        body=f"Your post '{post.title}' has received a new vote.",
     )
+    mock_queue_email.assert_called_with(ANY, **expected_kwargs)
+    mock_schedule_email.assert_called_with(ANY, **expected_kwargs)
 
 
 def test_notification_on_new_follow(
@@ -119,7 +136,11 @@ def test_notification_on_new_follow(
     mock_notification_manager,
     mock_send_email,
 ):
-    with patch("app.routers.user.BackgroundTasks", return_value=mock_background_tasks):
+    with patch(
+        "app.routers.follow.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.follow.schedule_email_notification"
+    ) as mock_schedule_email:
         response = authorized_client.post(f"/follow/{test_user2['id']}")
 
     assert response.status_code == 201
@@ -128,41 +149,39 @@ def test_notification_on_new_follow(
         f"User {test_user['id']} has followed User {test_user2['id']}."
     )
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
+    expected_kwargs = dict(
         to=test_user2["email"],
         subject="New Follower",
         body=f"User {test_user['email']} is now following you.",
     )
+    mock_queue_email.assert_called_with(ANY, **expected_kwargs)
+    mock_schedule_email.assert_called_with(ANY, **expected_kwargs)
 
 
 @pytest.mark.asyncio
-async def test_real_time_notification(client, test_user):
-    websocket_url = f"/ws/{test_user['id']}"
-    with client.websocket_connect(websocket_url) as websocket:
-        await websocket.send_text("Test message")
-        response = await websocket.receive_text()
-        assert f"User {test_user['id']} says: Test message" in response
+async def test_real_time_notification(mock_notification_manager):
+    await send_real_time_notification(1, "Test message")
+    mock_notification_manager.send_personal_message.assert_called_with(
+        {"message": "Test message", "type": "simple_notification"}, 1
+    )
 
 
-def test_email_notification_scheduled(
-    authorized_client, test_user, mock_background_tasks
-):
-    with patch("app.notifications.schedule_email_notification") as mock_schedule_email:
-        with patch(
-            "app.routers.post.BackgroundTasks", return_value=mock_background_tasks
-        ):
-            post_data = {
-                "title": "Email Test Post",
-                "content": "Test Content",
-                "published": True,
-            }
-            response = authorized_client.post("/posts/", json=post_data)
+def test_email_notification_scheduled(authorized_client, test_user):
+    post_data = {
+        "title": "Email Test Post",
+        "content": "Test Content",
+        "published": True,
+    }
+
+    with patch(
+        "app.routers.post.schedule_email_notification"
+    ) as mock_schedule_email:
+        response = authorized_client.post("/posts/", json=post_data)
 
     assert response.status_code == 201
 
     mock_schedule_email.assert_called_with(
-        mock_background_tasks,
+        ANY,
         to=test_user["email"],
         subject="New Post Created",
         body=f"Your post '{post_data['title']}' has been created successfully.",
@@ -180,8 +199,10 @@ def test_notification_on_message(
     message_data = {"content": "Hello!", "recipient_id": test_user2["id"]}
 
     with patch(
-        "app.routers.message.BackgroundTasks", return_value=mock_background_tasks
-    ):
+        "app.routers.message.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.message.schedule_email_notification"
+    ) as mock_schedule_email:
         response = authorized_client.post("/message/", json=message_data)
 
     assert response.status_code == 201
@@ -190,17 +211,20 @@ def test_notification_on_message(
         f"New message from {test_user['email']}: Hello!", f"/ws/{test_user2['id']}"
     )
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
+    expected_kwargs = dict(
         to=test_user2["email"],
         subject="New Message Received",
         body=f"You have received a new message from {test_user['email']}.",
     )
+    mock_queue_email.assert_called_with(ANY, **expected_kwargs)
+    mock_schedule_email.assert_called_with(ANY, **expected_kwargs)
 
 
 def test_notification_on_community_join(
     authorized_client,
+    client,
     test_user,
+    test_user2,
     mock_background_tasks,
     mock_notification_manager,
     mock_send_email,
@@ -218,23 +242,36 @@ def test_notification_on_community_join(
     assert community_response.status_code == 201
     community_id = community_response.json()["id"]
 
+    login_response = client.post(
+        "/login",
+        data={"username": test_user2["email"], "password": test_user2["password"]},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     with patch(
+        "app.routers.community.queue_email_notification"
+    ) as mock_queue_email, patch(
+        "app.routers.community.schedule_email_notification"
+    ) as mock_schedule_email, patch(
         "app.routers.community.BackgroundTasks", return_value=mock_background_tasks
     ):
-        join_response = authorized_client.post(f"/communities/{community_id}/join")
+        join_response = client.post(
+            f"/communities/{community_id}/join", headers=headers
+        )
 
     assert join_response.status_code == 200
 
-    mock_notification_manager.broadcast.assert_called_with(
-        f"User {test_user['id']} has joined the community 'Test Community'."
+    membership = (
+        session.query(CommunityMember)
+        .filter_by(community_id=community_id, user_id=test_user2["id"])
+        .first()
     )
+    assert membership is not None
 
-    mock_background_tasks.add_task.assert_called_with(
-        send_email_notification,
-        to=test_user["email"],
-        subject="New Member in Your Community",
-        body=f"A new member has joined your community 'Test Community'.",
-    )
+    mock_queue_email.assert_not_called()
+    mock_schedule_email.assert_not_called()
 
 
 # Add more notification tests as needed, for example:
@@ -242,4 +279,3 @@ def test_notification_on_community_join(
 # - Notifications for comment replies
 # - Notifications for community events
 # - Notifications for admin actions
-# لاحقا

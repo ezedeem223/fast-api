@@ -17,7 +17,8 @@ from typing import List, Optional
 
 # Local imports
 from .. import models, schemas, oauth2
-from ..database import get_db
+from app.modules.community import Community
+from app.core.database import get_db
 from ..analytics import (
     get_user_activity,
     get_problematic_users,
@@ -102,7 +103,7 @@ async def get_statistics(
             "total_posts": db.query(models.Post).count(),
             "total_users": db.query(models.User).count(),
             "total_reports": db.query(models.Report).count(),
-            "total_communities": db.query(models.Community).count(),
+            "total_communities": db.query(Community).count(),
         }
         return stats
     except Exception as e:
@@ -211,9 +212,9 @@ async def get_communities_overview(
     """
     try:
         stats = {
-            "total_communities": db.query(models.Community).count(),
-            "active_communities": db.query(models.Community)
-            .filter(models.Community.is_active == True)
+            "total_communities": db.query(Community).count(),
+            "active_communities": db.query(Community)
+            .filter(Community.is_active == True)
             .count(),
         }
         return stats
@@ -260,7 +261,7 @@ async def problematic_users(
     """
     try:
         users = get_problematic_users(db, threshold)
-        return [schemas.UserOut.from_orm(user) for user in users]
+        return [schemas.UserOut.model_validate(user) for user in users]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
