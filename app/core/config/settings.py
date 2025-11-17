@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     database_username: Optional[str] = os.getenv("DATABASE_USERNAME")
     database_ssl_mode: str = os.getenv("DATABASE_SSL_MODE", "require")
     environment: str = os.getenv('APP_ENV', 'production')
+    cors_origins: list[str] = []
     MAX_OWNED_COMMUNITIES: int = int(os.getenv("MAX_OWNED_COMMUNITIES", 5))
 
     # ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ط£ظ…ط§ظ†
@@ -149,6 +150,18 @@ class Settings(BaseSettings):
             logger.warning(
                 "REDIS_URL is not set, Redis client will not be initialized."
             )
+
+        cors_env = os.getenv("CORS_ORIGINS")
+        if cors_env:
+            origins = [origin.strip() for origin in cors_env.split(",") if origin.strip()]
+        elif self.cors_origins:
+            origins = self.cors_origins
+        else:
+            origins = [
+                "https://example.com",
+                "https://www.example.com",
+            ]
+        object.__setattr__(self, "cors_origins", origins)
 
     def get_database_url(self, *, use_test: bool = False) -> str:
         """

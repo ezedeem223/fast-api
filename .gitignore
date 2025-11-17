@@ -14,3 +14,12 @@ public_key
 private_key
 env.
 venv
+debug_report_api.py
+debug_report_api.log
+test.db
+uploads/
+static/media/
+content_classifier.joblib
+content_vectorizer.joblib
+app/firebase-credentials/
+scripts/__pycache__/

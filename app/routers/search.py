@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
-from sqlalchemy import or_, and_, func
 import json
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import Session
 
 from .. import models, schemas, oauth2
+from app.core.config import settings
 from app.core.database import get_db
 from app.modules.utils.search import (
     search_posts,
@@ -15,6 +17,10 @@ from app.modules.utils.search import (
 )
 from app.modules.utils.analytics import analyze_user_behavior
 from app.modules.search import SearchParams, SearchResponse, SearchStatOut
+from app.modules.search.service import (
+    update_search_statistics,
+    update_search_suggestions,
+)
 from app.modules.users.schemas import SortOption
 from ..analytics import (
     record_search_query,
@@ -46,11 +52,11 @@ async def search(
     Returns a SearchResponse with results, spell suggestion, and search suggestions.
     """
     cache_key = f"search:{search_params.query}:{search_params.sort_by}"
-    cached_result = database.settings.redis_client.get(
-        cache_key
-    )  # assuming redis_client exists in settings
-    if cached_result:
-        return json.loads(cached_result)
+    cache_client = settings.redis_client
+    if cache_client:
+        cached_payload = cache_client.get(cache_key)
+        if cached_payload:
+            return json.loads(cached_payload)
 
     # Record the search query
     record_search_query(db, search_params.query, current_user.id)
@@ -77,10 +83,8 @@ async def search(
         "search_suggestions": search_suggestions,
     }
 
-    if results:
-        database.settings.redis_client.setex(
-            cache_key, 3600, json.dumps(search_response)
-        )
+    if results and cache_client:
+        cache_client.setex(cache_key, 3600, json.dumps(search_response))
 
     return search_response
 
@@ -171,9 +175,11 @@ async def autocomplete(
     - Orders by frequency and caches results for 5 minutes.
     """
     cache_key = f"autocomplete:{query}"
-    cached_result = database.settings.redis_client.get(cache_key)
-    if cached_result:
-        return json.loads(cached_result)
+    cache_client = settings.redis_client
+    if cache_client:
+        cached_payload = cache_client.get(cache_key)
+        if cached_payload:
+            return json.loads(cached_payload)
 
     suggestions = (
         db.query(models.SearchSuggestion)
@@ -184,9 +190,8 @@ async def autocomplete(
     )
 
     result = [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]
-    database.settings.redis_client.setex(
-        cache_key, 300, json.dumps([s.dict() for s in result])
-    )
+    if cache_client:
+        cache_client.setex(cache_key, 300, json.dumps([s.model_dump() for s in result]))
 
     return result
 
@@ -299,48 +304,3 @@ async def smart_search(
         schemas.PostOut.model_validate(post)
         for post, _ in scored_results[skip : skip + limit]
     ]
-
-
-def update_search_statistics(db: Session, user_id: int, query: str):
-    """
-    Update the search statistics for a user.
-
-    - If a record exists, increment the count and update the last searched time.
-    - Otherwise, create a new record.
-    """
-    stat = (
-        db.query(models.SearchStatistics)
-        .filter(
-            models.SearchStatistics.user_id == user_id,
-            models.SearchStatistics.query == query,
-        )
-        .first()
-    )
-
-    if stat:
-        stat.count += 1
-        stat.last_searched = func.now()
-    else:
-        new_stat = models.SearchStatistics(user_id=user_id, query=query)
-        db.add(new_stat)
-
-    db.commit()
-
-
-def update_search_suggestions(db: Session):
-    """
-    Update search suggestions based on popular search queries.
-
-    This function retrieves the top search suggestions (ordered by frequency)
-    and returns them as a list of SearchSuggestionOut models.
-
-    Returns:
-        List[schemas.SearchSuggestionOut]: List of search suggestions.
-    """
-    suggestions = (
-        db.query(models.SearchSuggestion)
-        .order_by(models.SearchSuggestion.frequency.desc())
-        .limit(10)
-        .all()
-    )
-    return [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]

@@ -22,7 +22,7 @@ from app.modules.utils.analytics import create_default_categories, update_post_s
 from app.modules.utils.content import train_content_classifier
 from app.modules.utils.search import spell, update_search_vector
 from app.notifications import NotificationService
-from app.routers.search import update_search_suggestions
+from app.modules.search.service import update_search_suggestions
 
 
 logger = logging.getLogger(__name__)

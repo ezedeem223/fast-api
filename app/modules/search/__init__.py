@@ -12,6 +12,8 @@ from .schemas import (
     SearchSuggestionOut,
 )
 
+from .service import update_search_statistics, update_search_suggestions
+
 __all__ = [
     "AdvancedSearchQuery",
     "AdvancedSearchResponse",
@@ -22,4 +24,6 @@ __all__ = [
     "SearchStatisticsBase",
     "SearchStatisticsCreate",
     "SearchSuggestionOut",
+    "update_search_statistics",
+    "update_search_suggestions",
 ]

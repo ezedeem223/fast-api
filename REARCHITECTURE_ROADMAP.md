@@ -1,42 +1,53 @@
-# Re-Architecture Roadmap (v2)
+# Re-Architecture Roadmap (v3)
 
-This revision replaces the previous roadmap with a concise, three-part plan that addresses the remaining structural gaps and sets up the project for long-term maintainability. Each part contains concrete objectives that map directly to the issues identified during the recent audit.
-
----
-
-## Part 1 – Domain Isolation & Schema Hygiene
-1. **Split monolithic schemas**  
-   - Extract user/post/community/notification/search schemas into `app/modules/<domain>/schemas.py`.  
-   - Keep `app/schemas.py` as a lightweight compatibility aggregator that re-exports the modular schemas during the transition.
-2. **Finalize notifications/domain modules**  
-   - Move `ConnectionManager`, email helpers, and queue utilities from `app/notifications.py` into `app/modules/notifications/` and adjust router/service imports accordingly.  
-   - Remove any dead code left in the legacy module once consumers migrate.
-3. **Modularize moderation/media helpers**  
-   - Relocate `app/moderation.py` and `app/media_processing.py` logic into dedicated module/service packages so routers remain thin and consistent with other domains.
-
-## Part 2 – Core Platform Hardening
-1. **Unify configuration & database layers**  
-   - Deprecate legacy `app/config.py` and `app/database.py` in favor of `app/core/config/settings.py` and `app/core/database/session.py`.  
-   - Provide clear migration guidance (or shims) to prevent ambiguous imports.
-2. **Slim the FastAPI entrypoint**  
-   - Extract WebSocket management, exception handlers, and middleware wiring from `app/main.py` into `app/core/middleware`/`app/integrations`.  
-   - Ensure the main module handles only app creation plus router inclusion.
-3. **Lazy-load heavy analytics dependencies**  
-   - Wrap transformer initialization in `app/analytics.py` so models load on demand (or via dependency injection) to keep startup/testing fast.  
-   - Confirm background tasks (search/vector updates, Firebase init) gracefully degrade in test environments.
-
-## Part 3 – Quality Gates & Operational Confidence
-1. **Targeted test coverage**  
-   - Add unit tests for the new modular schemas, utility helpers (search ordering, analytics lazy-loading), and scheduling middleware.  
-   - Ensure pytest continues to run in strict asyncio mode without warnings.
-2. **Performance & startup checks**  
-   - Introduce lightweight benchmarks or profiling scripts to detect regressions from background jobs or AI model loading.  
-   - Include CI hooks (e.g., GitHub Actions) to run these checks on pull requests.
-3. **Documentation & handover**  
-   - Update developer docs to describe the final module layout, dependency injection expectations, and common extension points.  
-   - Provide a brief migration guide for teams adding new routers/services so they follow the modular patterns by default.
+تم دمج كل الملاحظات والتحسينات السابقة في خطة واحدة من ثلاث مراحل، بحيث لا نعود لإعادة العمل مرة أخرى. كل مرحلة تُغلق محوراً محدداً، مع التركيز على المعايير العالمية والنظافة المعمارية.
 
 ---
 
-**Execution guidance:**  
-Tackle the parts sequentially but keep changes reviewable by shipping each bullet as an independent PR/commit. After each part, rerun `python -m pytest -q` and perform a manual smoke test (auth, posts, messaging) to confirm functional parity.
+## المرحلة 1 – ضبط الدومينات والتنظيف السطحي
+1. **تثبيت مصادر الإعدادات والبنية**  
+   - تحديث جميع الاستخدامات (خصوصاً `app/routers/search.py`) لاستهلاك Redis مباشرة عبر `settings.redis_client` بدلاً من الرجوع إلى أي وحدات قديمة.  
+   - تحميل قائمة CORS من إعدادات قابلة للضبط (`settings.cors_origins`) لتجنب القيم الصلبة.
+2. **إزالة الأمثلة والمخلفات**  
+   - حذف مقطع “Example Instance for Testing” من `app/schemas.py` وأي سكربتات تجريبية مثل `debug_report_api.py` أو ملفات قاعدة بيانات مؤقتة (`test.db`) أو محتويات `uploads/` و `static/media/`.  
+   - تحديث `.gitignore` للتأكد من أن الأسرار (مثل `private_key.pem`, مجلد Firebase, `.env`) والملفات الكبيرة أو المتولدة لا تُرفع إلى Git.
+3. **تحسين سجل الأخطاء والمراقبة**  
+   - في `app/api/websocket.py`، استبدال `print` بسجل موحد (`logging`) لتوافق المعايير الإنتاجية.  
+   - إضافة مسارات صحية (`/livez` و`/readyz`) ونقطة مقاييس إن لزم لضمان إمكانية مراقبة الخدمة بسهولة.
+
+التحقق بعد المرحلة: تشغيل `python -m pytest -q` + `python scripts/perf_startup.py` للتأكد من الاستقرار بعد التنظيف.
+
+---
+
+## المرحلة 2 – صلابة المنصة وتقليل الترابط
+1. **فصل منطق البحث عن الراوترات**  
+   - نقل وظيفة `update_search_suggestions` وأي منطق مرتبط بها من `app/routers/search.py` إلى خدمة/وحدة تحت `app/modules/search/`، بحيث تستهلكها كل من المهام المجدولة والراوتر.
+2. **تحسين التحليلات والاعتمادات الثقيلة**  
+   - جعل `transformers` اعتماداً اختيارياً: يتم الاستيراد داخل `_get_sentiment_pipeline` فقط، مع رسالة واضحة أو fallback إن لم تكن الحزمة متاحة.  
+   - ضمان أن مهام `app/core/scheduling/tasks.py` تتعامل برشاقة مع بيئات الاختبار (تعطيل scheduler، التعامل مع `firebase_config` أو `AmenhotepAI` حين لا تتوفر المعطيات).
+3. **مسارات الأمان والتوجيه**  
+   - إضافة `TrustedHostMiddleware` و`HTTPSRedirectMiddleware` (عند توفر إعداد production) جنباً إلى جنب مع رؤوس أمنية (CSP/HSTS) حتى يكون التطبيق جاهزاً للنشر العالمي.  
+   - توفير إعدادات موحدة لمسارات Static/Uploads وتوثيق كيفية إدارة وسائط المستخدم.
+
+التحقق بعد المرحلة: `python -m pytest -q`, `scripts/perf_startup.py`, مع فحص يدوي لمسارات WebSocket والصحة.
+
+---
+
+## المرحلة 3 – الجودة التشغيلية وتهيئة CI/CD
+1. **أتمتة الاختبارات والأداء**  
+   - إعداد GitHub Actions (أو أي CI) لتشغيل `pytest -q` و`python scripts/perf_startup.py --iterations 3 --threshold <env>` على كل Pull Request.  
+   - إضافة pre-commit hooks (ruff/black وغيرها) لضمان توحيد الأسلوب قبل الدفع.
+2. **تحديث الوثائق والتسليم**  
+   - تحديث `docs/DEVELOPER_GUIDE.md` بشرح تفصيلي حول CORS، Redis، مهام الخلفية، مسارات الصحة، وكيفية إضافة دومين/خدمة جديدة وفق البنية الحالية.  
+   - إضافة قسم حول تعليمات Alembic (ترحيل قواعد البيانات) وخطوات التشغيل المحلي مقابل الإنتاج.
+3. **ضبط إدارة الأسرار**  
+   - التأكد من عدم متابعة أي أسرار أو شهادات داخل المستودع (خاصة `app/firebase-credentials/`).  
+   - توثيق آلية إعداد القيم الحساسة عبر متغيرات البيئة أو أنظمة إدارة الأسرار، مع خطوات توليد مفاتيح جديدة عند الحاجة.
+
+التحقق النهائي: تأكد أن CI يمر بنجاح، وأن الوثائق تعكس البنية الجديدة، ثم نفذ مراجعة أمان خفيفة (Secrets scan، مراجعة صلاحيات CORS/Hosts).
+
+---
+
+**ملاحظات التنفيذ**  
+- نفّذ كل مرحلة في فرع مستقل أو PR واضح، مع تشغيل الاختبارات والأداء بعد كل مرحلة.  
+- احتفظ بسجل واضح في Git (commits صغيرة ومركزة) لتسهيل المراجعة والرجوع إذا لزم.

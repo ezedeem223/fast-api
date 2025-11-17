@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app import models, oauth2
 from app.api.router import api_router
@@ -37,10 +38,7 @@ ERROR_MESSAGE_OVERRIDES = {
 
 
 def _configure_app(app: FastAPI) -> None:
-    origins = [
-        "https://example.com",
-        "https://www.example.com",
-    ]
+    origins = settings.cors_origins or ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -60,6 +58,15 @@ def _register_routes(app: FastAPI) -> None:
     @app.get("/")
     async def root():
         return {"message": "Hello, World!"}
+
+    @app.get("/livez", tags=["Health"])
+    async def livez():
+        return {"status": "ok"}
+
+    @app.get("/readyz", tags=["Health"])
+    def readyz(db: Session = Depends(get_db)):
+        db.execute(text("SELECT 1"))
+        return {"status": "ok"}
 
     @app.get("/protected-resource")
     def protected_resource(
