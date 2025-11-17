@@ -6,6 +6,8 @@ users, communities, search, and more. The file is organized into sections with c
 English comments to enhance readability and maintainability.
 """
 
+from __future__ import annotations
+
 # ================================================================
 # Imports
 # ================================================================
@@ -18,126 +20,123 @@ from pydantic import (
     constr,
     HttpUrl,
     Field,
+    model_validator,
 )
 from datetime import datetime, date, timedelta, time
-from typing import Optional, List, Dict, Tuple, Union, Any, ForwardRef
+from typing import Optional, List, Dict, Tuple, Union, Any
 from enum import Enum
+from app.modules.notifications.schemas import (
+    NotificationPreferencesUpdate,
+    NotificationPreferencesOut,
+    NotificationBase,
+    NotificationCreate,
+    NotificationUpdate,
+    NotificationDeliveryStatus,
+    NotificationStatistics,
+    NotificationAnalytics,
+    NotificationGroupOut,
+    NotificationDeliveryLogOut,
+    NotificationWithLogs,
+    NotificationOut,
+)
+from app.modules.posts import ReactionType
+from app.modules.posts.schemas import (
+    Comment,
+    CommentBase,
+    CommentCreate,
+    CommentEditHistoryOut,
+    CommentOut,
+    CommentStatistics,
+    CommentUpdate,
+    FlagCommentRequest,
+    PostCategory,
+    PostCategoryBase,
+    PostCategoryCreate,
+    PostVoteAnalytics,
+    PostVoteStatistics,
+    PostVoteStatisticsBase,
+    PostVoteStatisticsCreate,
+    Reaction,
+    ReactionBase,
+    ReactionCount,
+    ReactionCreate,
+    PollCreate,
+    PollData,
+    PollOption,
+    PollResults,
+    UserVoteAnalytics,
+    PostBase,
+    PostCreate,
+    Post,
+    PostOut,
+    EngagementStats,
+    SocialPostBase,
+    SocialPostCreate,
+    SocialPostUpdate,
+    SocialPostOut,
+    PostSearch,
+)
+from app.modules.users.schemas import (
+    EmailChange,
+    EmailSchema,
+    FollowingListOut,
+    FollowerOut,
+    FollowersListOut,
+    NotificationsSettings,
+    PasswordChange,
+    PasswordReset,
+    PrivacyLevel,
+    SecurityQuestionAnswer,
+    SecurityQuestionsSet,
+    SortOption,
+    UserAnalytics,
+    UserBanOut,
+    UserBase,
+    UserContentOut,
+    UserCreate,
+    UserFollowersSettings,
+    UserLanguageUpdate,
+    UserLogin,
+    UserOut,
+    UserPrivacyUpdate,
+    UserProfileOut,
+    UserProfileUpdate,
+    UserPublicKeyUpdate,
+    UserRole,
+    UserRoleUpdate,
+    UserSessionCreate,
+    UserSessionOut,
+    UserSettings,
+    UserSettingsUpdate,
+    UserStatisticsOut,
+    UserUpdate,
+    UserWarningOut,
+    UISettings,
+)
 
 
 # ================================================================
 # Reactions and Vote Models
-# This section defines schemas related to reactions on posts and vote statistics.
+# Re-exported from app.modules.posts.schemas for backwards compatibility.
 # ================================================================
-class ReactionType(str, Enum):
-    LIKE = "like"
-    LOVE = "love"
-    HAHA = "haha"
-    WOW = "wow"
-    SAD = "sad"
-    ANGRY = "angry"
-
-
-# Base model for a reaction
-class ReactionBase(BaseModel):
-    reaction_type: ReactionType
-
-
-# Model for creating a reaction (includes post id)
-class ReactionCreate(ReactionBase):
-    post_id: int
-
-
-# Reaction model with id and user information
-class Reaction(ReactionBase):
-    id: int
-    user_id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Model to count reactions of each type
-class ReactionCount(BaseModel):
-    reaction_type: ReactionType
-    count: int
 
 
 # ================================================================
 # User Email and Security Questions Schemas
 # Schemas related to email changes and security questions settings.
 # ================================================================
-class EmailChange(BaseModel):
-    new_email: EmailStr
 
-
-class SecurityQuestionsSet(BaseModel):
-    question1: str
-    answer1: str
-    question2: str
-    answer2: str
-    question3: str
-    answer3: str
-
-
-class SecurityQuestionAnswer(BaseModel):
-    question: str
-    answer: str
 
 
 # ================================================================
 # Following and User Listing Schemas
 # Schemas to represent following lists and user-related information.
 # ================================================================
-class FollowingListOut(BaseModel):
-    following: List["UserOut"]
-    total_count: int
-
 
 # ================================================================
 # Post Vote and Analytics Models
-# This section includes models for storing and calculating post vote statistics.
+# Re-exported from app.modules.posts.schemas for backwards compatibility.
 # ================================================================
-class PostVoteStatisticsBase(BaseModel):
-    total_votes: int
-    upvotes: int
-    downvotes: int
-    like_count: int
-    love_count: int
-    haha_count: int
-    wow_count: int
-    sad_count: int
-    angry_count: int
-
-
-class PostVoteStatisticsCreate(PostVoteStatisticsBase):
-    pass
-
-
-class PostVoteStatistics(PostVoteStatisticsBase):
-    id: int
-    post_id: int
-    last_updated: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Model to represent analytics of a post's votes
-class PostVoteAnalytics(BaseModel):
-    post_id: int
-    title: str
-    statistics: PostVoteStatistics
-    upvote_percentage: float
-    downvote_percentage: float
-    most_common_reaction: str
-
-
-# Aggregated vote analytics for a user
-class UserVoteAnalytics(BaseModel):
-    total_posts: int
-    total_votes_received: int
-    average_votes_per_post: float
-    most_upvoted_post: Optional[PostVoteAnalytics]
-    most_downvoted_post: Optional[PostVoteAnalytics]
-    most_reacted_post: Optional[PostVoteAnalytics]
 
 
 # ================================================================
@@ -170,18 +169,6 @@ class HashtagStatistics(BaseModel):
 # Search and Sorting Models
 # Schemas used for search parameters and sorting options.
 # ================================================================
-class SortOption(str, Enum):
-    DATE = "date"
-    USERNAME = "username"
-    POST_COUNT = "post_count"
-    INTERACTION_COUNT = "interaction_count"
-    REPOST_COUNT = "repost_count"
-    POPULARITY = "popularity"
-    RELEVANCE = "relevance"
-    DATE_DESC = "date_desc"
-    DATE_ASC = "date_asc"
-
-
 # Parameters used for search queries
 class SearchParams(BaseModel):
     query: str
@@ -189,11 +176,6 @@ class SearchParams(BaseModel):
 
 
 # Settings for user followers display and sorting
-class UserFollowersSettings(BaseModel):
-    followers_visibility: str
-    followers_custom_visibility: Optional[Dict[str, List[int]]] = None
-    followers_sort_preference: SortOption
-
 
 # ================================================================
 # Screen Share and Appeal Models
@@ -205,13 +187,7 @@ class VerificationStatus(str, Enum):
     REJECTED = "rejected"
 
 
-class ScreenShareStatus(str, Enum):
-    ACTIVE = "active"
-    ENDED = "ended"
-    FAILED = "failed"
 
-
-# Model for starting a screen share session
 class ScreenShareStart(BaseModel):
     call_id: int
 
@@ -540,74 +516,14 @@ class BusinessTransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CommentStatistics(BaseModel):
-    total_comments: int
-    top_commenters: List[Tuple[int, str, int]]
-    most_commented_posts: List[Tuple[int, str, int]]
-    average_sentiment: float
-
-
 # ================================================================
 # Privacy and User Profile Models
 # Schemas for updating user privacy settings and profiles.
 # ================================================================
-class PrivacyLevel(str, Enum):
-    PUBLIC = "public"
-    PRIVATE = "private"
-    CUSTOM = "custom"
 
 
-class UserPrivacyUpdate(BaseModel):
-    privacy_level: PrivacyLevel
-    custom_privacy: Optional[dict] = None
 
 
-class UserProfileUpdate(BaseModel):
-    profile_image: Optional[HttpUrl] = None
-    bio: Optional[str] = None
-    location: Optional[str] = None
-    website: Optional[HttpUrl] = None
-    skills: Optional[List[str]] = None
-    interests: Optional[List[str]] = None
-
-
-class UserProfileOut(BaseModel):
-    id: int
-    email: str
-    profile_image: Optional[str] = None
-    bio: Optional[str] = None
-    location: Optional[str] = None
-    website: Optional[str] = None
-    joined_at: datetime
-    post_count: int
-    follower_count: int
-    following_count: int
-    community_count: int
-    media_count: int
-    skills: Optional[List[str]] = None
-    interests: Optional[List[str]] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserStatisticsOut(BaseModel):
-    date: date
-    post_count: int
-    comment_count: int
-    like_count: int
-    view_count: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserAnalytics(BaseModel):
-    total_posts: int
-    total_comments: int
-    total_likes: int
-    total_views: int
-    daily_statistics: List[UserStatisticsOut]
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================
@@ -665,111 +581,44 @@ class BanCreate(BaseModel):
     reason: str
 
 
-class UserWarningOut(BaseModel):
-    id: int
-    user_id: int
-    reason: str
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserBanOut(BaseModel):
-    id: int
-    user_id: int
-    reason: str
-    duration: timedelta
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # ================================================================
 # Base Models for Users, Posts, Comments, and Reports
 # Core schemas for users, posts, comments, and report functionalities.
 # ================================================================
-class UserBase(BaseModel):
-    email: EmailStr
-    interests: Optional[List[str]] = None
-
-
-class PostBase(BaseModel):
-    title: str
-    content: str
-    published: bool = True
-    original_post_id: Optional[int] = None
-    is_repost: bool = False
-    allow_reposts: bool = True
-    copyright_type: CopyrightType = CopyrightType.ALL_RIGHTS_RESERVED
-    custom_copyright: Optional[str] = None
-    is_archived: bool = False
-
-
-class CommentBase(BaseModel):
-    content: str
-
 
 class ReportBase(BaseModel):
-    report_reason: str
-    reason: str
+    reason: constr(min_length=1)
+    report_reason: Optional[str] = None
     ai_detected: bool = False
     ai_confidence: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _sync_report_reason(self):
+        sanitized = self.reason.strip()
+        if not sanitized:
+            raise ValueError("Report reason cannot be empty")
+        self.reason = sanitized
+        if not self.report_reason:
+            self.report_reason = sanitized
+        return self
 
 
 class ReportCreate(ReportBase):
     post_id: Optional[int] = None
     comment_id: Optional[int] = None
 
+    @model_validator(mode="after")
+    def _validate_target(self):
+        has_post = self.post_id is not None
+        has_comment = self.comment_id is not None
+        if has_post == has_comment:
+            raise ValueError("Provide either post_id or comment_id to submit a report")
+        return self
 
-class ReportOut(ReportBase):
-    id: int
-    post_id: Optional[int]
-    comment_id: Optional[int]
-    reporter_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UserPublicKeyUpdate(BaseModel):
-    public_key: str
-
-
-# ================================================================
-# Message Attachment and Messaging Models
-# Schemas for messages, attachments, and conversation details.
-# ================================================================
-class MessageAttachmentBase(BaseModel):
-    file_url: str
-    file_type: str
-
-
-class MessageAttachmentCreate(MessageAttachmentBase):
-    pass
-
-
-class MessageAttachment(MessageAttachmentBase):
-    id: int
-    message_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class MessageBase(BaseModel):
-    encrypted_content: str
-    message_type: MessageType
-    audio_url: Optional[str] = None
-    duration: Optional[float] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    is_current_location: Optional[bool] = False
-    location_name: Optional[str] = None
-    replied_to_id: Optional[int] = None
-    quoted_message_id: Optional[int] = None
-    is_read: bool = False
-    read_at: Optional[datetime] = None
-    file_url: Optional[str]
 
 
 # Models for encrypted calls (voice/video)
@@ -822,9 +671,35 @@ class ArticleBase(BaseModel):
     content: str
 
 
-class CommunityBase(BaseModel):
-    name: constr(min_length=1)
-    description: Optional[str] = None
+from app.modules.community.schemas import (
+    CommunityAnalytics,
+    CommunityActivityAnalytics,
+    CommunityBase,
+    CommunityContentAnalysis,
+    CommunityCreate,
+    CommunityEngagementAnalytics,
+    CommunityGrowthAnalytics,
+    CommunityInvitationBase,
+    CommunityInvitationCreate,
+    CommunityInvitationOut,
+    CommunityMemberBase,
+    CommunityMemberCreate,
+    CommunityMemberOut,
+    CommunityMemberUpdate,
+    CommunityOut,
+    CommunityOutRef,
+    CommunityOverview,
+    CommunityOverviewAnalytics,
+    CommunityRole,
+    CommunityRuleBase,
+    CommunityRuleCreate,
+    CommunityRuleOut,
+    CommunityRuleUpdate,
+    CommunityStatistics,
+    CommunityStatisticsBase,
+    CommunityStatisticsCreate,
+    CommunityUpdate,
+)
 
 
 class ReelBase(BaseModel):
@@ -834,16 +709,6 @@ class ReelBase(BaseModel):
 
 
 # UI and Notification Settings
-class UISettings(BaseModel):
-    theme: Optional[str] = "light"
-    language: Optional[str] = "en"
-    font_size: Optional[str] = "medium"
-
-
-class NotificationsSettings(BaseModel):
-    email_notifications: bool = True
-    push_notifications: bool = True
-    newsletter: bool = True
 
 
 # Repost statistics model
@@ -869,32 +734,6 @@ class RepostCreate(BaseModel):
 
 
 # Preferences for notification updates
-class NotificationPreferencesUpdate(BaseModel):
-    email_notifications: Optional[bool] = None
-    push_notifications: Optional[bool] = None
-    in_app_notifications: Optional[bool] = None
-    quiet_hours_start: Optional[time] = None
-    quiet_hours_end: Optional[time] = None
-    categories_preferences: Optional[Dict[str, bool]] = None
-    notification_frequency: Optional[str] = None
-
-
-class NotificationPreferencesOut(BaseModel):
-    id: int
-    user_id: int
-    email_notifications: bool
-    push_notifications: bool
-    in_app_notifications: bool
-    quiet_hours_start: Optional[time]
-    quiet_hours_end: Optional[time]
-    categories_preferences: Dict[str, bool]
-    notification_frequency: str
-    created_at: datetime
-    updated_at: Optional[datetime]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # Amenhotep (chatbot or analytics) models
 class AmenhotepMessageCreate(BaseModel):
     message: str
@@ -972,187 +811,15 @@ class SocialAccountOut(SocialAccountBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Models for social posts
-class SocialPostBase(BaseModel):
-    title: Optional[str] = None
-    content: str
-    media_urls: Optional[List[HttpUrl]] = None
-    scheduled_for: Optional[datetime] = None
-
-
-class SocialPostCreate(SocialPostBase):
-    platform: SocialMediaType
-
-
-class SocialPostUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    media_urls: Optional[List[HttpUrl]] = None
-    scheduled_for: Optional[datetime] = None
-
-
-class SocialPostOut(SocialPostBase):
-    id: int
-    user_id: int
-    account_id: int
-    platform_post_id: Optional[str]
-    status: PostStatus
-    error_message: Optional[str]
-    engagement_stats: Dict
-    created_at: datetime
-    published_at: Optional[datetime]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class EngagementStats(BaseModel):
-    upvotes: Optional[int]
-    downvotes: Optional[int]
-    comments: Optional[int]
-    shares: Optional[int]
-    likes: Optional[int]
-
-
-# ================================================================
-# Notification Models
-# Schemas for creating and managing notifications.
-# ================================================================
-class NotificationBase(BaseModel):
-    content: str
-    notification_type: str
-    priority: Any  # Could be defined as an enum NotificationPriority
-    category: Any  # Could be defined as an enum NotificationCategory
-
-
-class NotificationCreate(NotificationBase):
-    user_id: int
-    link: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    scheduled_for: Optional[datetime] = None
-    notification_channel: Optional[str] = "in_app"
-    importance_level: Optional[int] = 1
-
-
-class NotificationUpdate(BaseModel):
-    is_read: Optional[bool] = None
-    is_archived: Optional[bool] = None
-    interaction_count: Optional[int] = None
-
-
-class NotificationDeliveryStatus(BaseModel):
-    success: bool
-    channel: str
-    timestamp: datetime
-    error_message: Optional[str] = None
-
-
-class NotificationStatistics(BaseModel):
-    total_count: int
-    unread_count: int
-    categories_distribution: List[Tuple[str, int]]
-    priorities_distribution: List[Tuple[str, int]]
-    daily_notifications: List[Tuple[date, int]]
-
-
-class NotificationAnalytics(BaseModel):
-    engagement_rate: float
-    response_time: float
-    peak_activity_hours: List[Dict[str, Union[int, int]]]
-    most_interacted_types: List[Dict[str, Union[str, int]]]
-
-
-class NotificationGroupOut(BaseModel):
-    id: int
-    group_type: str
-    count: int
-    last_updated: datetime
-    sample_notification: "NotificationOut"
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class NotificationDeliveryLogOut(BaseModel):
-    id: int
-    attempt_time: datetime
-    status: str
-    error_message: Optional[str]
-    delivery_channel: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class NotificationWithLogs(BaseModel):
-    delivery_logs: List[NotificationDeliveryLogOut]
-    retry_count: int
-    status: Any  # Could be defined as NotificationStatus enum
-    last_retry: Optional[datetime] = None
-
-
-class NotificationOut(BaseModel):
-    id: int
-    content: str
-    notification_type: str
-    priority: Any
-    category: Any
-    link: Optional[str]
-    is_read: bool
-    is_archived: bool
-    read_at: Optional[datetime]
-    created_at: datetime
-    group: Optional[NotificationGroupOut]
-    metadata: Dict[str, Any]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # User settings models
-class UserSettings(BaseModel):
-    ui_settings: UISettings
-    notifications_settings: NotificationsSettings
-
-
-class UserSettingsUpdate(BaseModel):
-    ui_settings: Optional[UISettings]
-    notifications_settings: Optional[NotificationsSettings]
 
 
 # ================================================================
 # User Models
 # Schemas for user creation, update, and output.
 # ================================================================
-class UserCreate(UserBase):
-    password: str
-    email: EmailStr
-    public_key: Optional[str] = None  # تم تعديل هذا الحقل ليصبح اختياريًا
 
 
-class UserUpdate(BaseModel):
-    hide_read_status: Optional[bool] = None
-    phone_number: Optional[str] = None
-    followers_settings: Optional[UserFollowersSettings] = None
-    followed_hashtags: List[int] = []
-    allow_reposts: Optional[bool] = None
-
-
-class UserLogin(UserBase):
-    password: str
-
-
-class UserOut(UserBase):
-    id: int
-    created_at: datetime
-    email: EmailStr
-    role: "UserRole"
-    is_2fa_enabled: bool
-    privacy_level: PrivacyLevel
-    custom_privacy: Optional[dict] = None
-    ui_settings: Optional[UISettings]
-    notifications_settings: Optional[NotificationsSettings]
-    public_key: Optional[str] = None  # Public key field
-    followers_count: int
-    is_verified: bool
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class InitialKeyExchange(BaseModel):
@@ -1220,12 +887,11 @@ class VotersListOut(BaseModel):
 # Community Models
 # Schemas for community creation, update, and details.
 # ================================================================
-CommunityOutRef = ForwardRef("CommunityOut")
-
 
 class CommunityCreate(CommunityBase):
-    category_id: int
+    category_id: Optional[int] = None
     tags: List[int] = []
+    rules: Optional[List["CommunityRuleCreate"]] = None
 
 
 class CommunityUpdate(BaseModel):
@@ -1243,15 +909,11 @@ class CommunityOut(CommunityBase):
     member_count: int
     members: List["CommunityMemberOut"]
     rules: List["CommunityRuleOut"] = []
-    category: "Category"
+    category: Optional["Category"] = None
     tags: List["Tag"]
 
     model_config = ConfigDict(from_attributes=True)
 
-
-class UserLanguageUpdate(BaseModel):
-    preferred_language: str
-    auto_translate: bool = True
 
 
 class TranslationRequest(BaseModel):
@@ -1260,19 +922,6 @@ class TranslationRequest(BaseModel):
     target_lang: str
 
 
-class FollowerOut(BaseModel):
-    id: int
-    username: str
-    follow_date: datetime
-    post_count: int
-    interaction_count: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class FollowersListOut(BaseModel):
-    followers: List[FollowerOut]
-    total_count: int
 
 
 class CategoryBase(BaseModel):
@@ -1309,26 +958,8 @@ class AdvancedSearchResponse(BaseModel):
     posts: List["PostOut"]
 
 
-class PostCategoryBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    parent_id: Optional[int] = None
-    is_active: bool = True
-    hashtags: List[str] = []
-    analyze_content: bool = Field(
-        default=False, description="Flag to trigger content analysis"
-    )
-
-
-class PostCategoryCreate(PostCategoryBase):
-    pass
-
-
-class PostCategory(PostCategoryBase):
-    id: int
-    children: List["PostCategory"] = []
-
-    model_config = ConfigDict(from_attributes=True)
+# Post category schemas live in app.modules.posts.schemas.
+PostCategorySchema = PostCategory
 
 
 class TagBase(BaseModel):
@@ -1464,155 +1095,24 @@ class EncryptedSessionUpdate(BaseModel):
 # Post Models
 # Schemas for creating, updating, and representing posts.
 # ================================================================
-class PostCreate(PostBase):
-    community_id: Optional[int] = None
-    hashtags: List[str] = []
-    is_help_request: bool = False
-    category_id: Optional[int] = None
-    scheduled_time: Optional[datetime] = None
-    content: str
-    mentioned_usernames: List[str] = []
-
-
-class Post(PostBase):
-    id: int
-    created_at: datetime
-    owner_id: int
-    community_id: Optional[int]
-    owner: UserOut
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class PostOut(Post):
-    community: Optional[CommunityOutRef]
-    privacy_level: PrivacyLevel
-    reactions: List[Reaction] = []
-    reaction_counts: List[ReactionCount] = []
-    has_best_answer: bool = False
-    category: Optional[PostCategory] = None
-    hashtags: List[Hashtag] = []
-    repost_count: int
-    original_post: Optional["PostOut"] = None
-    sentiment: Optional[str]
-    sentiment_score: Optional[float]
-    content_suggestion: Optional[str]
-    mentioned_users: List[UserOut]
-    is_audio_post: bool
-    audio_url: Optional[str]
-    is_poll: bool
-    poll_data: Optional["PollData"]
-    copyright_type: CopyrightType
-    custom_copyright: Optional[str]
-    is_archived: bool
-    archived_at: Optional[datetime]
-    media_url: Optional[str]
-    media_type: Optional[str]
-    media_text: Optional[str]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class PollOption(BaseModel):
-    id: int
-    option_text: str
-
-
-class PollData(BaseModel):
-    options: List[PollOption]
-    end_date: Optional[datetime]
-
-
-class PollCreate(BaseModel):
-    title: str
-    description: str
-    options: List[str]
-    end_date: Optional[datetime]
-
-
-class PollResults(BaseModel):
-    post_id: int
-    total_votes: int
-    results: List[Dict[str, Union[int, str, float]]]
-    is_ended: bool
-    end_date: Optional[datetime]
+# Poll schemas are imported from app.modules.posts.schemas.
 
 
 # ================================================================
 # Comment Models
 # Schemas for creating, editing, and representing comments.
 # ================================================================
-class CommentCreate(CommentBase):
-    content: str
-    post_id: int
-    parent_id: Optional[int] = None
-    image_url: Optional[HttpUrl] = None
-    video_url: Optional[HttpUrl] = None
-    sticker_id: Optional[int] = None
-
-
-class CommentOut(BaseModel):
-    contains_profanity: bool
-    has_invalid_urls: bool
-    reported_count: int
-    likes_count: int
-    is_flagged: bool
-    flag_reason: Optional[str] = None
-    reactions: List[Reaction] = []
-    reaction_counts: List[ReactionCount] = []
-    is_highlighted: bool = False
-    is_best_answer: bool = False
-    image_url: Optional[HttpUrl] = None
-    video_url: Optional[HttpUrl] = None
-    has_emoji: bool
-    has_sticker: bool
-    sticker: Optional[Any] = None  # Expected to be a StickerOut model
-    is_pinned: bool = False
-    pinned_at: Optional[datetime] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class FlagCommentRequest(BaseModel):
-    flag_reason: str = Field(..., min_length=5, max_length=200)
-
-
-class CommentUpdate(CommentBase):
-    pass
-
-
-class CommentEditHistoryOut(BaseModel):
-    id: int
-    previous_content: str
-    edited_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class Comment(CommentBase):
-    id: int
-    created_at: datetime
-    owner_id: int
-    post_id: int
-    parent_id: Optional[int]
-    is_edited: bool
-    edited_at: Optional[datetime]
-    is_deleted: bool
-    deleted_at: Optional[datetime]
-    edit_history: List[CommentEditHistoryOut] = []
-    replies: List["Comment"] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # ================================================================
 # Report Models
 # Schemas for creating and reviewing reports on content.
 # ================================================================
 class Report(ReportBase):
     id: int
-    created_at: datetime
+    post_id: Optional[int]
+    comment_id: Optional[int]
+    reported_user_id: Optional[int]
     reporter_id: int
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1621,22 +1121,13 @@ class ReportReview(BaseModel):
     is_valid: bool
 
 
-class UserRoleUpdate(BaseModel):
-    role: "UserRole"
-
 
 class ReportUpdate(BaseModel):
     status: "ReportStatus"
     resolution_notes: Optional[str] = None
 
 
-class ReportOut(ReportBase):
-    id: int
-    report_reason: str
-    post_id: Optional[int]
-    comment_id: Optional[int]
-    reporter_id: int
-    created_at: datetime
+class ReportOut(Report):
     status: "ReportStatus"
     reviewed_by: Optional[int]
     resolution_notes: Optional[str]
@@ -1649,10 +1140,11 @@ class ReportOut(ReportBase):
 # Schemas for message creation, update, and conversation details.
 # ================================================================
 class MessageCreate(MessageBase):
-    receiver_id: int
-    encrypted_content: str  # Encrypted content instead of plain text
-    message_type: MessageType
-    attachments: List[MessageAttachmentCreate] = []
+    receiver_id: int = Field(alias="recipient_id")
+    attachments: List[MessageAttachmentCreate] = Field(default_factory=list)
+    sticker_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class Message(MessageBase):
@@ -1666,31 +1158,6 @@ class Message(MessageBase):
     is_edited: bool = False
     conversation_id: str
     link_preview: Optional["LinkPreview"] = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class MessageSearch(BaseModel):
-    query: Optional[str] = None
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    message_type: Optional[MessageType] = None
-    conversation_id: Optional[str] = None
-    sort_order: SortOrder = SortOrder.DESC
-
-
-class MessageSearchResponse(BaseModel):
-    total: int
-    messages: List[Message]
-
-
-class MessageUpdate(BaseModel):
-    content: str
-
-
-class MessageOut(BaseModel):
-    message: Message
-    count: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1834,6 +1301,13 @@ class CommunityInvitationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CommunityInvitationResponse(BaseModel):
+    accept: bool = Field(
+        ...,
+        description="Set to true to accept the invitation, false to decline it.",
+    )
+
+
 # ================================================================
 # 2FA Models
 # Schemas for two-factor authentication processes.
@@ -1854,11 +1328,6 @@ class Verify2FAResponse(BaseModel):
 # Additional User Session and Authentication Models
 # Schemas for managing user sessions and authentication tokens.
 # ================================================================
-class UserRole(str, Enum):
-    ADMIN = "admin"
-    MODERATOR = "moderator"
-    USER = "user"
-
 
 class ReportStatus(str, Enum):
     PENDING = "pending"
@@ -1866,47 +1335,10 @@ class ReportStatus(str, Enum):
     RESOLVED = "resolved"
 
 
-class UserSessionCreate(BaseModel):
-    session_id: str
-    ip_address: str
-    user_agent: str
 
 
-class UserSessionOut(UserSessionCreate):
-    id: int
-    user_id: int
-    created_at: datetime
-    last_activity: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
-class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
-
-
-class EmailSchema(BaseModel):
-    email: EmailStr
-
-
-class PasswordReset(BaseModel):
-    token: str
-    new_password: str
-
-
-class UserContentOut(BaseModel):
-    posts: List[PostOut]
-    comments: List[Comment]
-    articles: List[ArticleOut]
-    reels: List[ReelOut]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class PostSearch(BaseModel):
-    keyword: Optional[str] = None
-    category_id: Optional[int] = None
 
 
 # ================================================================
@@ -1988,13 +1420,13 @@ class StickerReport(StickerReportBase):
 # Resolve Forward References
 # This section ensures that forward references are updated.
 # ================================================================
-Message.update_forward_refs()
+Message.model_rebuild()
 CommunityOut.model_rebuild()
 ArticleOut.model_rebuild()
 ReelOut.model_rebuild()
+Post.model_rebuild()
 PostOut.model_rebuild()
-PostOut.update_forward_refs()
-Comment.update_forward_refs()
+Comment.model_rebuild()
 CommunityInvitationOut.model_rebuild()
 
 # ================================================================
@@ -2070,3 +1502,8 @@ if __name__ == "__main__":
         print("PostOut instance:", post_example)
     except Exception as e:
         print("Validation error:", e)
+
+
+
+
+
