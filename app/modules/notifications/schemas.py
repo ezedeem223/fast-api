@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, date, time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class NotificationPreferencesUpdate(BaseModel):
@@ -117,9 +117,38 @@ class NotificationOut(BaseModel):
     read_at: Optional[datetime]
     created_at: datetime
     group: Optional[NotificationGroupOut]
-    metadata: Dict[str, Any]
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("notification_metadata", "metadata"),
+    )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationSummary(BaseModel):
+    unread_count: int
+    unseen_count: int
+    unread_urgent_count: int
+    last_unread_at: Optional[datetime]
+    generated_at: datetime
+
+
+class NotificationFeedResponse(BaseModel):
+    notifications: List[NotificationOut]
+    unread_count: int
+    unseen_count: int
+    next_cursor: Optional[int]
+    has_more: bool
+    last_seen_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PushNotification(BaseModel):
+    device_token: str
+    title: str
+    content: str
+    extra_data: Dict[str, Any] = Field(default_factory=dict)
 
 
 __all__ = [
@@ -135,4 +164,7 @@ __all__ = [
     "NotificationDeliveryLogOut",
     "NotificationWithLogs",
     "NotificationOut",
+    "NotificationSummary",
+    "NotificationFeedResponse",
+    "PushNotification",
 ]

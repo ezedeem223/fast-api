@@ -15,7 +15,7 @@ import emoji
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app import models, notifications, schemas
 from app.analytics import update_conversation_statistics
@@ -50,6 +50,96 @@ class MessageService:
         self.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------ helpers
+    def _get_conversation_or_404(self, conversation_id: str) -> models.Conversation:
+        conversation = (
+            self.db.query(models.Conversation)
+            .filter(
+                models.Conversation.id == conversation_id,
+                models.Conversation.is_active.is_(True),
+            )
+            .options(joinedload(models.Conversation.members))
+            .first()
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return conversation
+
+    def _ensure_conversation_membership(self, conversation_id: str, user_id: int) -> None:
+        member = (
+            self.db.query(models.ConversationMember)
+            .filter(
+                models.ConversationMember.conversation_id == conversation_id,
+                models.ConversationMember.user_id == user_id,
+            )
+            .first()
+        )
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not part of this conversation",
+            )
+
+    def _ensure_conversation_manager(self, conversation_id: str, user_id: int) -> None:
+        member = (
+            self.db.query(models.ConversationMember)
+            .filter(
+                models.ConversationMember.conversation_id == conversation_id,
+                models.ConversationMember.user_id == user_id,
+            )
+            .first()
+        )
+        if not member or member.role == models.ConversationMemberRole.MEMBER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only conversation owners or admins can modify membership",
+            )
+
+    def _get_conversation_members(
+        self, conversation_id: str, *, exclude_user_id: Optional[int] = None
+    ) -> List[models.User]:
+        query = (
+            self.db.query(models.User)
+            .join(
+                models.ConversationMember,
+                models.ConversationMember.user_id == models.User.id,
+            )
+            .filter(models.ConversationMember.conversation_id == conversation_id)
+        )
+        if exclude_user_id is not None:
+            query = query.filter(models.User.id != exclude_user_id)
+        return query.all()
+
+    def _get_or_create_direct_conversation(
+        self, user_a: int, user_b: int
+    ) -> str:
+        conversation_id = self._conversation_id(user_a, user_b)
+        conversation = (
+            self.db.query(models.Conversation)
+            .filter(models.Conversation.id == conversation_id)
+            .first()
+        )
+        if not conversation:
+            conversation = models.Conversation(
+                id=conversation_id,
+                type=models.ConversationType.DIRECT,
+                created_by=user_a,
+            )
+            self.db.add(conversation)
+            self.db.flush()
+            for uid in {user_a, user_b}:
+                member = models.ConversationMember(
+                    conversation_id=conversation_id,
+                    user_id=uid,
+                    role=(
+                        models.ConversationMemberRole.OWNER
+                        if uid == user_a
+                        else models.ConversationMemberRole.MEMBER
+                    ),
+                )
+                self.db.add(member)
+            self.db.commit()
+        return conversation_id
+
     @staticmethod
     def _conversation_id(user1_id: int, user2_id: int) -> str:
         return f"{min(user1_id, user2_id)}_{max(user1_id, user2_id)}"
@@ -107,10 +197,21 @@ class MessageService:
         current_user: models.User,
         content_text: str,
         files: Optional[List[UploadFile]] = None,
+        conversation_id: Optional[str] = None,
+        receiver_id: Optional[int] = None,
     ) -> models.Message:
-        conversation_id = self._conversation_id(
-            current_user.id, payload.receiver_id
-        )
+        target_receiver = receiver_id or payload.receiver_id
+        if conversation_id:
+            conversation_key = conversation_id
+        else:
+            if not target_receiver:
+                raise HTTPException(
+                    status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Receiver is required for direct messages",
+                )
+            conversation_key = self._conversation_id(
+                current_user.id, target_receiver
+            )
         normalized_content = content_text or None
 
         encrypted_payload = payload.encrypted_content
@@ -125,8 +226,8 @@ class MessageService:
 
         new_message = models.Message(
             sender_id=current_user.id,
-            receiver_id=payload.receiver_id,
-            conversation_id=conversation_id,
+            receiver_id=target_receiver,
+            conversation_id=conversation_key,
             content=normalized_content,
             encrypted_content=encrypted_payload,
             message_type=message_type,
@@ -167,43 +268,46 @@ class MessageService:
         self,
         message: models.Message,
         sender: models.User,
-        recipient: models.User,
+        recipients: List[models.User],
         background_tasks: BackgroundTasks,
     ):
+        if not recipients:
+            return
         sender_display = get_user_display_name(sender)
-        log_user_event(self.db, sender.id, "send_message", {"receiver_id": recipient.id})
+        log_user_event(self.db, sender.id, "send_message", {"conversation_id": message.conversation_id})
         update_conversation_statistics(self.db, message.conversation_id, message)
-        create_notification(
-            self.db,
-            recipient.id,
-            f"New message from {sender_display}",
-            f"/messages/{sender.id}",
-            "new_message",
-            message.id,
-        )
-        self._queue_email_notification(
-            background_tasks,
-            to=recipient.email,
-            subject="New Message Received",
-            body=f"You have received a new message from {sender.email}.",
-        )
-        self._schedule_email_notification(
-            background_tasks,
-            to=recipient.email,
-            subject="New Message Received",
-            body=f"You have received a new message from {sender.email}.",
-        )
-        realtime_payload = f"New message from {sender.email}: {message.content or ''}"
-        realtime_target = f"/ws/{recipient.id}"
-        personal_message = notifications.manager.send_personal_message
-        if asyncio.iscoroutinefunction(personal_message):
-            background_tasks.add_task(
-                asyncio.run, personal_message(realtime_payload, realtime_target)
+        for recipient in recipients:
+            create_notification(
+                self.db,
+                recipient.id,
+                f"New message from {sender_display}",
+                f"/messages/{sender.id}",
+                "new_message",
+                message.id,
             )
-        else:
-            background_tasks.add_task(
-                personal_message, realtime_payload, realtime_target
+            self._queue_email_notification(
+                background_tasks,
+                to=recipient.email,
+                subject="New Message Received",
+                body=f"You have received a new message from {sender.email}.",
             )
+            self._schedule_email_notification(
+                background_tasks,
+                to=recipient.email,
+                subject="New Message Received",
+                body=f"You have received a new message from {sender.email}.",
+            )
+            realtime_payload = f"New message from {sender.email}: {message.content or ''}"
+            realtime_target = f"/ws/{recipient.id}"
+            personal_message = notifications.manager.send_personal_message
+            if asyncio.iscoroutinefunction(personal_message):
+                background_tasks.add_task(
+                    asyncio.run, personal_message(realtime_payload, realtime_target)
+                )
+            else:
+                background_tasks.add_task(
+                    personal_message, realtime_payload, realtime_target
+                )
 
     def _schedule_link_preview(
         self, background_tasks: BackgroundTasks, message_id: int, url: str
@@ -270,6 +374,11 @@ class MessageService:
                 status_code=HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Message content cannot be empty",
             )
+        if payload.receiver_id is None:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="receiver_id is required for direct messages",
+            )
 
         recipient = (
             self.db.query(models.User)
@@ -284,26 +393,102 @@ class MessageService:
                 status_code=422, detail="You can't send messages to this user"
             )
 
+        conversation_id = self._get_or_create_direct_conversation(
+            current_user.id, recipient.id
+        )
         new_message = await self._create_message_object(
-            payload, current_user, content_text
+            payload,
+            current_user,
+            content_text,
+            conversation_id=conversation_id,
+            receiver_id=recipient.id,
         )
 
+        urls: List[str] = []
         if content_text:
             urls = re.findall(
                 r"http[s]?://(?:[a-zA-Z0-9/$-_@.&+!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
                 content_text,
             )
-            if urls:
-                self._schedule_link_preview(background_tasks, new_message.id, urls[0])
 
         self.db.add(new_message)
+        self.db.flush()
+        if urls:
+            self._schedule_link_preview(background_tasks, new_message.id, urls[0])
+
+        conversation = self._get_conversation_or_404(conversation_id)
+        conversation.last_message_at = datetime.now(timezone.utc)
+
         self.db.commit()
         self.db.refresh(new_message)
 
         await self._handle_post_creation_tasks(
-            new_message, current_user, recipient, background_tasks
+            new_message, current_user, [recipient], background_tasks
         )
 
+        new_message.content = await get_translated_content(
+            new_message.content, current_user, new_message.language
+        )
+        return new_message
+
+    async def send_group_message(
+        self,
+        *,
+        conversation_id: str,
+        payload: schemas.MessageCreate,
+        current_user: models.User,
+        background_tasks: BackgroundTasks,
+    ) -> models.Message:
+        conversation = self._get_conversation_or_404(conversation_id)
+        self._ensure_conversation_membership(conversation_id, current_user.id)
+        content_text = (payload.content or "").strip() if payload.content else ""
+        if content_text and len(content_text) > 1000:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Message content exceeds the maximum length of 1000 characters",
+            )
+        if not content_text and not payload.sticker_id:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Message content cannot be empty",
+            )
+
+        recipients = self._get_conversation_members(
+            conversation_id, exclude_user_id=current_user.id
+        )
+        if not recipients:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Conversation has no other members",
+            )
+
+        new_message = await self._create_message_object(
+            payload,
+            current_user,
+            content_text,
+            conversation_id=conversation_id,
+            receiver_id=None,
+        )
+
+        urls: List[str] = []
+        if content_text:
+            urls = re.findall(
+                r"http[s]?://(?:[a-zA-Z0-9/$-_@.&+!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
+                content_text,
+            )
+
+        self.db.add(new_message)
+        self.db.flush()
+        if urls:
+            self._schedule_link_preview(background_tasks, new_message.id, urls[0])
+
+        conversation.last_message_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(new_message)
+
+        await self._handle_post_creation_tasks(
+            new_message, current_user, recipients, background_tasks
+        )
         new_message.content = await get_translated_content(
             new_message.content, current_user, new_message.language
         )
@@ -655,6 +840,135 @@ class MessageService:
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
         return FileResponse(path=str(file_path), filename=file_name)
+
+    def create_group_conversation(
+        self, *, payload: schemas.ConversationCreate, current_user: models.User
+    ) -> models.Conversation:
+        member_ids = set(payload.member_ids or [])
+        member_ids.discard(current_user.id)
+        if member_ids:
+            existing = {
+                row[0]
+                for row in self.db.query(models.User.id).filter(models.User.id.in_(member_ids)).all()
+            }
+            missing = member_ids - existing
+            if missing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid member ids: {sorted(missing)}",
+                )
+        conversation = models.Conversation(
+            id=str(uuid4()),
+            title=payload.title,
+            type=models.ConversationType.GROUP,
+            created_by=current_user.id,
+        )
+        self.db.add(conversation)
+        self.db.flush()
+        all_members = {current_user.id} | member_ids
+        for uid in all_members:
+            role = (
+                models.ConversationMemberRole.OWNER
+                if uid == current_user.id
+                else models.ConversationMemberRole.MEMBER
+            )
+            self.db.add(
+                models.ConversationMember(
+                    conversation_id=conversation.id,
+                    user_id=uid,
+                    role=role,
+                )
+            )
+        self.db.commit()
+        self.db.refresh(conversation)
+        return conversation
+
+    def list_user_conversations(self, *, current_user: models.User) -> List[models.Conversation]:
+        return (
+            self.db.query(models.Conversation)
+            .join(models.ConversationMember)
+            .filter(
+                models.ConversationMember.user_id == current_user.id,
+                models.Conversation.is_active.is_(True),
+            )
+            .options(joinedload(models.Conversation.members))
+            .order_by(models.Conversation.last_message_at.desc().nullslast())
+            .all()
+        )
+
+    def add_members_to_conversation(
+        self,
+        *,
+        conversation_id: str,
+        member_ids: List[int],
+        current_user: models.User,
+    ) -> models.Conversation:
+        conversation = self._get_conversation_or_404(conversation_id)
+        self._ensure_conversation_manager(conversation_id, current_user.id)
+        for uid in member_ids:
+            exists = (
+                self.db.query(models.ConversationMember)
+                .filter(
+                    models.ConversationMember.conversation_id == conversation_id,
+                    models.ConversationMember.user_id == uid,
+                )
+                .first()
+            )
+            if not exists:
+                self.db.add(
+                    models.ConversationMember(
+                        conversation_id=conversation_id,
+                        user_id=uid,
+                        role=models.ConversationMemberRole.MEMBER,
+                    )
+                )
+        self.db.commit()
+        self.db.refresh(conversation)
+        return conversation
+
+    def remove_member_from_conversation(
+        self,
+        *,
+        conversation_id: str,
+        user_id: int,
+        current_user: models.User,
+    ) -> models.Conversation:
+        conversation = self._get_conversation_or_404(conversation_id)
+        self._ensure_conversation_manager(conversation_id, current_user.id)
+        member = (
+            self.db.query(models.ConversationMember)
+            .filter(
+                models.ConversationMember.conversation_id == conversation_id,
+                models.ConversationMember.user_id == user_id,
+            )
+            .first()
+        )
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found in conversation")
+        if member.role == models.ConversationMemberRole.OWNER:
+            raise HTTPException(status_code=400, detail="Cannot remove the conversation owner")
+        self.db.delete(member)
+        self.db.commit()
+        self.db.refresh(conversation)
+        return conversation
+
+    def get_conversation_messages(
+        self,
+        *,
+        conversation_id: str,
+        current_user: models.User,
+        skip: int,
+        limit: int,
+    ) -> List[models.Message]:
+        self._ensure_conversation_membership(conversation_id, current_user.id)
+        return (
+            self.db.query(models.Message)
+            .filter(models.Message.conversation_id == conversation_id)
+            .order_by(models.Message.timestamp.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
     async def get_inbox(
         self, *, current_user: models.User, skip: int, limit: int

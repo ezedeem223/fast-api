@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+import logging
+
 from cachetools import TTLCache
 from sqlalchemy import asc, desc, func, or_, text
 from sqlalchemy.orm import Query, Session
@@ -13,8 +15,36 @@ from sqlalchemy import create_engine
 from app import models
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 spell = SpellChecker()
 search_cache = TTLCache(maxsize=100, ttl=60)
+
+
+def _resolve_bind(session: Session | None):
+    if session is None:
+        return None
+    if hasattr(session, "get_bind"):
+        try:
+            bind = session.get_bind()
+            if bind is not None:
+                return bind
+        except Exception:
+            pass
+    return getattr(session, "bind", None)
+
+
+def _is_sqlite(bind) -> bool:
+    dialect = getattr(bind, "dialect", None)
+    name = getattr(dialect, "name", "")
+    return bool(name) and str(name).lower().startswith("sqlite")
+
+
+def _uses_sqlite(session: Session | None) -> bool:
+    bind = _resolve_bind(session)
+    if bind is not None:
+        return _is_sqlite(bind)
+    db_url = (settings.test_database_url or settings.database_url or "").lower()
+    return db_url.startswith("sqlite")
 
 
 def update_search_vector():
@@ -36,11 +66,24 @@ def update_search_vector():
 
 def search_posts(query: str, db: Session) -> Query:
     """Return a base query for posts matching the search parameters."""
+    like_query = f"%{query}%"
+    base_query = db.query(models.Post)
+
+    if _uses_sqlite(db):
+        logger.debug("search_posts using SQLite fallback")
+        return base_query.filter(
+            or_(
+                models.Post.title.ilike(like_query),
+                models.Post.content.ilike(like_query),
+                models.Post.media_text.ilike(like_query),
+            )
+        )
+
     search_query = func.plainto_tsquery("english", query)
-    return db.query(models.Post).filter(
+    return base_query.filter(
         or_(
             models.Post.search_vector.op("@@")(search_query),
-            models.Post.media_text.ilike(f"%{query}%"),
+            models.Post.media_text.ilike(like_query),
         )
     )
 
@@ -67,6 +110,8 @@ def format_spell_suggestions(original_query: str, suggestions: List[str]) -> str
 def sort_search_results(query: Query, sort_option: str, *, search_text: str):
     """Sort a SQLAlchemy query by relevance, date, or popularity."""
     if sort_option == "RELEVANCE":
+        if _uses_sqlite(getattr(query, "session", None)):
+            return query.order_by(desc(models.Post.created_at))
         ts_query = func.plainto_tsquery("english", search_text)
         return query.order_by(
             desc(

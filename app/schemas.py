@@ -38,6 +38,9 @@ from app.modules.notifications.schemas import (
     NotificationDeliveryLogOut,
     NotificationWithLogs,
     NotificationOut,
+    NotificationSummary,
+    NotificationFeedResponse,
+    PushNotification,
 )
 from app.modules.posts import ReactionType
 from app.modules.posts.schemas import (
@@ -82,6 +85,9 @@ from app.modules.posts.schemas import (
 )
 from app.modules.messaging import MessageType
 from app.modules.messaging.schemas import (
+    ConversationCreate,
+    ConversationMembersUpdate,
+    ConversationOut,
     ConversationStatistics,
     ConversationStatisticsBase,
     ConversationStatisticsCreate,
@@ -474,6 +480,26 @@ class AmenhotepSessionSummary(BaseModel):
     average_satisfaction: float
 
 
+class TopPostStat(BaseModel):
+    id: int
+    title: Optional[str] = None
+    votes: int
+    comment_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TopUserStat(BaseModel):
+    id: int
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
+    followers: int
+    post_count: int
+    comment_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ================================================================
 # Social Media and Account Models
 # Schemas for social account integration and social posts.
@@ -679,6 +705,7 @@ class ArticleOut(Article):
 # ================================================================
 class ReelCreate(ReelBase):
     community_id: int
+    expires_in_hours: int = Field(default=24, ge=1, le=168)
 
 
 class Reel(ReelBase):
@@ -686,6 +713,9 @@ class Reel(ReelBase):
     created_at: datetime
     owner_id: int
     community_id: int
+    expires_at: datetime
+    is_active: bool
+    view_count: int
     owner: UserOut
 
     model_config = ConfigDict(from_attributes=True)

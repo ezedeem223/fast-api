@@ -807,6 +807,7 @@ class PostService:
         limit: int,
         skip: int,
         search: str,
+        translate: bool,
         translator_fn,
     ) -> list[schemas.PostOut]:
         posts = (
@@ -821,11 +822,7 @@ class PostService:
         )
 
         result = []
-        should_translate = (
-            os.getenv("ENABLE_TRANSLATION", "1") == "1"
-            and settings.environment != "test"
-            and os.getenv("APP_ENV") != "test"
-        )
+        should_translate = translate and os.getenv("ENABLE_TRANSLATION", "1") == "1"
         for post_obj, _ in posts:
             if should_translate:
                 language = (

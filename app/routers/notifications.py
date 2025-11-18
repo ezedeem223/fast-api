@@ -7,6 +7,7 @@ from .. import models, schemas, oauth2
 from app.modules.notifications.models import (
     NotificationCategory,
     NotificationPriority,
+    NotificationStatus,
 )
 from app.core.database import get_db
 from app.modules.notifications.service import (
@@ -31,6 +32,8 @@ async def get_notifications(
     include_archived: bool = False,
     category: Optional[NotificationCategory] = None,
     priority: Optional[NotificationPriority] = None,
+    status: Optional[NotificationStatus] = None,
+    since: Optional[datetime] = None,
 ):
     """
     الحصول على قائمة الإشعارات للمستخدم الحالي
@@ -44,8 +47,54 @@ async def get_notifications(
         include_archived=include_archived,
         category=category,
         priority=priority,
+        status=status,
+        since=since,
     )
     return await notification_service.execute_query(query, skip, limit)
+
+
+@router.get("/feed", response_model=schemas.NotificationFeedResponse)
+async def get_notification_feed(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    cursor: Optional[int] = Query(None, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    include_read: bool = False,
+    include_archived: bool = False,
+    category: Optional[NotificationCategory] = None,
+    priority: Optional[NotificationPriority] = None,
+    status: Optional[NotificationStatus] = None,
+    mark_seen: bool = True,
+    mark_read: bool = False,
+):
+    """
+    Provide a cursor-based feed for the in-app notifications center.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.get_notification_feed(
+        user_id=current_user.id,
+        cursor=cursor,
+        limit=limit,
+        include_read=include_read,
+        include_archived=include_archived,
+        category=category,
+        priority=priority,
+        status=status,
+        mark_seen=mark_seen,
+        mark_read=mark_read,
+    )
+
+
+@router.get("/summary", response_model=schemas.NotificationSummary)
+async def get_notification_summary(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    Return badge-friendly counts of unread and unseen notifications.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.get_unread_summary(current_user.id)
 
 
 @router.put("/{notification_id}/read")

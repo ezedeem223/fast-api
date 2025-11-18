@@ -239,9 +239,14 @@ class UserService:
             .limit(limit)
             .all()
         )
+        now = datetime.now(timezone.utc)
         reels = (
             self.db.query(models.Reel)
-            .filter(models.Reel.owner_id == current_user.id)
+            .filter(
+                models.Reel.owner_id == current_user.id,
+                models.Reel.is_active.is_(True),
+                models.Reel.expires_at > now,
+            )
             .options(joinedload(models.Reel.owner))
             .order_by(models.Reel.created_at.desc())
             .offset(skip)

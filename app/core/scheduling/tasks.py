@@ -23,6 +23,7 @@ from app.modules.utils.content import train_content_classifier
 from app.modules.utils.search import spell, update_search_vector
 from app.notifications import NotificationService
 from app.modules.search.service import update_search_suggestions
+from app.services.reels import ReelService
 
 
 logger = logging.getLogger(__name__)
@@ -158,5 +159,16 @@ def retry_failed_notifications() -> None:
         notification_service = NotificationService(db)
         for notification in notifications:
             notification_service.retry_failed_notification(notification.id)
+    finally:
+        db.close()
+
+
+@repeat_every(seconds=1800)
+def cleanup_expired_reels_task() -> None:
+    if settings.environment.lower() == "test":
+        return
+    db = SessionLocal()
+    try:
+        ReelService(db).cleanup_expired_reels()
     finally:
         db.close()

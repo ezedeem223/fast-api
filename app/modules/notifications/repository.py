@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, Query
 
 from app.modules.notifications import models as notification_models
@@ -43,6 +44,8 @@ class NotificationRepository:
         include_archived: bool,
         category: Optional[notification_models.NotificationCategory],
         priority: Optional[notification_models.NotificationPriority],
+        status: Optional[notification_models.NotificationStatus] = None,
+        since: Optional[datetime] = None,
     ) -> Query:
         query = (
             self.db.query(notification_models.Notification)
@@ -57,6 +60,10 @@ class NotificationRepository:
             query = query.filter(notification_models.Notification.category == category)
         if priority:
             query = query.filter(notification_models.Notification.priority == priority)
+        if status:
+            query = query.filter(notification_models.Notification.status == status)
+        if since:
+            query = query.filter(notification_models.Notification.created_at >= since)
         return query.order_by(notification_models.Notification.created_at.desc())
 
     def get_notification_for_user(self, notification_id: int, user_id: int):
@@ -133,6 +140,52 @@ class NotificationRepository:
             )
             .count()
         )
+
+    def unseen_count(self, user_id: int) -> int:
+        return (
+            self.db.query(notification_models.Notification)
+            .filter(
+                notification_models.Notification.user_id == user_id,
+                notification_models.Notification.seen_at.is_(None),
+                notification_models.Notification.is_deleted.is_(False),
+            )
+            .count()
+        )
+
+    def get_unread_summary(self, user_id: int) -> Dict[str, Any]:
+        unread_count, last_unread_at, urgent_count = (
+            self.db.query(
+                func.count(notification_models.Notification.id),
+                func.max(notification_models.Notification.created_at),
+                func.sum(
+                    case(
+                        (
+                            notification_models.Notification.priority.in_(
+                                [
+                                    notification_models.NotificationPriority.HIGH,
+                                    notification_models.NotificationPriority.URGENT,
+                                ]
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+            )
+            .filter(
+                notification_models.Notification.user_id == user_id,
+                notification_models.Notification.is_read.is_(False),
+                notification_models.Notification.is_deleted.is_(False),
+            )
+            .one()
+        )
+        unseen = self.unseen_count(user_id)
+        return {
+            "unread_count": unread_count or 0,
+            "unseen_count": unseen,
+            "unread_urgent_count": urgent_count or 0,
+            "last_unread_at": last_unread_at,
+        }
 
     def cleanup_archived(self, cutoff) -> int:
         deleted = (

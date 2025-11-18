@@ -1,6 +1,11 @@
+import os
 import json
+import json
+import logging
 from datetime import datetime
 from typing import List, Optional
+
+from redis.exceptions import RedisError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_
@@ -21,6 +26,7 @@ from app.modules.search.service import (
     update_search_statistics,
     update_search_suggestions,
 )
+from app.modules.search.typesense_client import get_typesense_client
 from app.modules.users.schemas import SortOption
 from ..analytics import (
     record_search_query,
@@ -30,7 +36,19 @@ from ..analytics import (
     generate_search_trends_chart,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/search", tags=["Search"])
+
+
+def _cache_client():
+    """
+    Resolve the Redis client for caching, skipping it entirely in tests.
+    """
+    app_env = os.getenv("APP_ENV", settings.environment).lower()
+    if app_env == "test":
+        return None
+    client = getattr(settings, "redis_client", None)
+    return client
 
 
 @router.post("/", response_model=SearchResponse)
@@ -52,11 +70,16 @@ async def search(
     Returns a SearchResponse with results, spell suggestion, and search suggestions.
     """
     cache_key = f"search:{search_params.query}:{search_params.sort_by}"
-    cache_client = settings.redis_client
+    cache_client = _cache_client()
     if cache_client:
-        cached_payload = cache_client.get(cache_key)
-        if cached_payload:
-            return json.loads(cached_payload)
+        try:
+            cached_payload = cache_client.get(cache_key)
+        except Exception as exc:  # pragma: no cover - defensive cache fallback
+            logger.warning("Redis unavailable, skipping cache: %s", exc)
+            cache_client = None
+        else:
+            if cached_payload:
+                return json.loads(cached_payload)
 
     # Record the search query
     record_search_query(db, search_params.query, current_user.id)
@@ -69,6 +92,34 @@ async def search(
         query, search_params.sort_by, search_text=search_params.query
     )
     results = sorted_query.all()
+    typesense_client = get_typesense_client()
+    if typesense_client:
+        try:
+            ts_hits = typesense_client.search_posts(
+                search_params.query, limit=max(len(results), 10)
+            )
+            post_ids: list[int] = []
+            for hit in ts_hits:
+                document = (hit or {}).get("document") or {}
+                post_id = document.get("post_id") or document.get("id")
+                if post_id is None:
+                    continue
+                try:
+                    post_ids.append(int(post_id))
+                except (TypeError, ValueError):
+                    continue
+            if post_ids:
+                posts_by_id = {
+                    post.id: post
+                    for post in db.query(models.Post)
+                    .filter(models.Post.id.in_(post_ids))
+                    .all()
+                }
+                ordered = [posts_by_id[pid] for pid in post_ids if pid in posts_by_id]
+                if ordered:
+                    results = ordered
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Typesense search failed, using default search: %s", exc)
 
     # Get search suggestions from popular and user history
     popular_searches = get_popular_searches(db, limit=3)
@@ -84,7 +135,10 @@ async def search(
     }
 
     if results and cache_client:
-        cache_client.setex(cache_key, 3600, json.dumps(search_response))
+        try:
+            cache_client.setex(cache_key, 3600, json.dumps(search_response))
+        except RedisError:  # pragma: no cover - cache errors are ignored
+            pass
 
     return search_response
 
@@ -175,11 +229,15 @@ async def autocomplete(
     - Orders by frequency and caches results for 5 minutes.
     """
     cache_key = f"autocomplete:{query}"
-    cache_client = settings.redis_client
+    cache_client = _cache_client()
     if cache_client:
-        cached_payload = cache_client.get(cache_key)
-        if cached_payload:
-            return json.loads(cached_payload)
+        try:
+            cached_payload = cache_client.get(cache_key)
+        except Exception:
+            cache_client = None
+        else:
+            if cached_payload:
+                return json.loads(cached_payload)
 
     suggestions = (
         db.query(models.SearchSuggestion)
@@ -191,7 +249,10 @@ async def autocomplete(
 
     result = [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]
     if cache_client:
-        cache_client.setex(cache_key, 300, json.dumps([s.model_dump() for s in result]))
+        try:
+            cache_client.setex(cache_key, 300, json.dumps([s.model_dump() for s in result]))
+        except Exception:
+            pass
 
     return result
 

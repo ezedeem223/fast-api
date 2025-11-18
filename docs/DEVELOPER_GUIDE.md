@@ -18,6 +18,9 @@
 - Runtime variables of note:
   - `APP_ENV` (`production`/`development`/`test`) controls heavy integrations (scheduler, Firebase, etc.).
   - `CORS_ORIGINS` (comma-separated) overrides the default origins served by `app/core/app_factory.py`.
+  - `ALLOWED_HOSTS` controls the host allow-list enforced by `TrustedHostMiddleware`. Use `*` to allow everything (default in dev/test).
+  - `FORCE_HTTPS` enables the `HTTPSRedirectMiddleware` and should generally be `true` in production behind a TLS terminator.
+  - `STATIC_ROOT` / `UPLOADS_ROOT` (and their `*_CACHE_CONTROL` counterparts) choose where `/static` and `/uploads` mount points read files from.
   - `REDIS_URL` is optional; when not supplied the Redis features (search cache/autocomplete) degrade gracefully.
 
 ## Testing & Quality Gates
@@ -26,6 +29,7 @@
   - This script fails if the average startup time regresses—use it locally or wire into CI.
 - New utility tests live under `tests/` (e.g., `tests/test_utils_search.py`, `tests/test_analytics_lazy.py`).
 - CI: `.github/workflows/ci.yml` executes both `pytest` and the startup benchmark on pushes/PRs (with `APP_ENV=test` to bypass heavy integrations).
+- Pre-commit: install hooks with `pip install pre-commit && pre-commit install`. Ruff and Black run automatically before each commit; you can trigger them manually via `pre-commit run --all-files`.
 
 ## Notes
 - Background tasks are registered via `app/core/app_factory.py`. Keep `app/main.py` minimal.

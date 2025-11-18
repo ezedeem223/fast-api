@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import (
     Column,
@@ -66,6 +67,61 @@ class ScreenShareStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class ConversationType(str, enum.Enum):
+    DIRECT = "direct"
+    GROUP = "group"
+
+
+class ConversationMemberRole(str, enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+class Conversation(Base):
+    """Conversation container representing direct or group chats."""
+
+    __tablename__ = "conversations"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    title = Column(String, nullable=True)
+    type = Column(SAEnum(ConversationType, name="conversation_type_enum"), default=ConversationType.DIRECT)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+    updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    messages = relationship("Message", back_populates="conversation")
+    members = relationship(
+        "ConversationMember",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConversationMember(Base):
+    """Membership of users inside conversations."""
+
+    __tablename__ = "conversation_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    role = Column(
+        SAEnum(ConversationMemberRole, name="conversation_member_role"),
+        default=ConversationMemberRole.MEMBER,
+    )
+    joined_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+    is_muted = Column(Boolean, default=False)
+    notifications_enabled = Column(Boolean, default=True)
+
+    conversation = relationship("Conversation", back_populates="members")
+    user = relationship("User")
+
+    __table_args__ = (Index("ix_conversation_members_unique", "conversation_id", "user_id", unique=True),)
+
+
 class Message(Base):
     """Message exchanged between users."""
 
@@ -73,7 +129,7 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     encrypted_content = Column(LargeBinary, nullable=True, default=b"")
     content = Column(Text, nullable=True)
     replied_to_id = Column(
@@ -114,7 +170,12 @@ class Message(Base):
         default=MessageType.TEXT,
     )
     file_url = Column(String, nullable=True)
-    conversation_id = Column(String, index=True, default=_conversation_id_default)
+    conversation_id = Column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        index=True,
+        default=_conversation_id_default,
+    )
     read_at = Column(TIMESTAMP(timezone=True), nullable=True)
     timestamp = Column(
         TIMESTAMP(timezone=True),
@@ -139,6 +200,7 @@ class Message(Base):
     attachments = relationship(
         "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
     )
+    conversation = relationship("Conversation", back_populates="messages")
 
     __table_args__ = (
         Index(

@@ -1,7 +1,9 @@
 import pytest
 from fastapi import BackgroundTasks
+from datetime import datetime, timezone
 from app import models
 from app.modules.community import CommunityMember
+from app.modules.notifications import models as notification_models
 from app.notifications import (
     manager,
     send_email_notification,
@@ -272,6 +274,78 @@ def test_notification_on_community_join(
 
     mock_queue_email.assert_not_called()
     mock_schedule_email.assert_not_called()
+
+
+def _create_notification(
+    session,
+    user_id: int,
+    content: str = "Test notification",
+    priority: notification_models.NotificationPriority = notification_models.NotificationPriority.MEDIUM,
+    is_read: bool = False,
+    seen: bool = False,
+):
+    notification = notification_models.Notification(
+        user_id=user_id,
+        content=content,
+        notification_type="system_update",
+        priority=priority,
+        category=notification_models.NotificationCategory.SYSTEM,
+        is_read=is_read,
+        is_archived=False,
+    )
+    if is_read:
+        notification.read_at = datetime.now(timezone.utc)
+    if seen:
+        notification.seen_at = datetime.now(timezone.utc)
+    session.add(notification)
+    session.commit()
+    session.refresh(notification)
+    return notification
+
+
+def test_notification_summary_endpoint(authorized_client, session, test_user):
+    _create_notification(session, test_user["id"], content="welcome")
+    _create_notification(
+        session,
+        test_user["id"],
+        content="urgent",
+        priority=notification_models.NotificationPriority.URGENT,
+    )
+    _create_notification(
+        session,
+        test_user["id"],
+        content="old",
+        is_read=True,
+        seen=True,
+    )
+
+    response = authorized_client.get("/notifications/summary")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["unread_count"] == 2
+    assert payload["unseen_count"] == 2
+    assert payload["unread_urgent_count"] == 1
+    assert payload["last_unread_at"] is not None
+    assert payload["generated_at"] is not None
+
+
+def test_notification_feed_marks_seen(authorized_client, session, test_user):
+    first = _create_notification(session, test_user["id"], content="one")
+    second = _create_notification(session, test_user["id"], content="two")
+    _create_notification(session, test_user["id"], content="three")
+    first_id, second_id = first.id, second.id
+
+    response = authorized_client.get("/notifications/feed", params={"limit": 2})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert len(payload["notifications"]) == 2
+    assert payload["has_more"] is True
+    assert payload["unseen_count"] == 1  # only the oldest notification remains unseen
+    assert payload["unread_count"] == 3  # mark_seen does not mark as read by default
+    assert payload["next_cursor"] is not None
+
 
 
 # Add more notification tests as needed, for example:

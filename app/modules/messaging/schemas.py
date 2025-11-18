@@ -8,7 +8,12 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.messaging import MessageType, ScreenShareStatus
+from app.modules.messaging import (
+    MessageType,
+    ScreenShareStatus,
+    ConversationType,
+    ConversationMemberRole,
+)
 
 
 class MessageAttachmentBase(BaseModel):
@@ -46,7 +51,8 @@ class MessageBase(BaseModel):
 
 
 class MessageCreate(MessageBase):
-    receiver_id: int = Field(alias="recipient_id")
+    receiver_id: Optional[int] = Field(default=None, alias="recipient_id")
+    conversation_id: Optional[str] = None
     attachments: List[MessageAttachmentCreate] = Field(default_factory=list)
     sticker_id: Optional[int] = None
 
@@ -63,7 +69,7 @@ class LinkPreview(BaseModel):
 class Message(MessageBase):
     id: int
     sender_id: int
-    receiver_id: int
+    receiver_id: Optional[int] = None
     conversation_id: str
     created_at: datetime
     timestamp: datetime
@@ -107,6 +113,39 @@ class MessageOut(BaseModel):
     count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationMemberOut(BaseModel):
+    user_id: int
+    role: ConversationMemberRole
+    joined_at: datetime
+    is_muted: bool
+    notifications_enabled: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationBase(BaseModel):
+    title: Optional[str] = None
+
+
+class ConversationCreate(ConversationBase):
+    member_ids: List[int] = Field(default_factory=list)
+
+
+class ConversationOut(ConversationBase):
+    id: str
+    type: ConversationType
+    created_by: Optional[int]
+    created_at: datetime
+    last_message_at: Optional[datetime]
+    members: List[ConversationMemberOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationMembersUpdate(BaseModel):
+    member_ids: List[int]
 
 
 class ConversationStatisticsBase(BaseModel):

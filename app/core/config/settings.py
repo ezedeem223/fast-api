@@ -26,6 +26,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # ط¥ظ†ط´ط§ط، طµظ†ظپ ظ…ط®طµطµ ظ„طھط¹ط·ظٹظ„ ط§ظ„طھط­ظ‚ظ‚ ظ…ظ† ط§ظ„ط­ظ‚ظˆظ„ ط§ظ„ط¥ط¶ط§ظپظٹط© ظپظٹ ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ط¨ط±ظٹط¯ ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ
 class CustomConnectionConfig(ConnectionConfig):
     model_config = ConfigDict(extra="ignore")
@@ -55,8 +62,26 @@ class Settings(BaseSettings):
     database_username: Optional[str] = os.getenv("DATABASE_USERNAME")
     database_ssl_mode: str = os.getenv("DATABASE_SSL_MODE", "require")
     environment: str = os.getenv('APP_ENV', 'production')
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "https://yourapp.com")
     cors_origins: list[str] = []
+    allowed_hosts: list[str] = []
+    force_https: bool = _env_bool(
+        "FORCE_HTTPS", default=os.getenv("APP_ENV", "production").lower() == "production"
+    )
+    static_root: str = os.getenv("STATIC_ROOT", str(BASE_DIR / "static"))
+    uploads_root: str = os.getenv("UPLOADS_ROOT", str(BASE_DIR / "uploads"))
+    static_cache_control: str = os.getenv(
+        "STATIC_CACHE_CONTROL", "public, max-age=3600"
+    )
+    uploads_cache_control: str = os.getenv(
+        "UPLOADS_CACHE_CONTROL", "public, max-age=60"
+    )
     MAX_OWNED_COMMUNITIES: int = int(os.getenv("MAX_OWNED_COMMUNITIES", 5))
+    typesense_host: Optional[str] = os.getenv("TYPESENSE_HOST")
+    typesense_port: str = os.getenv("TYPESENSE_PORT", "8108")
+    typesense_protocol: str = os.getenv("TYPESENSE_PROTOCOL", "http")
+    typesense_api_key: Optional[str] = os.getenv("TYPESENSE_API_KEY")
+    typesense_collection: str = os.getenv("TYPESENSE_COLLECTION", "posts")
 
     # ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ط£ظ…ط§ظ†
     secret_key: str = os.getenv("SECRET_KEY")
@@ -79,13 +104,13 @@ class Settings(BaseSettings):
     mail_server: str = os.getenv("MAIL_SERVER")
 
     # ط¥ط¹ط¯ط§ط¯ط§طھ ظˆط³ط§ط¦ظ„ ط§ظ„طھظˆط§طµظ„ ط§ظ„ط§ط¬طھظ…ط§ط¹ظٹ
-    facebook_access_token: str = os.getenv("FACEBOOK_ACCESS_TOKEN")
-    facebook_app_id: str = os.getenv("FACEBOOK_APP_ID")
-    facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET")
-    twitter_api_key: str = os.getenv("TWITTER_API_KEY")
-    twitter_api_secret: str = os.getenv("TWITTER_API_SECRET")
-    twitter_access_token: str = os.getenv("TWITTER_ACCESS_TOKEN")
-    twitter_access_token_secret: str = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    facebook_access_token: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "facebook-access-token")
+    facebook_app_id: str = os.getenv("FACEBOOK_APP_ID", "facebook-app-id")
+    facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET", "facebook-app-secret")
+    twitter_api_key: str = os.getenv("TWITTER_API_KEY", "twitter-api-key")
+    twitter_api_secret: str = os.getenv("TWITTER_API_SECRET", "twitter-api-secret")
+    twitter_access_token: str = os.getenv("TWITTER_ACCESS_TOKEN", "twitter-access-token")
+    twitter_access_token_secret: str = os.getenv("TWITTER_ACCESS_TOKEN_SECRET", "twitter-access-token-secret")
 
     # ط§ظ„ظ…طھط؛ظٹط±ط§طھ ط§ظ„ط¥ط¶ط§ظپظٹط©
     huggingface_api_token: str = os.getenv("HUGGINGFACE_API_TOKEN")
@@ -162,6 +187,15 @@ class Settings(BaseSettings):
                 "https://www.example.com",
             ]
         object.__setattr__(self, "cors_origins", origins)
+
+        hosts_env = os.getenv("ALLOWED_HOSTS")
+        if hosts_env:
+            hosts = [host.strip() for host in hosts_env.split(",") if host.strip()]
+        elif self.allowed_hosts:
+            hosts = self.allowed_hosts
+        else:
+            hosts = ["*"]
+        object.__setattr__(self, "allowed_hosts", hosts)
 
     def get_database_url(self, *, use_test: bool = False) -> str:
         """
@@ -261,6 +295,16 @@ class Settings(BaseSettings):
             "USE_CREDENTIALS": True,
         }
         return CustomConnectionConfig(**config_data)
+
+    @property
+    def typesense_enabled(self) -> bool:
+        return all(
+            [
+                self.typesense_host,
+                self.typesense_api_key,
+                self.typesense_collection,
+            ]
+        )
 
 
 

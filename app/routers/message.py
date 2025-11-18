@@ -321,6 +321,120 @@ async def get_message(
     )
 
 
+@router.post("/conversations", response_model=schemas.ConversationOut, status_code=status.HTTP_201_CREATED)
+def create_conversation(
+    conversation: schemas.ConversationCreate,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    Create a group conversation with the specified members.
+    """
+    return service.create_group_conversation(
+        payload=conversation, current_user=current_user
+    )
+
+
+@router.get("/conversations", response_model=List[schemas.ConversationOut])
+def list_conversations(
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    List conversations the current user belongs to.
+    """
+    return service.list_user_conversations(current_user=current_user)
+
+
+@router.post(
+    "/conversations/{conversation_id}/members",
+    response_model=schemas.ConversationOut,
+)
+def add_conversation_members(
+    conversation_id: str,
+    members_update: schemas.ConversationMembersUpdate,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    Add members to an existing conversation.
+    """
+    return service.add_members_to_conversation(
+        conversation_id=conversation_id,
+        member_ids=members_update.member_ids,
+        current_user=current_user,
+    )
+
+
+@router.delete(
+    "/conversations/{conversation_id}/members/{user_id}",
+    response_model=schemas.ConversationOut,
+)
+def remove_conversation_member(
+    conversation_id: str,
+    user_id: int,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    Remove a member from the conversation.
+    """
+    return service.remove_member_from_conversation(
+        conversation_id=conversation_id,
+        user_id=user_id,
+        current_user=current_user,
+    )
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=schemas.Message,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_group_message(
+    conversation_id: str,
+    message: schemas.MessageCreate,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    Send a new message to a conversation.
+    """
+    payload_data = message.model_dump()
+    payload_data["conversation_id"] = conversation_id
+    payload_data.pop("receiver_id", None)
+    group_payload = schemas.MessageCreate(**payload_data)
+    return await service.send_group_message(
+        conversation_id=conversation_id,
+        payload=group_payload,
+        current_user=current_user,
+        background_tasks=background_tasks,
+    )
+
+
+@router.get(
+    "/conversations/{conversation_id}/messages",
+    response_model=List[schemas.Message],
+)
+async def get_conversation_messages(
+    conversation_id: str,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    service: MessageService = Depends(get_message_service),
+):
+    """
+    Retrieve messages for a given conversation.
+    """
+    return service.get_conversation_messages(
+        conversation_id=conversation_id,
+        current_user=current_user,
+        skip=skip,
+        limit=limit,
+    )
+
+
 @router.put("/user/read-status", response_model=schemas.UserOut)
 async def update_read_status_visibility(
     user_update: schemas.UserUpdate,

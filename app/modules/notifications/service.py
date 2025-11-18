@@ -451,6 +451,8 @@ class NotificationService:
         include_archived: bool = False,
         category: Optional[notification_models.NotificationCategory] = None,
         priority: Optional[notification_models.NotificationPriority] = None,
+        status: Optional[notification_models.NotificationStatus] = None,
+        since: Optional[datetime] = None,
     ):
         """Compose a base query for listing notifications."""
         return self.repository.build_notifications_query(
@@ -459,11 +461,65 @@ class NotificationService:
             include_archived=include_archived,
             category=category,
             priority=priority,
+            status=status,
+            since=since,
         )
 
     async def execute_query(self, query, skip: int, limit: int):
         """Materialise a notifications query with pagination."""
         return query.offset(skip).limit(limit).all()
+
+    async def get_notification_feed(
+        self,
+        *,
+        user_id: int,
+        cursor: Optional[int] = None,
+        limit: int = 20,
+        include_read: bool = False,
+        include_archived: bool = False,
+        category: Optional[notification_models.NotificationCategory] = None,
+        priority: Optional[notification_models.NotificationPriority] = None,
+        status: Optional[notification_models.NotificationStatus] = None,
+        mark_seen: bool = True,
+        mark_read: bool = False,
+    ) -> Dict[str, Any]:
+        """Return a cursor-paginated notification feed."""
+        base_query = self.build_notifications_query(
+            user_id=user_id,
+            include_read=include_read,
+            include_archived=include_archived,
+            category=category,
+            priority=priority,
+            status=status,
+        )
+        if cursor:
+            base_query = base_query.filter(notification_models.Notification.id < cursor)
+        records = base_query.limit(limit + 1).all()
+        has_more = len(records) > limit
+        notifications = records[:limit]
+        next_cursor = notifications[-1].id if has_more else None
+        seen_timestamp = (
+            self._mark_notifications_seen(notifications, mark_read) if mark_seen else None
+        )
+        unread_count = self.repository.unread_count(user_id)
+        unseen_count = self.repository.unseen_count(user_id)
+        last_seen_at = (
+            max((n.seen_at for n in notifications if n.seen_at), default=None)
+            if notifications
+            else None
+        )
+        if last_seen_at and last_seen_at.tzinfo is None:
+            last_seen_at = last_seen_at.replace(tzinfo=timezone.utc)
+        if seen_timestamp and (not last_seen_at or seen_timestamp > last_seen_at):
+            last_seen_at = seen_timestamp
+        return {
+            "notifications": notifications,
+            "unread_count": unread_count,
+            "unseen_count": unseen_count,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "last_seen_at": last_seen_at,
+        }
 
     async def mark_as_read(self, notification_id: int, user_id: int):
         """Mark a single notification as read."""
@@ -511,6 +567,44 @@ class NotificationService:
     async def get_unread_count(self, user_id: int) -> int:
         """Return the number of unread notifications for a user."""
         return self.repository.unread_count(user_id)
+
+    async def get_unread_summary(self, user_id: int) -> Dict[str, Any]:
+        """Return counts that power badge indicators."""
+        summary = self.repository.get_unread_summary(user_id)
+        summary["generated_at"] = datetime.now(timezone.utc)
+        return summary
+
+    def _mark_notifications_seen(
+        self,
+        notifications: List[notification_models.Notification],
+        mark_read: bool,
+    ) -> Optional[datetime]:
+        """Set seen/read timestamps the first time a notification is fetched."""
+        if not notifications:
+            return None
+        now = datetime.now(timezone.utc)
+        should_commit = False
+        for notification in notifications:
+            updated = False
+            if notification.seen_at is None:
+                notification.seen_at = now
+                updated = True
+            if mark_read and not notification.is_read:
+                notification.is_read = True
+                notification.read_at = now
+                updated = True
+            if notification.status in (
+                notification_models.NotificationStatus.PENDING,
+                notification_models.NotificationStatus.RETRYING,
+            ):
+                notification.status = notification_models.NotificationStatus.DELIVERED
+                updated = True
+            if updated:
+                should_commit = True
+        if should_commit:
+            self.db.commit()
+            return now
+        return None
 
     async def bulk_create_notifications(
         self,

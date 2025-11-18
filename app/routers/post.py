@@ -599,6 +599,7 @@ async def get_posts(
     limit: int = 10,
     skip: int = 0,
     search: Optional[str] = "",
+    translate: bool = Query(False, description="Set to true to translate post title/content to the user's preferred language"),
 ):
     """
     Retrieve posts along with aggregated vote counts.
@@ -610,6 +611,7 @@ async def get_posts(
         skip=skip,
         search=search or "",
         translator_fn=get_translated_content_async,
+        translate=translate,
     )
 
 

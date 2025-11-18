@@ -23,9 +23,10 @@ from pydantic import EmailStr
 from .. import schemas, models, oauth2
 from app.core.database import get_db
 from app.core.config import settings
-from ..notifications import send_login_notification, send_email_notification
+from ..notifications import send_login_notification, queue_email_notification
 from app.modules.utils.events import log_user_event
 from app.modules.utils.security import hash as hash_password, verify
+from app.modules.users import UserService
 
 # =====================================================
 # =============== Global Constants ====================
@@ -35,10 +36,45 @@ MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 TOKEN_EXPIRY = timedelta(hours=1)
+DEFAULT_FRONTEND_URL = getattr(settings, "frontend_base_url", "https://yourapp.com").rstrip("/")
+
+
+def _build_frontend_link(path: str, token: str) -> str:
+    base = DEFAULT_FRONTEND_URL or "https://yourapp.com"
+    return f"{base.rstrip('/')}/{path.lstrip('/')}?token={token}"
+
+
+def _schedule_verification_email(background_tasks: BackgroundTasks, email: str) -> None:
+    token = create_verification_token(email)
+    verification_link = _build_frontend_link("verify-email", token)
+    message = MessageSchema(
+        subject="تأكيد البريد الإلكتروني",
+        recipients=[email],
+        body=f"انقر على الرابط التالي لتأكيد بريدك الإلكتروني: {verification_link}",
+        subtype="html",
+    )
+    fm = FastMail(settings.mail_config)
+    background_tasks.add_task(fm.send_message, message)
 
 # =====================================================
 # ==================== Endpoints ======================
 # =====================================================
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
+async def register_user(
+    payload: schemas.UserCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Register a new user using email/password and send a verification email.
+    """
+    service = UserService(db)
+    new_user = service.create_user(payload)
+    _schedule_verification_email(background_tasks, new_user.email)
+    log_user_event(db, new_user.id, "user_registered")
+    return schemas.UserOut.model_validate(new_user)
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -412,18 +448,7 @@ async def resend_verification_email(
     """
     user = db.query(models.User).filter(models.User.email == email.email).first()
     if user and not user.is_verified:
-        token = create_verification_token(email.email)
-        verification_link = f"https://yourapp.com/verify-email?token={token}"
-
-        message = MessageSchema(
-            subject="تأكيد البريد الإلكتروني",
-            recipients=[email.email],
-            body=f"انقر على الرابط التالي لتأكيد بريدك الإلكتروني: {verification_link}",
-            subtype="html",
-        )
-
-        fm = FastMail(settings.mail_config)
-        background_tasks.add_task(fm.send_message, message)
+        _schedule_verification_email(background_tasks, email.email)
         log_user_event(db, user.id, "verification_email_resent")
 
     return {"message": "إذا كان الحساب موجوداً وغير مؤكد، سيتم إرسال رابط التحقق"}
@@ -543,6 +568,28 @@ async def check_password_strength(password: str):
         "strength_text": strength_text[strength],
         "suggestions": suggestions,
     }
+
+
+@router.post("/change-password")
+def change_password_auth(
+    password_change: schemas.PasswordChange,
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Change the authenticated user's password after verifying the current password.
+    """
+    service = UserService(db)
+    response = service.change_password(current_user, password_change)
+    queue_email_notification(
+        background_tasks,
+        to=current_user.email,
+        subject="Password changed",
+        body="تم تغيير كلمة مرور حسابك. إذا لم تقم بهذا الإجراء، يرجى التواصل مع الدعم فوراً.",
+    )
+    log_user_event(db, current_user.id, "password_changed")
+    return response
 
 
 @router.post("/security-questions")

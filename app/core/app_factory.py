@@ -11,9 +11,12 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import models, oauth2
 from app.api.router import api_router
@@ -37,7 +40,30 @@ ERROR_MESSAGE_OVERRIDES = {
 }
 
 
+class CachedStaticFiles(StaticFiles):
+    def __init__(self, *args, cache_control: str | None = None, **kwargs):
+        self._cache_control = cache_control
+        super().__init__(*args, **kwargs)
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if (
+            self._cache_control
+            and response.status_code == HTTPStatus.OK
+            and "cache-control" not in response.headers
+        ):
+            response.headers["Cache-Control"] = self._cache_control
+        return response
+
+
 def _configure_app(app: FastAPI) -> None:
+    if settings.force_https:
+        app.add_middleware(HTTPSRedirectMiddleware)
+
+    allowed_hosts = getattr(settings, "allowed_hosts", ["*"])
+    if allowed_hosts and not (len(allowed_hosts) == 1 and allowed_hosts[0] == "*"):
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
     origins = settings.cors_origins or ["*"]
     app.add_middleware(
         CORSMiddleware,
@@ -51,6 +77,7 @@ def _configure_app(app: FastAPI) -> None:
     app.middleware("http")(language_middleware)
     app.middleware("http")(add_language_header)
     app.middleware("http")(ip_ban_middleware)
+    _mount_static_files(app)
     register_startup_tasks(app)
 
 
@@ -77,6 +104,38 @@ def _register_routes(app: FastAPI) -> None:
             "message": "You have access to this protected resource",
             "user_id": current_user.id,
         }
+
+
+def _mount_static_files(app: FastAPI) -> None:
+    try:
+        static_dir = Path(settings.static_root)
+        uploads_dir = Path(settings.uploads_root)
+    except Exception:
+        # Fallback to working directory if settings paths are invalid
+        static_dir = Path("static")
+        uploads_dir = Path("uploads")
+
+    static_dir.mkdir(parents=True, exist_ok=True)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    app.mount(
+        "/static",
+        CachedStaticFiles(
+            directory=static_dir,
+            check_dir=False,
+            cache_control=settings.static_cache_control,
+        ),
+        name="static",
+    )
+    app.mount(
+        "/uploads",
+        CachedStaticFiles(
+            directory=uploads_dir,
+            check_dir=False,
+            cache_control=settings.uploads_cache_control,
+        ),
+        name="uploads",
+    )
 
     @app.get("/languages")
     def get_available_languages():

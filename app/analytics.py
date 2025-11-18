@@ -14,11 +14,28 @@ import io
 import base64
 from .models import SearchStatistics
 from app.modules.users.models import User, UserEvent
+from app.modules.search import SearchStatOut
+from app.modules.search.cache import (
+    get_cached_json,
+    invalidate_stats_cache,
+    popular_cache_key,
+    recent_cache_key,
+    set_cached_json,
+    user_cache_key,
+)
 from sqlalchemy.orm import Session
 
 _PIPELINE_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
 _sentiment_pipeline = None
 model = None
+
+_STAT_QUERY_ATTR = "query" if hasattr(SearchStatistics, "query") else "term"
+_STAT_COUNT_ATTR = "count" if hasattr(SearchStatistics, "count") else "searches"
+_STAT_TS_ATTR = (
+    "last_searched"
+    if hasattr(SearchStatistics, "last_searched")
+    else "updated_at"
+)
 
 
 def _get_sentiment_pipeline():
@@ -128,59 +145,110 @@ def get_ban_statistics(db: Session):
 # ------------------------- Search Statistics Functions -------------------------
 
 
+def _schemas_from_rows(rows):
+    stats = []
+    for row in rows:
+        stats.append(
+            SearchStatOut(
+                query=getattr(row, _STAT_QUERY_ATTR),
+                count=getattr(row, _STAT_COUNT_ATTR),
+                last_searched=getattr(row, _STAT_TS_ATTR),
+            )
+        )
+    return stats
+
+
+def _cache_stats(key: str, stats):
+    set_cached_json(key, [stat.model_dump() for stat in stats], ttl_seconds=300)
+
+
+def _cached_stats(key: str):
+    payload = get_cached_json(key)
+    if payload is None:
+        return None
+    return [SearchStatOut.model_validate(item) for item in payload]
+
+
 def record_search_query(db: Session, query: str, user_id: int):
     """
     Record a search query. If the query exists for the user, increment the count;
     otherwise, create a new record.
     """
+    query_column = getattr(SearchStatistics, _STAT_QUERY_ATTR)
+    count_column = getattr(SearchStatistics, _STAT_COUNT_ATTR)
+    timestamp_column = getattr(SearchStatistics, _STAT_TS_ATTR)
     search_stat = (
         db.query(SearchStatistics)
-        .filter(SearchStatistics.query == query, SearchStatistics.user_id == user_id)
+        .filter(query_column == query, SearchStatistics.user_id == user_id)
         .first()
     )
     if search_stat:
-        search_stat.count += 1
+        setattr(search_stat, _STAT_COUNT_ATTR, getattr(search_stat, _STAT_COUNT_ATTR) + 1)
+        setattr(search_stat, _STAT_TS_ATTR, datetime.now(timezone.utc))
     else:
-        search_stat = SearchStatistics(query=query, user_id=user_id)
+        search_stat = SearchStatistics(user_id=user_id, **{_STAT_QUERY_ATTR: query})
+        setattr(search_stat, _STAT_COUNT_ATTR, 1)
         db.add(search_stat)
     db.commit()
+    invalidate_stats_cache(for_user_id=user_id)
 
 
 def get_popular_searches(db: Session, limit: int = 10):
     """
     Retrieve the most popular searches based on the count.
     """
-    return (
+    cache_key = popular_cache_key(limit)
+    cached = _cached_stats(cache_key)
+    if cached is not None:
+        return cached
+    rows = (
         db.query(SearchStatistics)
-        .order_by(SearchStatistics.count.desc())
+        .order_by(getattr(SearchStatistics, _STAT_COUNT_ATTR).desc())
         .limit(limit)
         .all()
     )
+    stats = _schemas_from_rows(rows)
+    _cache_stats(cache_key, stats)
+    return stats
 
 
 def get_recent_searches(db: Session, limit: int = 10):
     """
     Retrieve the most recent search queries.
     """
-    return (
+    cache_key = recent_cache_key(limit)
+    cached = _cached_stats(cache_key)
+    if cached is not None:
+        return cached
+    rows = (
         db.query(SearchStatistics)
-        .order_by(SearchStatistics.last_searched.desc())
+        .order_by(getattr(SearchStatistics, _STAT_TS_ATTR).desc())
         .limit(limit)
         .all()
     )
+    stats = _schemas_from_rows(rows)
+    _cache_stats(cache_key, stats)
+    return stats
 
 
 def get_user_searches(db: Session, user_id: int, limit: int = 10):
     """
     Retrieve recent search queries for a specific user.
     """
-    return (
+    cache_key = user_cache_key(user_id, limit)
+    cached = _cached_stats(cache_key)
+    if cached is not None:
+        return cached
+    rows = (
         db.query(SearchStatistics)
         .filter(SearchStatistics.user_id == user_id)
-        .order_by(SearchStatistics.last_searched.desc())
+        .order_by(getattr(SearchStatistics, _STAT_TS_ATTR).desc())
         .limit(limit)
         .all()
     )
+    stats = _schemas_from_rows(rows)
+    _cache_stats(cache_key, stats)
+    return stats
 
 
 def clean_old_statistics(db: Session, days: int = 30):
@@ -188,9 +256,8 @@ def clean_old_statistics(db: Session, days: int = 30):
     Delete search statistics that are older than the specified number of days.
     """
     threshold = datetime.now() - timedelta(days=days)
-    db.query(SearchStatistics).filter(
-        SearchStatistics.last_searched < threshold
-    ).delete()
+    timestamp_column = getattr(SearchStatistics, _STAT_TS_ATTR)
+    db.query(SearchStatistics).filter(timestamp_column < threshold).delete()
     db.commit()
 
 
@@ -202,7 +269,7 @@ def generate_search_trends_chart():
     db = next(get_db())  # Ensure get_db() is properly defined in your project
     data = (
         db.query(
-            func.date(SearchStatistics.last_searched).label("date"),
+            func.date(getattr(SearchStatistics, _STAT_TS_ATTR)).label("date"),
             func.count(SearchStatistics.id).label("count"),
         )
         .group_by(func.date(SearchStatistics.last_searched))
@@ -253,10 +320,11 @@ def update_conversation_statistics(
 
     # If no statistics exist for this conversation, create a new record.
     if not stats:
+        receiver_id = new_message.receiver_id or new_message.sender_id
         stats = models.ConversationStatistics(
             conversation_id=conversation_id,
-            user1_id=min(new_message.sender_id, new_message.receiver_id),
-            user2_id=max(new_message.sender_id, new_message.receiver_id),
+            user1_id=min(new_message.sender_id, receiver_id),
+            user2_id=max(new_message.sender_id, receiver_id),
             total_messages=0,
             total_files=0,
             total_emojis=0,

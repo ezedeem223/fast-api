@@ -1,7 +1,8 @@
 import os
-os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("DISABLE_EXTERNAL_NOTIFICATIONS", "1")
+os.environ["APP_ENV"] = "test"
+os.environ["DISABLE_EXTERNAL_NOTIFICATIONS"] = "1"
 os.environ["ENABLE_TRANSLATION"] = "0"
+os.environ["REDIS_URL"] = ""
 
 from fastapi.testclient import TestClient
 import pytest
@@ -10,6 +11,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
+
+# Force Redis off during tests to avoid real network calls.
+settings.__class__.redis_client = None
+object.__setattr__(settings, "redis_client", None)
 
 settings.database_url = settings.test_database_url
 os.environ["DATABASE_URL"] = settings.test_database_url

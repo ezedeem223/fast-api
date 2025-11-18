@@ -253,6 +253,9 @@ class Reel(Base):
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, index=True)
+    view_count = Column(Integer, default=0)
 
     owner = relationship("User", back_populates="reels")
     community = relationship("Community", back_populates="reels")

@@ -20,6 +20,8 @@ from app.routers import (
     auth,
     oauth,
     p2fa,
+    notifications,
+    reels,
     post,
     reaction,
     report,
@@ -64,6 +66,8 @@ api_router.include_router(reaction.router)
 api_router.include_router(message.router)
 api_router.include_router(call.router)
 api_router.include_router(screen_share.router)
+api_router.include_router(notifications.router)
+api_router.include_router(reels.router)
 
 # Business and support
 api_router.include_router(business.router)

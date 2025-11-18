@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List
 from datetime import date, timedelta
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 # Import project modules
 from .. import models, schemas, oauth2
@@ -181,3 +182,86 @@ async def get_ban_type_distribution(
         "word_bans": distribution.word_bans or 0,
         "user_bans": distribution.user_bans or 0,
     }
+
+
+@router.get("/top-posts", response_model=List[schemas.TopPostStat])
+async def get_top_posts(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_admin),
+):
+    """
+    Return the most engaging posts ranked by votes and comment counts.
+    """
+    posts = (
+        db.query(
+            models.Post.id,
+            models.Post.title,
+            func.coalesce(models.Post.votes, 0).label("votes"),
+            func.coalesce(models.Post.comment_count, 0).label("comment_count"),
+        )
+        .order_by(
+            func.coalesce(models.Post.votes, 0).desc(),
+            func.coalesce(models.Post.comment_count, 0).desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return [
+        schemas.TopPostStat(
+            id=post.id,
+            title=post.title,
+            votes=post.votes or 0,
+            comment_count=post.comment_count or 0,
+        )
+        for post in posts
+    ]
+
+
+@router.get("/top-users", response_model=List[schemas.TopUserStat])
+async def get_top_users(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_admin),
+):
+    """
+    Return the most active community members based on followers and publishing activity.
+    """
+    followers_subq = (
+        db.query(
+            models.Follow.followed_id.label("user_id"),
+            func.count(models.Follow.follower_id).label("followers"),
+        )
+        .group_by(models.Follow.followed_id)
+        .subquery()
+    )
+
+    users = (
+        db.query(
+            models.User.id,
+            models.User.email,
+            models.User.username,
+            func.coalesce(models.User.post_count, 0).label("post_count"),
+            func.coalesce(models.User.comment_count, 0).label("comment_count"),
+            func.coalesce(followers_subq.c.followers, 0).label("followers"),
+        )
+        .outerjoin(followers_subq, followers_subq.c.user_id == models.User.id)
+        .order_by(
+            func.coalesce(followers_subq.c.followers, 0).desc(),
+            func.coalesce(models.User.post_count, 0).desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        schemas.TopUserStat(
+            id=user.id,
+            email=user.email,
+            username=user.username,
+            followers=user.followers or 0,
+            post_count=user.post_count or 0,
+            comment_count=user.comment_count or 0,
+        )
+        for user in users
+    ]
