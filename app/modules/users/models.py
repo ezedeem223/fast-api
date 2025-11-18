@@ -17,55 +17,30 @@ from sqlalchemy import (
     JSON,
     Interval,
     LargeBinary,
-    Index,
     Float,
 )
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, JSONB as PG_JSONB
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy import Enum as SQLAlchemyEnum
 
-from app.core.config import settings
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
-
-DATABASE_URL = settings.get_database_url(
-    use_test=settings.environment.lower() == "test"
-)
-IS_POSTGRES = DATABASE_URL.startswith("postgresql")
-
-if IS_POSTGRES:
-    ARRAY = PG_ARRAY
-    JSONB = PG_JSONB
-else:
-
-    class SqliteArray(TypeDecorator):
-        impl = JSON
-        cache_ok = True
-
-        def __init__(self, item_type=None, **kwargs):
-            super().__init__(**kwargs)
-            self.item_type = item_type
-
-        def process_bind_param(self, value, dialect):
-            if value is None:
-                return []
-            if isinstance(value, list):
-                return value
-            return list(value)
-
-        def process_result_value(self, value, dialect):
-            if value is None:
-                return []
-            return value
-
-    ARRAY = SqliteArray
-    JSONB = JSON
-
-
 from app.modules.users.associations import post_mentions, user_hashtag_follows
+
+def _array_type(item_type):
+    """
+    Return an ARRAY type that automatically falls back to JSON for SQLite.
+    """
+    base = PG_ARRAY(item_type)
+    return base.with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
+
+
+def _jsonb_type():
+    """
+    Return a JSONB type that stores JSON on SQLite.
+    """
+    return PG_JSONB().with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
 
 class UserType(str, enum.Enum):
@@ -123,10 +98,10 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     failed_login_attempts = Column(Integer, default=0)
     account_locked_until = Column(DateTime(timezone=True), nullable=True)
-    skills = Column(ARRAY(String), nullable=True)
-    interests = Column(ARRAY(String), nullable=True)
-    ui_settings = Column(JSONB, default={})
-    notifications_settings = Column(JSONB, default={})
+    skills = Column(_array_type(String), nullable=True)
+    interests = Column(_array_type(String), nullable=True)
+    ui_settings = Column(_jsonb_type(), default={})
+    notifications_settings = Column(_jsonb_type(), default={})
     user_type = Column(
         SQLAlchemyEnum(UserType, name="user_type_enum"), default=UserType.PERSONAL
     )
@@ -154,7 +129,7 @@ class User(Base):
     interaction_count = Column(Integer, default=0)
     followers_count = Column(Integer, default=0)
     following_count = Column(Integer, default=0)
-    followers_growth = Column(ARRAY(Integer), default=list)
+    followers_growth = Column(_array_type(Integer), default=list)
     comment_count = Column(Integer, default=0)
     warning_count = Column(Integer, default=0)
     last_warning_date = Column(DateTime(timezone=True), nullable=True)

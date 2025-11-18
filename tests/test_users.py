@@ -2,9 +2,6 @@ import pytest
 from jose import jwt
 from app import schemas
 from app.core.config import settings
-from app.models import User
-from app.oauth2 import create_access_token
-from datetime import datetime, timedelta
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 
@@ -62,7 +59,7 @@ def test_get_user(authorized_client, test_user):
 
 
 def test_get_non_exist_user(authorized_client):
-    res = authorized_client.get(f"/users/99999")
+    res = authorized_client.get("/users/99999")
     assert res.status_code == 404
 
 

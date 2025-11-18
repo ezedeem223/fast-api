@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
 from .. import models, schemas, oauth2, crypto
 from app.core.database import get_db
 

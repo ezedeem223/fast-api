@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import ForwardRef, List, Optional
+from typing import Any, ForwardRef, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, constr
 from app.modules.users.schemas import UserOut
@@ -38,8 +38,8 @@ class CommunityOut(CommunityBase):
     member_count: int
     members: List["CommunityMemberOut"]
     rules: List["CommunityRuleOut"] = []
-    category: Optional["Category"] = None
-    tags: List["Tag"] = Field(default_factory=list)
+    category: Optional[Any] = None
+    tags: List[Any] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

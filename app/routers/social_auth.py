@@ -3,7 +3,6 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
-import json
 
 from .. import models, oauth2, schemas
 from app.core.config import settings
@@ -276,7 +275,7 @@ async def disconnect_social_account(
         .filter(
             models.SocialMediaAccount.user_id == current_user.id,
             models.SocialMediaAccount.platform == platform,
-            models.SocialMediaAccount.is_active == True,
+            models.SocialMediaAccount.is_active,
         )
         .first()
     )

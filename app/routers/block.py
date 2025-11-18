@@ -11,13 +11,13 @@ fetch block logs and statistics, as well as handling block appeals.
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Optional
+from typing import List
 from datetime import datetime, timedelta
 
 # Local imports
 from .. import models, oauth2, schemas
 from app.core.database import get_db
-from ..celery_worker import celery_app, unblock_user
+from ..celery_worker import unblock_user
 from app.modules.utils.moderation import log_event
 
 # =====================================================

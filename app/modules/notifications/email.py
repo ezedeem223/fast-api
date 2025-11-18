@@ -5,11 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Union
+from typing import List, Optional, Union
 
 from fastapi import BackgroundTasks
 from fastapi_mail import MessageSchema
-from sqlalchemy.orm import Session
 
 from app import models
 from app.core.config import settings, fm

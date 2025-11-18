@@ -7,7 +7,6 @@ from collections import deque
 from datetime import date, datetime, timezone
 from typing import Dict, Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models, schemas

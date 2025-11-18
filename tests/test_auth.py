@@ -1,6 +1,5 @@
 import pytest
 from fastapi import HTTPException
-from app.core.config import settings
 from app.oauth2 import create_access_token, verify_access_token
 from app.notifications import send_email_notification
 import logging

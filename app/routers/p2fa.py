@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import pyotp
 import logging
-from typing import Optional
 from .. import models, oauth2, schemas
 from app.core.database import get_db
 from app.modules.utils.files import generate_qr_code

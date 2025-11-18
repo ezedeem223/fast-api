@@ -8,7 +8,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models
-from app.modules.moderation import schemas
 
 REPORT_THRESHOLD = 5  # Number of valid reports required for automatic ban
 REPORT_WINDOW = timedelta(days=30)

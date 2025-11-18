@@ -6,7 +6,6 @@ from sqlalchemy import pool
 from alembic import context
 from app.models import Base  # Import database models
 from app.core.config import settings
-from app.models import BannedWord  # Example: Importing a specific model
 
 # Set the target metadata for Alembic migrations
 target_metadata = [Base.metadata]

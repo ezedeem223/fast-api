@@ -6,7 +6,6 @@ from datetime import (
 )  # Added timezone for correct UTC usage
 from . import models
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-from app.core.config import settings
 from app.core.database import get_db
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -117,8 +116,9 @@ def get_problematic_users(db: Session, threshold: int = 5):
             func.count(models.Report.id).label("report_count"),
         )
         .filter(
-            models.Report.is_valid == True,
-            models.Report.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
+            models.Report.is_valid,
+            models.Report.created_at
+            >= datetime.now(timezone.utc) - timedelta(days=30),
         )
         .group_by(models.Report.reported_user_id)
         .subquery()
@@ -175,8 +175,6 @@ def record_search_query(db: Session, query: str, user_id: int):
     otherwise, create a new record.
     """
     query_column = getattr(SearchStatistics, _STAT_QUERY_ATTR)
-    count_column = getattr(SearchStatistics, _STAT_COUNT_ATTR)
-    timestamp_column = getattr(SearchStatistics, _STAT_TS_ATTR)
     search_stat = (
         db.query(SearchStatistics)
         .filter(query_column == query, SearchStatistics.user_id == user_id)

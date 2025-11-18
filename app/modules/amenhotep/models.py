@@ -10,43 +10,21 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Text,
+    JSON,
 )
-from sqlalchemy.types import TypeDecorator, JSON
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
-from app.core.config import settings
-from app.core.database import Base
-from app.core.db_defaults import timestamp_default
 from sqlalchemy.orm import relationship
 
+from app.core.database import Base
+from app.core.db_defaults import timestamp_default
 
-DATABASE_URL = settings.get_database_url(
-    use_test=settings.environment.lower() == "test"
-)
-IS_POSTGRES = DATABASE_URL.startswith("postgresql")
 
-if IS_POSTGRES:
-    ARRAY = PG_ARRAY
-else:
-
-    class SqliteArray(TypeDecorator):
-        """SQLite-friendly ARRAY replacement."""
-
-        impl = JSON
-        cache_ok = True
-
-        def process_bind_param(self, value, dialect):
-            if value is None:
-                return []
-            if isinstance(value, list):
-                return value
-            return list(value)
-
-        def process_result_value(self, value, dialect):
-            if value is None:
-                return []
-            return value
-
-    ARRAY = SqliteArray
+def _array_type(item_type):
+    """
+    Return an ARRAY that transparently stores JSON when using SQLite.
+    """
+    base = PG_ARRAY(item_type)
+    return base.with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
 
 class AmenhotepMessage(Base):
@@ -72,7 +50,7 @@ class AmenhotepChatAnalytics(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     session_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
-    topics_discussed = Column(ARRAY(String), default=list)
+    topics_discussed = Column(_array_type(String), default=list)
     session_duration = Column(Integer)
     satisfaction_score = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())

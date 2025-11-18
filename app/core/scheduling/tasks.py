@@ -19,7 +19,6 @@ from app.core.database import SessionLocal, get_db
 from app.firebase_config import initialize_firebase
 from app.modules.community import Community
 from app.modules.utils.analytics import create_default_categories, update_post_score
-from app.modules.utils.content import train_content_classifier
 from app.modules.utils.search import spell, update_search_vector
 from app.notifications import NotificationService
 from app.modules.search.service import update_search_suggestions

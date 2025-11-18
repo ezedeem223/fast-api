@@ -1,12 +1,6 @@
 import pytest
-from app import models, schemas, oauth2
-from app.core.database import get_db
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
-from fastapi import UploadFile
-from io import BytesIO
-from unittest.mock import patch, MagicMock
-from app.routers import message as message_router
+from app import models
+from unittest.mock import patch
 
 
 @pytest.fixture

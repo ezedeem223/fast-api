@@ -28,9 +28,9 @@ from app.modules.social import Vote
 from app.modules.users.models import PrivacyLevel, User
 from app.schemas import (
     CommunityCreate,
-    CommunityMemberUpdate,
     CommunityInvitationCreate,
-    CommunityRuleCreate,
+    CommunityMemberUpdate,
+    CommunityUpdate,
     PostCreate,
 )
 from app.modules.utils.content import (
@@ -215,7 +215,7 @@ class CommunityService:
         self,
         *,
         community_id: int,
-        payload: "schemas.CommunityUpdate",
+        payload: CommunityUpdate,
         current_user: User,
     ) -> Community:
         community = self.db.query(Community).filter(Community.id == community_id).first()
@@ -285,7 +285,7 @@ class CommunityService:
         *,
         community_id: int,
         user_id: int,
-        payload: "schemas.CommunityMemberUpdate",
+        payload: CommunityMemberUpdate,
         current_user: User,
     ) -> CommunityMember:
         community = (

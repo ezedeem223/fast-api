@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     Column,
@@ -25,49 +23,33 @@ from sqlalchemy.dialects.postgresql import (
     JSONB as PG_JSONB,
     TSVECTOR as PG_TSVECTOR,
 )
-from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
-from app.core.config import settings
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
 from app.modules.users.associations import post_mentions
 
-DATABASE_URL = settings.get_database_url(
-    use_test=settings.environment.lower() == "test"
-)
-IS_POSTGRES = DATABASE_URL.startswith("postgresql")
+def _array_type(item_type):
+    """
+    Return an ARRAY type that gracefully falls back to JSON on SQLite.
+    """
+    base = PG_ARRAY(item_type)
+    return base.with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
-if IS_POSTGRES:
-    ARRAY = PG_ARRAY
-    JSONB = PG_JSONB
-    TSVECTOR = PG_TSVECTOR
-else:
-    class SqliteArray(TypeDecorator):
-        impl = JSON
-        cache_ok = True
 
-        def __init__(self, item_type=None, **kwargs):
-            super().__init__(**kwargs)
-            self.item_type = item_type
+def _jsonb_type():
+    """
+    Return a JSONB type stored as JSON on SQLite.
+    """
+    return PG_JSONB().with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
-        def process_bind_param(self, value, dialect):
-            if value is None:
-                return []
-            if isinstance(value, list):
-                return value
-            return list(value)
 
-        def process_result_value(self, value, dialect):
-            if value is None:
-                return []
-            return value
-
-    ARRAY = SqliteArray
-    JSONB = JSON
-    TSVECTOR = Text
+def _tsvector_type():
+    """
+    Provide a TSVector column that degrades to TEXT for SQLite.
+    """
+    return PG_TSVECTOR().with_variant(Text, "sqlite").with_variant(Text, "sqlite+pysqlite")
 
 post_hashtags = Table(
     "post_hashtags",
@@ -241,11 +223,11 @@ class Post(Base):
     archived_at = Column(DateTime(timezone=True), nullable=True)
     is_flagged = Column(Boolean, default=False)
     flag_reason = Column(String, nullable=True)
-    search_vector = Column(TSVECTOR)
+    search_vector = Column(_tsvector_type())
     share_scope = Column(String, default="public")
     shared_with_community_id = Column(Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True)
     score = Column(Float, default=0.0, index=True)
-    sharing_settings = Column(JSONB, default={})
+    sharing_settings = Column(_jsonb_type(), default={})
 
     __table_args__ = (
         Index("idx_post_search_vector", "search_vector", postgresql_using="gin"),
@@ -399,12 +381,12 @@ class SocialMediaPost(Base):
     title = Column(String, nullable=True)
     content = Column(Text, nullable=False)
     platform_post_id = Column(String, nullable=True)
-    media_urls = Column(ARRAY(String), nullable=True)
+    media_urls = Column(_array_type(String), nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     status = Column(Enum(PostStatus), default=PostStatus.DRAFT)
     error_message = Column(Text, nullable=True)
-    post_metadata = Column(JSONB, default={})
-    engagement_stats = Column(JSONB, default={})
+    post_metadata = Column(_jsonb_type(), default={})
+    engagement_stats = Column(_jsonb_type(), default={})
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     published_at = Column(DateTime(timezone=True), nullable=True)
 

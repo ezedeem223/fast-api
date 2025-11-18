@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import List
 
 # Local imports
 from .. import models, schemas, oauth2
@@ -214,7 +214,7 @@ async def get_communities_overview(
         stats = {
             "total_communities": db.query(Community).count(),
             "active_communities": db.query(Community)
-            .filter(Community.is_active == True)
+            .filter(Community.is_active)
             .count(),
         }
         return stats

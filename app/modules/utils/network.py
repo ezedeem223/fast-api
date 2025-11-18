@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ipaddress
 from datetime import datetime
-from typing import Optional
 
 from fastapi import Request
 from sqlalchemy.exc import ProgrammingError

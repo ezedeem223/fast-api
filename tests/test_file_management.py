@@ -1,5 +1,4 @@
 import pytest
-from fastapi import UploadFile
 from io import BytesIO
 from unittest.mock import patch
 

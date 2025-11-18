@@ -5,9 +5,6 @@ from app import models
 from app.modules.community import CommunityMember
 from app.modules.notifications import models as notification_models
 from app.notifications import (
-    manager,
-    send_email_notification,
-    schedule_email_notification,
     send_real_time_notification,
 )
 from unittest.mock import patch, MagicMock, ANY, AsyncMock
@@ -51,7 +48,7 @@ def test_notification_on_new_post(
     assert response.status_code == 201
 
     mock_notification_manager.broadcast.assert_called_with(
-        f"New post created: New Post"
+        "New post created: New Post"
     )
 
     expected_kwargs = dict(
@@ -331,11 +328,9 @@ def test_notification_summary_endpoint(authorized_client, session, test_user):
 
 
 def test_notification_feed_marks_seen(authorized_client, session, test_user):
-    first = _create_notification(session, test_user["id"], content="one")
-    second = _create_notification(session, test_user["id"], content="two")
+    _create_notification(session, test_user["id"], content="one")
+    _create_notification(session, test_user["id"], content="two")
     _create_notification(session, test_user["id"], content="three")
-    first_id, second_id = first.id, second.id
-
     response = authorized_client.get("/notifications/feed", params={"limit": 2})
     assert response.status_code == 200
     payload = response.json()

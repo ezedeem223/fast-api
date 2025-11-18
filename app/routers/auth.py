@@ -13,7 +13,7 @@ from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 import uuid
-from typing import Optional, List
+from typing import List
 import pyotp
 from jose import jwt, JWTError
 from fastapi_mail import FastMail, MessageSchema

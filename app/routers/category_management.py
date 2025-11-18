@@ -130,7 +130,7 @@ def get_categories(db: Session = Depends(get_db)):
     """
     categories = (
         db.query(PostCategory)
-        .filter(PostCategory.parent_id == None)
+        .filter(PostCategory.parent_id.is_(None))
         .all()
     )
     return categories

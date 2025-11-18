@@ -7,13 +7,12 @@ from fastapi import (
     HTTPException,
     status,
     Query,
-    Request,
     Body,
-    BackgroundTasks,
 )
+from fastapi import BackgroundTasks as FastAPIBackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Any, Dict, List, Optional
-from datetime import date, timedelta, datetime
+from datetime import date
 from http import HTTPStatus
 import logging
 from fastapi.responses import StreamingResponse
@@ -36,8 +35,23 @@ from app.schemas import (
 )
 from app.core.database import get_db
 from app.services.community import CommunityService
-from app.core.config import settings
-from ..notifications import queue_email_notification, schedule_email_notification
+from app.notifications import (
+    queue_email_notification as _queue_email_notification,
+    schedule_email_notification as _schedule_email_notification,
+)
+
+# Expose BackgroundTasks for backwards compatibility (tests patch it directly).
+BackgroundTasks = FastAPIBackgroundTasks
+
+
+def queue_email_notification(*args, **kwargs):
+    """Proxy to the notifications helper so tests can patch this module attribute."""
+    return _queue_email_notification(*args, **kwargs)
+
+
+def schedule_email_notification(*args, **kwargs):
+    """Proxy to the notifications helper so tests can patch this module attribute."""
+    return _schedule_email_notification(*args, **kwargs)
 logger = logging.getLogger(__name__)
 
 HTTP_422_UNPROCESSABLE_CONTENT = getattr(

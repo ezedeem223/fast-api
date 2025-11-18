@@ -1,4 +1,3 @@
-import pytest
 
 
 def test_create_group_conversation(authorized_client, test_user2):

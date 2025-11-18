@@ -1,6 +1,4 @@
-import firebase_admin
 from firebase_admin import credentials, messaging, initialize_app
-from pathlib import Path
 from app.core.config import settings
 from typing import List
 import logging

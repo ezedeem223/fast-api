@@ -13,7 +13,6 @@ from better_profanity import profanity
 from langdetect import detect, LangDetectException
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
@@ -22,7 +21,7 @@ from nltk.corpus import stopwords
 
 from app import models
 from app.core.config import settings
-from .common import get_user_display_name, logger
+from .common import get_user_display_name
 
 nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()

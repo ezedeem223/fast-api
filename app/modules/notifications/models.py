@@ -18,23 +18,16 @@ from sqlalchemy import (
     Time,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 
-from app.core.config import settings
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
 
-DATABASE_URL = settings.get_database_url(
-    use_test=settings.environment.lower() == "test"
-)
-IS_POSTGRES = DATABASE_URL.startswith("postgresql")
-
-if IS_POSTGRES:
-    from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
-
-    JSONB = PG_JSONB
-else:
-    JSONB = JSON
+def _jsonb_type():
+    """
+    Return a JSONB type that gracefully falls back to JSON on SQLite.
+    """
+    return PG_JSONB().with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
 
 class NotificationStatus(str, enum.Enum):
@@ -84,7 +77,7 @@ class NotificationPreferences(Base):
     in_app_notifications = Column(Boolean, default=True)
     quiet_hours_start = Column(Time, nullable=True)
     quiet_hours_end = Column(Time, nullable=True)
-    categories_preferences = Column(JSONB, default={})
+    categories_preferences = Column(_jsonb_type(), default={})
     notification_frequency = Column(String, default="realtime")
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
@@ -136,7 +129,7 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
-    notification_metadata = Column(JSONB, default={})
+    notification_metadata = Column(_jsonb_type(), default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
@@ -147,14 +140,14 @@ class Notification(Base):
     importance_level = Column(Integer, default=1)
     seen_at = Column(DateTime(timezone=True), nullable=True)
     interaction_count = Column(Integer, default=0)
-    custom_data = Column(JSONB, default={})
-    device_info = Column(JSONB, nullable=True)
+    custom_data = Column(_jsonb_type(), default={})
+    device_info = Column(_jsonb_type(), nullable=True)
     notification_channel = Column(String, default="in_app")
     failure_reason = Column(String, nullable=True)
     batch_id = Column(String, nullable=True)
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
-    delivery_tracking = Column(JSONB, default={})
+    delivery_tracking = Column(_jsonb_type(), default={})
     retry_strategy = Column(String, nullable=True)
     max_retries = Column(Integer, default=3)
     current_retry_count = Column(Integer, default=0)
@@ -214,7 +207,7 @@ class NotificationDeliveryAttempt(Base):
     error_message = Column(String, nullable=True)
     delivery_channel = Column(String, nullable=False)
     response_time = Column(Float)
-    attempt_metadata = Column(JSONB, default={})
+    attempt_metadata = Column(_jsonb_type(), default={})
 
     notification = relationship("Notification", back_populates="delivery_attempts_rel")
 
@@ -239,8 +232,8 @@ class NotificationAnalytics(Base):
     last_delivery_attempt = Column(DateTime(timezone=True), onupdate=timestamp_default())
     successful_delivery = Column(Boolean, default=False)
     delivery_channel = Column(String)
-    device_info = Column(JSONB, default={})
-    performance_metrics = Column(JSONB, default={})
+    device_info = Column(_jsonb_type(), default={})
+    performance_metrics = Column(_jsonb_type(), default={})
 
     notification = relationship("Notification", back_populates="analytics")
 

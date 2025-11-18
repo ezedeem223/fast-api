@@ -1,14 +1,14 @@
 import os
 import json
-import json
 import logging
 from datetime import datetime
 from typing import List, Optional
 
 from redis.exceptions import RedisError
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_
+from fastapi import APIRouter, Depends, Query
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas, oauth2
@@ -21,13 +21,11 @@ from app.modules.utils.search import (
     sort_search_results,
 )
 from app.modules.utils.analytics import analyze_user_behavior
-from app.modules.search import SearchParams, SearchResponse, SearchStatOut
+from app.modules.search import SearchParams, SearchResponse
 from app.modules.search.service import (
     update_search_statistics,
-    update_search_suggestions,
 )
 from app.modules.search.typesense_client import get_typesense_client
-from app.modules.users.schemas import SortOption
 from ..analytics import (
     record_search_query,
     get_popular_searches,
@@ -136,7 +134,11 @@ async def search(
 
     if results and cache_client:
         try:
-            cache_client.setex(cache_key, 3600, json.dumps(search_response))
+            cache_client.setex(
+                cache_key,
+                3600,
+                json.dumps(jsonable_encoder(search_response)),
+            )
         except RedisError:  # pragma: no cover - cache errors are ignored
             pass
 
@@ -250,7 +252,8 @@ async def autocomplete(
     result = [schemas.SearchSuggestionOut.model_validate(s) for s in suggestions]
     if cache_client:
         try:
-            cache_client.setex(cache_key, 300, json.dumps([s.model_dump() for s in result]))
+            payload = jsonable_encoder(result)
+            cache_client.setex(cache_key, 300, json.dumps(payload))
         except Exception:
             pass
 

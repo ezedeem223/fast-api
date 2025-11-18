@@ -6,9 +6,8 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional, TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, conint
+from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
 
-from app.modules.users.models import VerificationStatus
 
 if TYPE_CHECKING:  # pragma: no cover
     from app.modules.posts.schemas import Comment as PostComment, PostOut

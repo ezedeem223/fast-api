@@ -1,10 +1,8 @@
-from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from app.main import app
 from app.core.config import settings
-from app.core.database import get_db, Base
+from app.core.database import Base
 
 # إعداد URL للاتصال بقاعدة بيانات الاختبار
 SQLALCHEMY_DATABASE_URL = (

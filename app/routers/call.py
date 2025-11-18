@@ -11,7 +11,6 @@ for real-time call communication.
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -25,7 +24,7 @@ from datetime import datetime, timezone, timedelta
 from .. import schemas, oauth2, notifications
 from app.core.database import get_db
 from ..notifications import ConnectionManager
-from app.modules.utils.security import generate_encryption_key, update_encryption_key
+from app.modules.utils.security import update_encryption_key
 from app.modules.utils.analytics import (
     check_call_quality,
     should_adjust_video_quality,
@@ -168,7 +167,7 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         await _handle_call_disconnect(call, db, other_user_id)
         clean_old_quality_buffers()
-    except Exception as e:
+    except Exception:
         await websocket.close(code=1011, reason="Internal server error")
 
 

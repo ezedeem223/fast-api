@@ -162,7 +162,7 @@ async def verify_user(
     رفع وثيقة التحقق وتفعيل الحساب
     Upload verification document and verify the user.
     """
-    file_location = service.verify_user_document(current_user, file)
+    service.verify_user_document(current_user, file)
 
     await send_email_notification(
         to=current_user.email,

@@ -2,11 +2,8 @@
 
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 import torch
-from typing import List, Optional
 import json
 import os
-from datetime import datetime
-import aiohttp
 from app.core.config import settings
 
 

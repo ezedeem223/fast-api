@@ -2,7 +2,6 @@ from fastapi import APIRouter, status, Depends, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import timedelta
-from app.modules.posts.models import Comment
 from ..models import User
 from .. import schemas, oauth2
 from app.core.database import get_db

@@ -1,13 +1,15 @@
+from collections import Counter
+from datetime import date, datetime, timedelta
+from typing import List
+
 from celery import Celery
 from celery.schedules import crontab
 from fastapi_mail import FastMail, MessageSchema
 from pydantic import EmailStr
-from typing import List
-from datetime import datetime, timedelta, date
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from app.core.config import settings  # استخدام الإعدادات بالحروف الكبيرة كما هو معرف
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app import models as legacy_models
 from app.modules.notifications import models as notification_models
@@ -19,11 +21,10 @@ from app.modules.notifications.tasks import (
 )
 from app.modules.utils.content import is_content_offensive
 
+
 # إزالة الاستيراد الثابت لدالة send_notifications_and_share لتفادي دائرة الاستيراد
 # from .routers.post import send_notifications_and_share
 
-import firebase_admin
-from firebase_admin import credentials, messaging
 
 # ------------------------- Celery Setup -------------------------
 celery_app = Celery(
@@ -33,11 +34,7 @@ celery_app = Celery(
 )
 
 # ------------------------- Email Configuration -------------------------
-# استخدام إعدادات البريد الإلكتروني من ملف config.py
-from app.core.config import fm  # fm معرف في config.py
-
-email_conf = settings.mail_config
-fm = FastMail(email_conf)
+fm = FastMail(settings.mail_config)
 
 # ------------------------- Beat Schedule Configuration -------------------------
 celery_app.conf.beat_schedule = {
@@ -74,6 +71,39 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(day_of_month=1, hour=0, minute=0),  # تشغيل في بداية كل شهر
     },
 }
+
+
+def calculate_user_notification_analytics(db: Session, user_id: int) -> dict:
+    """
+    Simple analytics helper used by the scheduled task to avoid None values.
+    """
+    notifications = (
+        db.query(notification_models.Notification)
+        .filter(notification_models.Notification.user_id == user_id)
+        .all()
+    )
+    if not notifications:
+        return {"engagement_rate": 0.0, "response_time": 0.0, "peak_hours": []}
+
+    total = len(notifications)
+    read_count = sum(1 for notification in notifications if notification.is_read)
+    response_times = [
+        (notification.read_at - notification.created_at).total_seconds()
+        for notification in notifications
+        if notification.created_at and notification.read_at
+    ]
+    avg_response = (
+        sum(response_times) / len(response_times) if response_times else 0.0
+    )
+    hours = [notification.created_at.hour for notification in notifications if notification.created_at]
+    peak_hours = [hour for hour, _ in Counter(hours).most_common(3)]
+
+    return {
+        "engagement_rate": read_count / total if total else 0.0,
+        "response_time": avg_response,
+        "peak_hours": peak_hours,
+    }
+
 
 # ------------------------- Celery Tasks -------------------------
 
@@ -200,7 +230,11 @@ def check_old_posts_content():
     """
     db: Session = SessionLocal()
     try:
-        old_posts = db.query(legacy_models.Post).filter(legacy_models.Post.is_flagged == False).all()
+        old_posts = (
+            db.query(legacy_models.Post)
+            .filter(legacy_models.Post.is_flagged.is_(False))
+            .all()
+        )
         for post in old_posts:
             is_offensive, confidence = is_content_offensive(post.content)
             if is_offensive:
@@ -365,3 +399,4 @@ def schedule_post_publication(post_id: int):
             send_notifications_and_share(None, post, user)
     finally:
         db.close()
+

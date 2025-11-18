@@ -21,6 +21,7 @@ from .models import (
 )
 
 __all__ = [
+    "models",
     "CallType",
     "CallStatus",
     "MessageType",

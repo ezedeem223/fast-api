@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import func, case, text
+from datetime import datetime
 from .. import models, schemas, oauth2
 from app.modules.notifications.models import (
     NotificationCategory,

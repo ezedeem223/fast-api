@@ -15,7 +15,6 @@ Helper functions and global constants are defined at the beginning to organize t
 # =====================================================
 
 from fastapi import (
-    FastAPI,
     Response,
     status,
     HTTPException,
@@ -27,35 +26,24 @@ from fastapi import (
     Query,
     Form,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, and_, cast, desc
-from sqlalchemy.dialects.postgresql import JSONB
-from typing import List, Optional, Union
-import inspect
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from typing import List, Optional
 import os
 import logging
 from pathlib import Path
 import requests
 import aiofiles
 import uuid
-import asyncio
-from datetime import datetime, timedelta
 from io import BytesIO
-from cachetools import cached, TTLCache
+from cachetools import TTLCache
 
 # Import local modules
 from .. import models, schemas, oauth2, notifications
-from app.modules.community import Community, CommunityMember
 from app.core.config import settings
 from app.core.database import get_db
-from ..i18n import translate_text, get_translated_content
-from ..content_filter import check_content, filter_content
-from ..celery_worker import schedule_post_publication
 from ..analytics import analyze_content
-from ..media_processing import process_media_file
-from app.notifications import NotificationService, send_real_time_notification, send_email_notification, queue_email_notification, schedule_email_notification
-from ..services.reporting import submit_report
+from app.notifications import queue_email_notification, schedule_email_notification
 from app.services.posts import PostService
 
 # =====================================================

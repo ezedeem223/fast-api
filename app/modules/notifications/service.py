@@ -6,12 +6,11 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException
 from fastapi_mail import MessageSchema
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
 
 from app import models as legacy_models, schemas
 from app.modules.notifications import models as notification_models
@@ -24,7 +23,6 @@ from .batching import NotificationBatcher
 from .common import (
     delivery_status_cache,
     get_model_by_id,
-    get_or_create,
     handle_async_errors,
     logger,
     notification_cache,

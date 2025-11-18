@@ -7,6 +7,7 @@ import inspect
 import logging
 import os
 from datetime import datetime
+from io import BytesIO
 from http import HTTPStatus
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -17,7 +18,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.celery_worker import schedule_post_publication
-from app.core.config import settings
 from app.content_filter import check_content, filter_content
 from app.modules.community import Community, CommunityMember
 from app.modules.utils.content import (
@@ -30,6 +30,35 @@ from app.modules.utils.content import (
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
 from app.services.reporting import submit_report
+
+
+def _create_pdf(post: models.Post):
+    """
+    Generates a PDF file from a post's content.
+    Returns a BytesIO object containing the PDF data if successful.
+    """
+    from xhtml2pdf import pisa  # Local import keeps dependency optional during tests.
+
+    html = f"""
+    <html>
+    <head>
+        <title>{post.title}</title>
+    </head>
+    <body>
+        <h1>{post.title}</h1>
+        <p>Posted by: {getattr(post.owner, 'username', post.owner.email)}</p>
+        <p>Date: {post.created_at.strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <div>
+            {post.content}
+        </div>
+    </body>
+    </html>
+    """
+    result = BytesIO()
+    pdf = pisa.pisaDocument(BytesIO(html.encode("UTF-8")), result)
+    if not pdf.err:
+        return BytesIO(result.getvalue())
+    return None
 
 HTTP_422_UNPROCESSABLE_CONTENT = getattr(
     status, "HTTP_422_UNPROCESSABLE_CONTENT", HTTPStatus.UNPROCESSABLE_ENTITY
@@ -326,7 +355,7 @@ class PostService:
             .filter(
                 models.Post.owner_id == current_user.id,
                 models.Post.scheduled_time.isnot(None),
-                models.Post.is_published == False,
+                models.Post.is_published.is_(False),
             )
             .all()
         )
@@ -794,7 +823,7 @@ class PostService:
             models.Post.mentioned_users.any(id=current_user.id)
         )
         if not include_archived:
-            query = query.filter(models.Post.is_archived == False)
+            query = query.filter(models.Post.is_archived.is_(False))
         if search:
             query = query.filter(models.Post.title.contains(search))
         posts = query.offset(skip).limit(limit).all()
@@ -851,7 +880,7 @@ class PostService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Post with id: {post_id} not found",
             )
-        pdf = create_pdf(post)
+        pdf = _create_pdf(post)
         if not pdf:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -859,45 +888,6 @@ class PostService:
             )
         return pdf.getvalue()
 
-    def get_poll_results(self, *, post_id: int) -> dict:
-        post = (
-            self.db.query(models.Post)
-            .filter(models.Post.id == post_id, models.Post.is_poll == True)
-            .first()
-        )
-        if not post:
-            raise HTTPException(status_code=404, detail="Poll not found")
-        poll = self.db.query(models.Poll).filter(models.Poll.post_id == post_id).first()
-        options = (
-            self.db.query(models.PollOption).filter(models.PollOption.post_id == post_id).all()
-        )
-        results = []
-        total_votes = 0
-        for option in options:
-            vote_count = (
-                self.db.query(func.count(models.PollVote.id))
-                .filter(models.PollVote.option_id == option.id)
-                .scalar()
-            )
-            total_votes += vote_count
-            results.append(
-                {
-                    "option_id": option.id,
-                    "option_text": option.option_text,
-                    "votes": vote_count,
-                }
-            )
-        for result in results:
-            result["percentage"] = (
-                (result["votes"] / total_votes * 100) if total_votes > 0 else 0
-            )
-        return {
-            "post_id": post_id,
-            "total_votes": total_votes,
-            "results": results,
-            "is_ended": poll.end_date < datetime.now() if poll else False,
-            "end_date": poll.end_date if poll else None,
-        }
     async def create_audio_post(
         self,
         *,

@@ -151,7 +151,7 @@ class MessageService:
                 models.Block.blocker_id == blocker_id,
                 models.Block.blocked_id == blocked_id,
                 or_(
-                    models.Block.ends_at == None,  # noqa: E711
+                models.Block.ends_at.is_(None),
                     models.Block.ends_at > datetime.now(),
                 ),
             )

@@ -27,7 +27,7 @@ from app.core.middleware import add_language_header, ip_ban_middleware, language
 from app.core.scheduling import register_startup_tasks
 from app.i18n import ALL_LANGUAGES, get_locale, translate_text
 from app.modules.utils.content import train_content_classifier
-from app.notifications import ConnectionManager, send_real_time_notification
+from app.notifications import ConnectionManager
 from app.routers import community
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,4 @@
-import pytest
 from app import schemas, models
-from app.core.config import settings
 from datetime import datetime
 
 
@@ -52,7 +50,7 @@ def test_get_one_post(authorized_client, test_posts):
 
 
 def test_get_one_post_not_exist(authorized_client, test_posts):
-    res = authorized_client.get(f"/posts/88888")
+    res = authorized_client.get("/posts/88888")
     assert res.status_code == 404
 
 
@@ -81,7 +79,7 @@ def test_create_post(authorized_client, test_user, session):
     created_post = schemas.Post(**res.json())
     assert created_post.title == "Test title"
     assert created_post.content == "Test content"
-    assert created_post.published == True
+    assert created_post.published
     assert created_post.owner_id == test_user["id"]
     assert isinstance(created_post.created_at, datetime)
     assert hasattr(created_post, "id")
@@ -102,7 +100,7 @@ def test_create_post_default_published_true(authorized_client, test_user, sessio
     created_post = schemas.Post(**res.json())
     assert created_post.title == "Test title"
     assert created_post.content == "Test content"
-    assert created_post.published == True
+    assert created_post.published
     assert created_post.owner_id == test_user["id"]
     assert isinstance(created_post.created_at, datetime)
     assert hasattr(created_post, "id")
@@ -127,7 +125,7 @@ def test_delete_post_success(authorized_client, test_user, test_posts):
 
 
 def test_delete_post_non_exist(authorized_client, test_user, test_posts):
-    res = authorized_client.delete(f"/posts/8000000")
+    res = authorized_client.delete("/posts/8000000")
     assert res.status_code == 404
 
 
@@ -170,5 +168,5 @@ def test_update_post_non_exist(authorized_client, test_user, test_posts):
         "content": "updated content",
         "id": test_posts[0].id,
     }
-    res = authorized_client.put(f"/posts/8000000", json=data)
+    res = authorized_client.put("/posts/8000000", json=data)
     assert res.status_code == 404

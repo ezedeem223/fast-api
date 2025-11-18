@@ -118,4 +118,6 @@ __all__ = [
     "get_translated_content",
     "update_link_preview",
     "log_user_event",
+    "log_event",
+    "log_admin_action",
 ]
