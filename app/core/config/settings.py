@@ -1,23 +1,15 @@
-from pydantic import BaseSettings, SecretStr
+# Proper environment variable handling
 import os
+from dotenv import load_dotenv
 
-class Settings(BaseSettings):
-    # Define environment variables with default values or required settings
-    app_name: str = "Fast API Application"
-    redis_url: str
-    rsa_private_key: SecretStr
-    rsa_public_key: SecretStr
+# Load environment variables from .env file
+load_dotenv()
 
-    class Config:
-        env_file = ".env"
+# RSA keys handling
+RSA_PUBLIC_KEY = os.getenv('RSA_PUBLIC_KEY') or open('path/to/your/public/key.pem').read()
+RSA_PRIVATE_KEY = os.getenv('RSA_PRIVATE_KEY') or open('path/to/your/private/key.pem').read()
 
-settings = Settings()  # Create an instance to load settings
+# Example of correct os.getenv usage
+SOME_CONFIG_VALUE = os.getenv('SOME_CONFIG_VALUE', 'default_value')
 
-# Handle RSA keys gracefully for production deployments
-if os.getenv('ENVIRONMENT') == 'production':
-    if not settings.rsa_private_key:
-        raise ValueError("RSA private key must be provided in production")
-    if not settings.rsa_public_key:
-        raise ValueError("RSA public key must be provided in production")
-
-# Use settings.redis_url in your Redis connection logic
+# Your other settings go here
