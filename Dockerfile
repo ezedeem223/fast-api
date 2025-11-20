@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     git \
     libpq-dev \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
