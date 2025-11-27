@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,8 +14,10 @@ from fastapi import (
     Response,
     WebSocket,
     WebSocketDisconnect,
+    Request,
 )
 from sqlalchemy.orm import Session
+
 
 # Project modules
 from .. import (
@@ -30,8 +33,11 @@ from app.notifications import (
     schedule_email_notification as _schedule_email_notification,
 )
 from app.services.messaging import MessageService
+from app.core.middleware.rate_limit import limiter
+
 
 router = APIRouter(prefix="/message", tags=["Messages"])
+
 
 # ---------------------------------------------------
 # Dependency
@@ -69,7 +75,9 @@ def schedule_email_notification(*args, **kwargs):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Message)
+@limiter.limit("60/minute")
 async def create_message(
+    request: Request,
     message: schemas.MessageCreate,
     background_tasks: BackgroundTasks,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -102,7 +110,9 @@ async def get_messages(
 
 
 @router.put("/{message_id}", response_model=schemas.Message)
+@limiter.limit("30/hour")
 async def update_message(
+    request: Request,
     message_id: int,
     message_update: schemas.MessageUpdate,
     background_tasks: BackgroundTasks,
@@ -153,7 +163,9 @@ async def get_conversations(
 
 
 @router.post("/location", response_model=schemas.Message)
+@limiter.limit("30/hour")
 async def send_location(
+    request: Request,
     location: schemas.MessageCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: MessageService = Depends(get_message_service),
@@ -162,13 +174,13 @@ async def send_location(
     Send a location message.
     Requires latitude and longitude to be provided.
     """
-    return await service.send_location(
-        location=location, current_user=current_user
-    )
+    return await service.send_location(location=location, current_user=current_user)
 
 
 @router.post("/audio", response_model=schemas.Message)
+@limiter.limit("20/hour")
 async def create_audio_message(
+    request: Request,
     receiver_id: int,
     audio_file: UploadFile = File(...),
     duration: float = None,
@@ -233,7 +245,9 @@ async def mark_message_as_read(
 
 
 @router.post("/send_file", status_code=status.HTTP_201_CREATED)
+@limiter.limit("15/hour")
 async def send_file(
+    request: Request,
     file: UploadFile = File(...),
     recipient_id: int = Form(...),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -258,9 +272,7 @@ async def download_file(
     Download a file message.
     Validates that the current user is either the sender or receiver.
     """
-    return await service.download_file(
-        file_name=file_name, current_user=current_user
-    )
+    return await service.download_file(file_name=file_name, current_user=current_user)
 
 
 @router.get("/inbox", response_model=List[schemas.MessageOut])
@@ -273,9 +285,7 @@ async def get_inbox(
     """
     Retrieve the inbox messages for the current user.
     """
-    return await service.get_inbox(
-        current_user=current_user, skip=skip, limit=limit
-    )
+    return await service.get_inbox(current_user=current_user, skip=skip, limit=limit)
 
 
 @router.get("/search", response_model=schemas.MessageSearchResponse)
@@ -316,13 +326,17 @@ async def get_message(
     """
     Retrieve a specific message by its ID.
     """
-    return await service.get_message(
-        message_id=message_id, current_user=current_user
-    )
+    return await service.get_message(message_id=message_id, current_user=current_user)
 
 
-@router.post("/conversations", response_model=schemas.ConversationOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/conversations",
+    response_model=schemas.ConversationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("10/hour")
 def create_conversation(
+    request: Request,
     conversation: schemas.ConversationCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: MessageService = Depends(get_message_service),
@@ -350,7 +364,9 @@ def list_conversations(
     "/conversations/{conversation_id}/members",
     response_model=schemas.ConversationOut,
 )
+@limiter.limit("20/hour")
 def add_conversation_members(
+    request: Request,
     conversation_id: str,
     members_update: schemas.ConversationMembersUpdate,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -391,7 +407,9 @@ def remove_conversation_member(
     response_model=schemas.Message,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("60/minute")
 async def send_group_message(
+    request: Request,
     conversation_id: str,
     message: schemas.MessageCreate,
     background_tasks: BackgroundTasks,
@@ -470,5 +488,3 @@ async def amenhotep_chat(websocket: WebSocket, user_id: int):
             await websocket.send_text(response_text)
     except WebSocketDisconnect:
         print(f"User {user_id} disconnected from Amenhotep chat")
-
-

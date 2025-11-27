@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, status, Depends, BackgroundTasks, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import timedelta
@@ -10,6 +10,12 @@ from app.notifications import (
     queue_email_notification,
     schedule_email_notification,
 )
+from app.core.middleware.rate_limit import limiter
+from app.core.cache.redis_cache import (
+    cache,
+    cache_manager,
+)  # Task 5: Redis Caching Imports
+
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -17,6 +23,7 @@ router = APIRouter(prefix="/comments", tags=["Comments"])
 def get_comment_service(db: Session = Depends(get_db)) -> CommentService:
     """Provide a CommentService instance for route handlers."""
     return CommentService(db)
+
 
 # إذا لم يكن هناك حد زمني للتعديل، نترك EDIT_WINDOW فارغاً
 EDIT_WINDOW: Optional[timedelta] = None
@@ -28,7 +35,9 @@ EDIT_WINDOW: Optional[timedelta] = None
 @router.post(
     "/", status_code=status.HTTP_201_CREATED, response_model=schemas.CommentOut
 )
+@limiter.limit("30/minute")
 async def create_comment(
+    request: Request,
     background_tasks: BackgroundTasks,
     comment: schemas.CommentCreate,
     current_user: User = Depends(oauth2.get_current_user),
@@ -38,6 +47,7 @@ async def create_comment(
     Create a new comment.
 
     Parameters:
+      - request: HTTP request object (required for rate limiting).
       - comment: CommentCreate schema containing comment data.
       - background_tasks: For scheduling background tasks.
       - db: Database session.
@@ -54,7 +64,7 @@ async def create_comment(
     Returns:
       The newly created comment.
     """
-    return await service.create_comment(
+    result = await service.create_comment(
         schema=comment,
         current_user=current_user,
         background_tasks=background_tasks,
@@ -62,8 +72,16 @@ async def create_comment(
         schedule_email_fn=schedule_email_notification,
     )
 
+    # Task 5: Invalidate comments cache when a new comment is added
+    # Using a pattern to invalidate all sorted/paginated versions of the list
+    await cache_manager.invalidate("comments:list:*")
+
+    return result
+
 
 @router.get("/{post_id}", response_model=List[schemas.CommentOut])
+# Task 5: Add cache decorator (2 minutes TTL)
+@cache(prefix="comments:list", ttl=120)
 async def get_comments(
     post_id: int,
     current_user: User = Depends(oauth2.get_current_user),
@@ -130,7 +148,9 @@ def get_comment_replies(
 
 
 @router.put("/{comment_id}", response_model=schemas.Comment)
+@limiter.limit("20/hour")
 def update_comment(
+    request: Request,
     comment_id: int,
     updated_comment: schemas.CommentUpdate,
     current_user: User = Depends(oauth2.get_current_user),
@@ -140,6 +160,7 @@ def update_comment(
     Update an existing comment.
 
     Parameters:
+      - request: HTTP request object (required for rate limiting).
       - comment_id: ID of the comment to update.
       - updated_comment: New content for the comment.
       - db: Database session.
@@ -211,8 +232,13 @@ def get_comment_edit_history(
         current_user=current_user,
     )
 
-@router.post("/report", status_code=status.HTTP_201_CREATED, response_model=schemas.Report)
+
+@router.post(
+    "/report", status_code=status.HTTP_201_CREATED, response_model=schemas.Report
+)
+@limiter.limit("5/hour")
 def report_comment(
+    request: Request,
     report: schemas.ReportCreate,
     current_user: User = Depends(oauth2.get_current_user),
     service: CommentService = Depends(get_comment_service),
@@ -222,7 +248,9 @@ def report_comment(
 
 
 @router.post("/{comment_id}/like", status_code=status.HTTP_200_OK)
+@limiter.limit("60/minute")
 def like_comment(
+    request: Request,
     comment_id: int,
     service: CommentService = Depends(get_comment_service),
 ):
@@ -230,6 +258,7 @@ def like_comment(
     Like a comment.
 
     Parameters:
+      - request: HTTP request object (required for rate limiting).
       - comment_id: ID of the comment to like.
       - db: Database session.
       - current_user: The authenticated user.

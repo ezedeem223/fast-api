@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 
+
 from .. import models, schemas, oauth2
 from app.core.database import get_db
+from app.core.middleware.rate_limit import limiter
+
 
 router = APIRouter(prefix="/reactions", tags=["Reactions"])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Reaction)
+@limiter.limit("60/minute")
 def create_reaction(
+    request: Request,
     reaction: schemas.ReactionCreate,
     post_id: int = None,
     comment_id: int = None,
@@ -27,6 +32,7 @@ def create_reaction(
     it will be updated accordingly.
 
     Args:
+        request (Request): HTTP request object (required for rate limiting).
         reaction (schemas.ReactionCreate): Reaction data containing reaction_type.
         post_id (int, optional): ID of the post to react to.
         comment_id (int, optional): ID of the comment to react to.

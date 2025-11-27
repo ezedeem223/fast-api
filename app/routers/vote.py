@@ -1,4 +1,5 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, status, Request
+
 
 from .. import oauth2, schemas
 from app.core.database import get_db
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from ..notifications import queue_email_notification, schedule_email_notification
 from app.notifications import create_notification
 from app import notifications
+from app.core.middleware.rate_limit import limiter
+
 
 router = APIRouter(prefix="/vote", tags=["Vote"])
 
@@ -18,7 +21,9 @@ def get_vote_service(db: Session = Depends(get_db)) -> VoteService:
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
 def vote(
+    request: Request,
     vote: schemas.ReactionCreate,
     background_tasks: BackgroundTasks,
     service: VoteService = Depends(get_vote_service),

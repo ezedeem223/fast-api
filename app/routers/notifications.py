@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -15,8 +15,11 @@ from app.modules.notifications.service import (
 )
 from app.modules.notifications.analytics import NotificationAnalyticsService
 from app.firebase_config import send_push_notification  # Firebase push notifications
+from app.core.middleware.rate_limit import limiter
+
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
 
 # === Notifications Endpoints ===
 
@@ -97,7 +100,9 @@ async def get_notification_summary(
 
 
 @router.put("/{notification_id}/read")
+@limiter.limit("100/minute")
 async def mark_notification_as_read(
+    request: Request,
     notification_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -112,7 +117,9 @@ async def mark_notification_as_read(
 
 
 @router.put("/read-all")
+@limiter.limit("10/minute")
 async def mark_all_notifications_as_read(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
@@ -125,7 +132,9 @@ async def mark_all_notifications_as_read(
 
 
 @router.put("/{notification_id}/archive")
+@limiter.limit("50/minute")
 async def archive_notification(
+    request: Request,
     notification_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -141,7 +150,9 @@ async def archive_notification(
 
 
 @router.delete("/{notification_id}")
+@limiter.limit("50/minute")
 async def delete_notification(
+    request: Request,
     notification_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -173,7 +184,9 @@ async def get_notification_preferences(
 
 
 @router.put("/preferences", response_model=schemas.NotificationPreferencesOut)
+@limiter.limit("20/hour")
 async def update_notification_preferences(
+    request: Request,
     preferences: schemas.NotificationPreferencesUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -250,7 +263,9 @@ async def get_delivery_statistics(
 
 
 @router.post("/test-channels")
+@limiter.limit("5/hour")
 async def test_notification_channels(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
     background_tasks: BackgroundTasks = None,
@@ -264,7 +279,9 @@ async def test_notification_channels(
 
 
 @router.post("/bulk", response_model=List[schemas.NotificationOut])
+@limiter.limit("5/hour")
 async def create_bulk_notifications(
+    request: Request,
     notifications: List[schemas.NotificationCreate],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -279,7 +296,9 @@ async def create_bulk_notifications(
 
 
 @router.put("/cleanup")
+@limiter.limit("3/day")
 async def cleanup_old_notifications(
+    request: Request,
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
@@ -297,7 +316,9 @@ async def cleanup_old_notifications(
 
 
 @router.post("/retry")
+@limiter.limit("10/hour")
 async def retry_failed_notifications(
+    request: Request,
     notification_ids: List[int],
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -318,7 +339,9 @@ async def retry_failed_notifications(
 
 
 @router.post("/send-push")
+@limiter.limit("100/hour")
 async def send_push(
+    request: Request,
     notification: schemas.PushNotification,
     current_user: models.User = Depends(oauth2.get_current_user),
 ):

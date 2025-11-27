@@ -30,6 +30,10 @@ from app.modules.utils.content import (
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
 from app.services.reporting import submit_report
+from app.core.database.query_helpers import (
+    optimize_post_query,
+    paginate_query,
+)
 
 
 def _create_pdf(post: models.Post):
@@ -60,11 +64,13 @@ def _create_pdf(post: models.Post):
         return BytesIO(result.getvalue())
     return None
 
+
 HTTP_422_UNPROCESSABLE_CONTENT = getattr(
     status, "HTTP_422_UNPROCESSABLE_CONTENT", HTTPStatus.UNPROCESSABLE_ENTITY
 )
 
 logger = logging.getLogger(__name__)
+
 
 class PostService:
     def __init__(self, db: Session):
@@ -76,7 +82,10 @@ class PostService:
         """Ensure ORM posts expose the virtual fields expected by schemas."""
         owner = owner or getattr(post, "owner", None)
         default_privacy = getattr(owner, "privacy_level", schemas.PrivacyLevel.PUBLIC)
-        if not hasattr(post, "privacy_level") or getattr(post, "privacy_level", None) is None:
+        if (
+            not hasattr(post, "privacy_level")
+            or getattr(post, "privacy_level", None) is None
+        ):
             setattr(post, "privacy_level", default_privacy)
         if not hasattr(post, "poll_data"):
             setattr(post, "poll_data", None)
@@ -165,7 +174,9 @@ class PostService:
         analyze_requested = getattr(payload, "analyze_content", False)
         if analyze_requested:
             if analyze_content_fn is None:
-                raise HTTPException(status_code=500, detail="Content analysis service is unavailable")
+                raise HTTPException(
+                    status_code=500, detail="Content analysis service is unavailable"
+                )
             analysis_result = analyze_content_fn(payload.content)
             new_post.sentiment = analysis_result["sentiment"]["sentiment"]
             new_post.sentiment_score = analysis_result["sentiment"]["score"]
@@ -174,15 +185,15 @@ class PostService:
         is_offensive, confidence = is_content_offensive(new_post.content)
         if is_offensive:
             new_post.is_flagged = True
-            new_post.flag_reason = (
-                f"AI detected potentially offensive content (confidence: {confidence:.2f})"
-            )
+            new_post.flag_reason = f"AI detected potentially offensive content (confidence: {confidence:.2f})"
 
         self.db.add(new_post)
         self.db.commit()
         self.db.refresh(new_post)
 
-        log_user_event(self.db, current_user.id, "create_post", {"post_id": new_post.id})
+        log_user_event(
+            self.db, current_user.id, "create_post", {"post_id": new_post.id}
+        )
 
         queue_email_fn(
             background_tasks,
@@ -269,7 +280,9 @@ class PostService:
             comment_data = comment.__dict__.copy()
             comment_data["replies"] = []
             comment_data["reactions"] = [
-                schemas.Reaction(id=r.id, user_id=r.user_id, reaction_type=r.reaction_type)
+                schemas.Reaction(
+                    id=r.id, user_id=r.user_id, reaction_type=r.reaction_type
+                )
                 for r in comment.reactions
             ]
             comment_data["reaction_counts"] = self._get_comment_reaction_counts(
@@ -302,7 +315,9 @@ class PostService:
             owner_id=post.owner_id,
             owner=post.owner,
             reactions=[
-                schemas.Reaction(id=r.id, user_id=r.user_id, reaction_type=r.reaction_type)
+                schemas.Reaction(
+                    id=r.id, user_id=r.user_id, reaction_type=r.reaction_type
+                )
                 for r in post.reactions
             ],
             reaction_counts=[
@@ -326,9 +341,7 @@ class PostService:
         post_out.content = await translator_fn(
             post.content, current_user, post.language
         )
-        post_out.title = await translator_fn(
-            post.title, current_user, post.language
-        )
+        post_out.title = await translator_fn(post.title, current_user, post.language)
         return post_out
 
     def search_posts(
@@ -349,7 +362,9 @@ class PostService:
         posts = query.all()
         return [schemas.PostOut.model_validate(post) for post in posts]
 
-    def get_scheduled_posts(self, *, current_user: models.User) -> List[schemas.PostOut]:
+    def get_scheduled_posts(
+        self, *, current_user: models.User
+    ) -> List[schemas.PostOut]:
         scheduled_posts = (
             self.db.query(models.Post)
             .filter(
@@ -465,7 +480,9 @@ class PostService:
         analyze_requested = getattr(payload, "analyze_content", False)
         if analyze_requested:
             if analyze_content_fn is None:
-                raise HTTPException(status_code=500, detail="Content analysis service is unavailable")
+                raise HTTPException(
+                    status_code=500, detail="Content analysis service is unavailable"
+                )
             analysis_result = analyze_content_fn(payload.content)
             post.sentiment = analysis_result["sentiment"]["sentiment"]
             post.sentiment_score = analysis_result["sentiment"]["score"]
@@ -487,12 +504,12 @@ class PostService:
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail='User is not verified.',
+                detail="User is not verified.",
             )
 
         media_dir.mkdir(parents=True, exist_ok=True)
         file_location = media_dir / file.filename
-        with open(file_location, 'wb+') as file_object:
+        with open(file_location, "wb+") as file_object:
             file_object.write(file.file.read())
 
         new_post = models.Post(
@@ -509,7 +526,7 @@ class PostService:
         queue_email_fn(
             background_tasks,
             to=current_user.email,
-            subject='New Short Video Created',
+            subject="New Short Video Created",
             body=f"Your short video '{new_post.title}' has been created successfully.",
         )
         return self._prepare_post_response(new_post, current_user)
@@ -642,7 +659,9 @@ class PostService:
         self.db.commit()
 
         update_repost_statistics(self.db, post_id)
-        send_repost_notification(self.db, original_post.owner_id, current_user.id, new_post.id)
+        send_repost_notification(
+            self.db, original_post.owner_id, current_user.id, new_post.id
+        )
 
         if new_post.share_scope == "community" and new_post.community_id:
             self._notify_community_members(new_post)
@@ -768,7 +787,9 @@ class PostService:
         self.db.refresh(post)
         return self._prepare_post_response(post, current_user)
 
-    def toggle_archive_post(self, *, post_id: int, current_user: models.User) -> schemas.PostOut:
+    def toggle_archive_post(
+        self, *, post_id: int, current_user: models.User
+    ) -> schemas.PostOut:
         post_query = self.db.query(models.Post).filter(models.Post.id == post_id)
         post = post_query.first()
         if post is None:
@@ -796,7 +817,9 @@ class PostService:
     ) -> schemas.PostOut:
         post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
         if not post:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
+            )
         if post.owner_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -839,19 +862,46 @@ class PostService:
         translate: bool,
         translator_fn,
     ) -> list[schemas.PostOut]:
-        posts = (
+        """
+        List posts with optimized eager loading to prevent N+1 queries.
+
+        Improvements:
+        - Eager loading of owner and related data
+        - Better query structure
+        - Proper pagination with validation
+        """
+
+        # Build base query with vote aggregation
+        query = (
             self.db.query(models.Post, func.count(models.Vote.user_id).label("votes"))
             .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
             .group_by(models.Post.id)
-            .filter(models.Post.title.contains(search))
-            .order_by(models.Post.score.desc())
-            .limit(limit)
-            .offset(skip)
-            .all()
         )
 
+        # Apply search filter if provided
+        if search:
+            query = query.filter(
+                models.Post.title.contains(search)
+                | models.Post.content.contains(search)
+            )
+
+        # Apply eager loading optimization (prevent N+1 queries)
+        # This loads owner, comments, reactions in efficient way
+        query = optimize_post_query(query)
+
+        # Order by score descending
+        query = query.order_by(models.Post.score.desc())
+
+        # Apply pagination with validation
+        query = paginate_query(query, skip, limit)
+
+        # Execute query
+        posts = query.all()
+
+        # Process results with optional translation
         result = []
         should_translate = translate and os.getenv("ENABLE_TRANSLATION", "1") == "1"
+
         for post_obj, _ in posts:
             if should_translate:
                 language = (
@@ -870,7 +920,9 @@ class PostService:
                     logger.warning(
                         "Skipping translation for post %s due to TypeError", post_obj.id
                     )
+
             result.append(schemas.PostOut.model_validate(post_obj))
+
         return result
 
     def export_post_as_pdf(self, *, post_id: int) -> bytes:
@@ -923,7 +975,9 @@ class PostService:
         self.db.add(new_post)
         self.db.commit()
         self.db.refresh(new_post)
-        log_user_event(self.db, current_user.id, "create_audio_post", {"post_id": new_post.id})
+        log_user_event(
+            self.db, current_user.id, "create_audio_post", {"post_id": new_post.id}
+        )
         queue_email_fn(
             background_tasks,
             to=current_user.email,
@@ -983,7 +1037,9 @@ class PostService:
             new_poll = models.Poll(post_id=new_post.id, end_date=payload.end_date)
             self.db.add(new_poll)
         self.db.commit()
-        log_user_event(self.db, current_user.id, "create_poll_post", {"post_id": new_post.id})
+        log_user_event(
+            self.db, current_user.id, "create_poll_post", {"post_id": new_post.id}
+        )
         queue_email_fn(
             background_tasks,
             to=current_user.email,
@@ -1047,7 +1103,9 @@ class PostService:
             raise HTTPException(status_code=404, detail="Poll not found")
         poll = self.db.query(models.Poll).filter(models.Poll.post_id == post_id).first()
         options = (
-            self.db.query(models.PollOption).filter(models.PollOption.post_id == post_id).all()
+            self.db.query(models.PollOption)
+            .filter(models.PollOption.post_id == post_id)
+            .all()
         )
         results = []
         total_votes = 0
@@ -1073,7 +1131,9 @@ class PostService:
             "post_id": post_id,
             "total_votes": total_votes,
             "results": results,
-            "is_ended": poll.end_date < datetime.now() if poll and poll.end_date else False,
+            "is_ended": (
+                poll.end_date < datetime.now() if poll and poll.end_date else False
+            ),
             "end_date": poll.end_date if poll else None,
         }
 

@@ -6,7 +6,7 @@ It includes functionalities for:
     - Searching, creating, updating, and deleting posts.
     - Uploading media files (images, audio, short videos).
     - Handling reposts, poll posts, comments, notifications, and exporting posts as PDF.
-    
+
 Helper functions and global constants are defined at the beginning to organize the code.
 """
 
@@ -25,6 +25,7 @@ from fastapi import (
     File,
     Query,
     Form,
+    Request,
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -38,6 +39,7 @@ import uuid
 from io import BytesIO
 from cachetools import TTLCache
 
+
 # Import local modules
 from .. import models, schemas, oauth2, notifications
 from app.core.config import settings
@@ -45,13 +47,22 @@ from app.core.database import get_db
 from ..analytics import analyze_content
 from app.notifications import queue_email_notification, schedule_email_notification
 from app.services.posts import PostService
+from app.core.middleware.rate_limit import limiter
+from app.core.cache.redis_cache import (
+    cache,
+    cache_manager,
+)  # Task 5: Redis Caching Imports
+
 
 # =====================================================
 # ==============  Global Constants  ===================
 # =====================================================
 
+
 router = APIRouter(prefix="/posts", tags=["Posts"])
-cache = TTLCache(maxsize=100, ttl=60)
+# Note: internal TTLCache is kept for local logic if needed,
+# but Redis is now the primary response cache.
+cache_local = TTLCache(maxsize=100, ttl=60)
 logger = logging.getLogger(__name__)
 
 
@@ -65,11 +76,14 @@ AUDIO_DIR = Path("static/audio_posts")
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
 MAX_AUDIO_DURATION = 300  # Maximum audio duration in seconds (5 minutes)
 
+
 TWITTER_API_URL = "https://api.twitter.com/2/tweets"
 TWITTER_BEARER_TOKEN = "YOUR_TWITTER_BEARER_TOKEN"
 
+
 FACEBOOK_API_URL = "https://graph.facebook.com/v11.0/me/feed"
 FACEBOOK_ACCESS_TOKEN = "YOUR_FACEBOOK_ACCESS_TOKEN"
+
 
 # =====================================================
 # ================  Helper Functions  =================
@@ -93,7 +107,9 @@ def share_on_twitter(content: str):
     }
     data = {"text": content}
     try:
-        response = requests.post(TWITTER_API_URL, headers=headers, json=data, timeout=10)
+        response = requests.post(
+            TWITTER_API_URL, headers=headers, json=data, timeout=10
+        )
         if response.status_code != 201:
             logger.warning("Twitter share failed: %s", response.text)
             if settings.environment.lower() == "production":
@@ -145,7 +161,10 @@ async def save_audio_file(file: UploadFile) -> str:
     Checks if the file extension is allowed and verifies the audio duration.
     Returns the file path if successful.
     """
-    from pydub import AudioSegment  # Local import avoids import-time warnings during tests
+    from pydub import (
+        AudioSegment,
+    )  # Local import avoids import-time warnings during tests
+
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     file_extension = os.path.splitext(file.filename)[1]
     if file_extension.lower() not in ALLOWED_AUDIO_EXTENSIONS:
@@ -175,7 +194,9 @@ def create_pdf(post: models.Post):
     Generates a PDF file from a post's content.
     Returns a BytesIO object containing the PDF data if successful.
     """
-    from xhtml2pdf import pisa  # Local import defers reportlab side effects during tests
+    from xhtml2pdf import (
+        pisa,
+    )  # Local import defers reportlab side effects during tests
 
     html = f"""
     <html>
@@ -222,6 +243,7 @@ def search_posts(
     """Search for posts based on keyword/category/hashtag filters."""
     return service.search_posts(search=search, current_user=current_user)
 
+
 @router.get("/{id}", response_model=schemas.PostOut)
 async def get_post(
     id: int,
@@ -235,15 +257,18 @@ async def get_post(
         translator_fn=get_translated_content_async,
     )
 
+
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut)
-def create_posts(
+@limiter.limit("15/minute")
+async def create_posts(
+    request: Request,
     background_tasks: BackgroundTasks,
     post: schemas.PostCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
     """Create a new post after validating content and triggering side-effects."""
-    return service.create_post(
+    result = service.create_post(
         background_tasks=background_tasks,
         payload=post,
         current_user=current_user,
@@ -256,6 +281,12 @@ def create_posts(
         analyze_content_fn=analyze_content,
     )
 
+    # Task 5: Invalidate cache list when new post is created
+    await cache_manager.invalidate("posts:list:*")
+
+    return result
+
+
 @router.get("/scheduled", response_model=List[schemas.PostOut])
 def get_scheduled_posts(
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -266,7 +297,9 @@ def get_scheduled_posts(
 
 
 @router.post("/upload_file/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
@@ -281,7 +314,9 @@ def upload_file(
 
 
 @router.post("/report/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 def report_post(
+    request: Request,
     report: schemas.ReportCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
@@ -309,7 +344,9 @@ def delete_post(
 
 
 @router.put("/{id}", response_model=schemas.Post)
+@limiter.limit("20/hour")
 def update_post(
+    request: Request,
     id: int,
     updated_post: schemas.PostCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -327,7 +364,9 @@ def update_post(
 
 
 @router.post("/short_videos/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 def create_short_video(
+    request: Request,
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -375,7 +414,9 @@ def get_comments(
     status_code=status.HTTP_201_CREATED,
     response_model=schemas.PostOut,
 )
+@limiter.limit("20/hour")
 def repost(
+    request: Request,
     post_id: int,
     repost_data: schemas.RepostCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -483,7 +524,9 @@ def get_posts_with_mentions(
 @router.post(
     "/audio", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut
 )
+@limiter.limit("10/hour")
 async def create_audio_post(
+    request: Request,
     background_tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(...),
@@ -524,7 +567,9 @@ def get_audio_posts(
 @router.post(
     "/poll", status_code=status.HTTP_201_CREATED, response_model=schemas.PostOut
 )
+@limiter.limit("10/hour")
 def create_poll_post(
+    request: Request,
     background_tasks: BackgroundTasks,
     poll: schemas.PollCreate,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -542,7 +587,9 @@ def create_poll_post(
 
 
 @router.post("/{post_id}/vote", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute")
 async def vote_in_poll(
+    request: Request,
     post_id: int,
     option_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -581,13 +628,18 @@ def archive_post(
 
 
 @router.get("/", response_model=List[schemas.PostOut])
+# Task 5: Add cache decorator
+@cache(prefix="posts:list", ttl=60, include_user=False)
 async def get_posts(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
     limit: int = 10,
     skip: int = 0,
     search: Optional[str] = "",
-    translate: bool = Query(False, description="Set to true to translate post title/content to the user's preferred language"),
+    translate: bool = Query(
+        False,
+        description="Set to true to translate post title/content to the user's preferred language",
+    ),
 ):
     """
     Retrieve posts along with aggregated vote counts.

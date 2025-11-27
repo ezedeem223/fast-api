@@ -27,6 +27,7 @@ from ..notifications import send_login_notification, queue_email_notification
 from app.modules.utils.events import log_user_event
 from app.modules.utils.security import hash as hash_password, verify
 from app.modules.users import UserService
+from app.core.middleware.rate_limit import limiter
 
 # =====================================================
 # =============== Global Constants ====================
@@ -36,7 +37,9 @@ MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 TOKEN_EXPIRY = timedelta(hours=1)
-DEFAULT_FRONTEND_URL = getattr(settings, "frontend_base_url", "https://yourapp.com").rstrip("/")
+DEFAULT_FRONTEND_URL = getattr(
+    settings, "frontend_base_url", "https://yourapp.com"
+).rstrip("/")
 
 
 def _build_frontend_link(path: str, token: str) -> str:
@@ -56,13 +59,18 @@ def _schedule_verification_email(background_tasks: BackgroundTasks, email: str) 
     fm = FastMail(settings.mail_config)
     background_tasks.add_task(fm.send_message, message)
 
+
 # =====================================================
 # ==================== Endpoints ======================
 # =====================================================
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut)
+@router.post(
+    "/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserOut
+)
+@limiter.limit("10/hour")
 async def register_user(
+    request: Request,
     payload: schemas.UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -78,19 +86,20 @@ async def register_user(
 
 
 @router.post("/login", response_model=schemas.Token)
+@limiter.limit("6/minute")
 def login(
+    request: Request,
     user_credentials: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
-    request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     User login endpoint.
 
     Parameters:
+        - request: HTTP request object (required for rate limiting).
         - user_credentials: User login credentials.
         - db: Database session.
-        - request: HTTP request.
         - background_tasks: Background tasks manager.
 
     Returns:
@@ -144,17 +153,19 @@ def login(
 
 
 @router.post("/login/2fa", response_model=schemas.Token)
+@limiter.limit("6/minute")
 def login_2fa(
+    request: Request,
     user_id: int,
     otp: schemas.Verify2FARequest,
     db: Session = Depends(get_db),
-    request: Request = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
     Login with Two-Factor Authentication.
 
     Parameters:
+        - request: HTTP request object (required for rate limiting).
         - user_id: User ID.
         - otp: One-time password.
 
@@ -317,7 +328,9 @@ def create_password_reset_token(email: str) -> str:
 
 
 @router.post("/reset-password-request")
+@limiter.limit("3/hour")
 async def reset_password_request(
+    request: Request,
     email: schemas.EmailSchema,
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -438,7 +451,9 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification")
+@limiter.limit("3/hour")
 async def resend_verification_email(
+    request: Request,
     email: schemas.EmailSchema,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -601,7 +616,9 @@ async def set_security_questions(
     """
     Set security questions for the user by encrypting the answers.
     """
-    encrypted_answers = {q.question: hash_password(q.answer) for q in questions.questions}
+    encrypted_answers = {
+        q.question: hash_password(q.answer) for q in questions.questions
+    }
     current_user.security_questions = encrypted_answers
     db.commit()
     log_user_event(db, current_user.id, "security_questions_set")

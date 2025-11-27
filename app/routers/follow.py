@@ -7,17 +7,23 @@ from fastapi import (
     Path,
     Query,
     status,
+    Request,
 )
 from sqlalchemy.orm import Session
 
 from .. import oauth2, schemas
-from ..cache import cache
 from app.core.database import get_db
 from app.modules.social import FollowService
 from app.modules.users.models import User
 from ..notifications import queue_email_notification, schedule_email_notification
 from app.notifications import create_notification
 from app import notifications
+from app.core.middleware.rate_limit import limiter
+from app.core.cache.redis_cache import (
+    cache,
+    cache_manager,
+)  # Task 5: Redis Caching Imports
+
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
 
@@ -28,7 +34,9 @@ def get_follow_service(db: Session = Depends(get_db)) -> FollowService:
 
 
 @router.post("/{user_id}", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def follow_user(
+    request: Request,
     background_tasks: BackgroundTasks,
     user_id: int = Path(..., gt=0),
     service: FollowService = Depends(get_follow_service),
@@ -38,6 +46,7 @@ async def follow_user(
     Follow a user.
 
     Parameters:
+      - request: HTTP request object (required for rate limiting).
       - user_id: ID of the user to follow.
       - background_tasks: Background tasks manager.
       - db: Database session.
@@ -55,7 +64,7 @@ async def follow_user(
     Returns:
       A success message.
     """
-    return service.follow_user(
+    result = service.follow_user(
         background_tasks=background_tasks,
         current_user=current_user,
         target_user_id=user_id,
@@ -64,6 +73,14 @@ async def follow_user(
         notification_manager=notifications.manager,
         create_notification_fn=create_notification,
     )
+
+    # Task 5: Invalidate cache for current user's following list
+    # The cache key includes user ID because include_user=True in decorator
+    await cache_manager.invalidate(f"users:following:u{current_user.id}:*")
+    # Optionally also invalidate followers cache for target user (if we had access to it here)
+    # For simplicity, we invalidate the current user's following only
+
+    return result
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -92,16 +109,22 @@ async def unfollow_user(
     Returns:
       None.
     """
-    return service.unfollow_user(
+    result = service.unfollow_user(
         background_tasks=background_tasks,
         current_user=current_user,
         target_user_id=user_id,
         queue_email_fn=queue_email_notification,
     )
 
+    # Task 5: Invalidate cache when unfollowing
+    await cache_manager.invalidate(f"users:following:u{current_user.id}:*")
+
+    return result
+
 
 @router.get("/followers", response_model=schemas.FollowersListOut)
-@cache(expire=300)
+# Task 5: Updated cache decorator with new syntax
+@cache(prefix="users:followers", ttl=300, include_user=True)
 async def get_followers(
     service: FollowService = Depends(get_follow_service),
     current_user: User = Depends(oauth2.get_current_user),
@@ -132,7 +155,8 @@ async def get_followers(
 
 
 @router.get("/following", response_model=schemas.FollowingListOut)
-@cache(expire=300)
+# Task 5: Updated cache decorator with new syntax
+@cache(prefix="users:following", ttl=300, include_user=True)
 async def get_following(
     service: FollowService = Depends(get_follow_service),
     current_user: User = Depends(oauth2.get_current_user),

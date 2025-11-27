@@ -8,11 +8,9 @@ from pathlib import Path
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, Request, status, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -22,22 +20,25 @@ from app import models, oauth2
 from app.api.router import api_router
 from app.api.websocket import router as websocket_router
 from app.core.config import settings
-from app.core.database import get_db
-from app.core.middleware import add_language_header, ip_ban_middleware, language_middleware
+from app.core.database import get_db, engine
+from app.core.middleware import (
+    add_language_header,
+    ip_ban_middleware,
+    language_middleware,
+)
 from app.core.scheduling import register_startup_tasks
 from app.i18n import ALL_LANGUAGES, get_locale, translate_text
 from app.modules.utils.content import train_content_classifier
 from app.notifications import ConnectionManager
-from app.routers import community
+from app.core.middleware.rate_limit import limiter
+from app.core.logging_config import setup_logging
+from app.core.middleware.logging_middleware import LoggingMiddleware
+from app.core.error_handlers import register_exception_handlers
+from app.core.cache.redis_cache import cache_manager
+from app.core.monitoring import setup_monitoring  # Task 7: Import Monitoring
 
 logger = logging.getLogger(__name__)
 manager = ConnectionManager()
-
-ERROR_MESSAGE_OVERRIDES = {
-    "\u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0627\u0639\u062a\u0645\u0627\u062f \u063a\u064a\u0631 \u0635\u0627\u0644\u062d\u0629": "Invalid Credentials",
-    "\u0627\u0644\u062d\u0633\u0627\u0628 \u0645\u0648\u0642\u0648\u0641": "Account is suspended",
-    "\u062a\u0645 \u0642\u0641\u0644 \u0627\u0644\u062d\u0633\u0627\u0628. \u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649 \u0644\u0627\u062d\u0642\u0627\u064b": "Account locked. Please try again later.",
-}
 
 
 class CachedStaticFiles(StaticFiles):
@@ -64,6 +65,10 @@ def _configure_app(app: FastAPI) -> None:
     if allowed_hosts and not (len(allowed_hosts) == 1 and allowed_hosts[0] == "*"):
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
+    # Task 4: Add Logging Middleware
+    # Logs all requests and responses with timing
+    app.add_middleware(LoggingMiddleware)
+
     origins = settings.cors_origins or ["*"]
     app.add_middleware(
         CORSMiddleware,
@@ -72,11 +77,14 @@ def _configure_app(app: FastAPI) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
     app.include_router(api_router)
     app.include_router(websocket_router)
+
     app.middleware("http")(language_middleware)
     app.middleware("http")(add_language_header)
     app.middleware("http")(ip_ban_middleware)
+
     _mount_static_files(app)
     register_startup_tasks(app)
 
@@ -86,14 +94,49 @@ def _register_routes(app: FastAPI) -> None:
     async def root():
         return {"message": "Hello, World!"}
 
+    # Task 8: Liveness Check (Is the app process running?)
     @app.get("/livez", tags=["Health"])
     async def livez():
         return {"status": "ok"}
 
+    # Task 8: Readiness Check (Are dependencies like DB and Redis ready?)
     @app.get("/readyz", tags=["Health"])
-    def readyz(db: Session = Depends(get_db)):
-        db.execute(text("SELECT 1"))
-        return {"status": "ok"}
+    async def readyz(db: Session = Depends(get_db)):
+        health_status = {"database": "unknown", "redis": "unknown"}
+        is_ready = True
+
+        # 1. Check Database
+        try:
+            db.execute(text("SELECT 1"))
+            health_status["database"] = "connected"
+        except Exception as e:
+            logger.error(f"Readiness check failed (Database): {e}")
+            health_status["database"] = "disconnected"
+            is_ready = False
+
+        # 2. Check Redis
+        try:
+            if cache_manager.redis:
+                await cache_manager.redis.ping()
+                health_status["redis"] = "connected"
+            else:
+                # If Redis is not enabled/configured, consider it skipped/disconnected based on strictness
+                if settings.redis_url:
+                    health_status["redis"] = "disconnected (client not init)"
+                    is_ready = False
+                else:
+                    health_status["redis"] = "skipped"
+        except Exception as e:
+            logger.error(f"Readiness check failed (Redis): {e}")
+            health_status["redis"] = "disconnected"
+            is_ready = False
+
+        if not is_ready:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=health_status
+            )
+
+        return {"status": "ready", "details": health_status}
 
     @app.get("/protected-resource")
     def protected_resource(
@@ -104,6 +147,30 @@ def _register_routes(app: FastAPI) -> None:
             "message": "You have access to this protected resource",
             "user_id": current_user.id,
         }
+
+    @app.get("/healthz/database")
+    async def database_health_check(db: Session = Depends(get_db)):
+        """
+        Check database connection health.
+        """
+        try:
+            # Test simple query
+            db.execute(text("SELECT 1"))
+
+            # Test connection pool stats
+            pool = engine.pool
+            pool_status = {
+                "pool_size": pool.size(),
+                "checked_in": pool.checkedin(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+                "total_connections": pool.size() + pool.overflow(),
+            }
+
+            return {"status": "healthy", "database": "connected", "pool": pool_status}
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
 
 def _mount_static_files(app: FastAPI) -> None:
@@ -155,97 +222,78 @@ def _mount_static_files(app: FastAPI) -> None:
         }
 
 
-def _register_exception_handlers(app: FastAPI) -> None:
-    http_422 = getattr(
-        status, "HTTP_422_UNPROCESSABLE_CONTENT", HTTPStatus.UNPROCESSABLE_ENTITY
-    )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        logger.error("ValidationError for request: %s", request.url.path)
-        logger.error("Error details: %s", exc.errors())
-
-        if request.url.path == "/communities/user-invitations":
-            try:
-                db = next(get_db())
-                auth_header = request.headers.get("Authorization")
-                if not auth_header or not auth_header.startswith("Bearer "):
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Invalid authorization header",
-                    )
-                token = auth_header.split(" ")[1]
-                current_user = oauth2.get_current_user(token, db)
-                return await community.get_user_invitations(request, db, current_user)
-            except HTTPException as he:
-                logger.error("HTTP Exception in user-invitations: %s", he)
-                return JSONResponse(
-                    status_code=he.status_code, content={"detail": he.detail}
-                )
-            except Exception as err:
-                logger.exception("Error handling user-invitations: %s", err)
-                return JSONResponse(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content={"detail": "Internal server error"},
-                )
-
-        if request.url.path.startswith("/communities"):
-            path_segments = request.url.path.split("/")
-            if len(path_segments) > 2 and path_segments[2].isdigit():
-                return JSONResponse(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    content={"detail": "Community not found"},
-                )
-
-        return JSONResponse(
-            status_code=http_422,
-            content={"detail": exc.errors()},
-        )
-
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        detail = exc.detail
-        if isinstance(detail, str):
-            detail = ERROR_MESSAGE_OVERRIDES.get(detail, detail)
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": detail},
-            headers=exc.headers,
-        )
-
-
 def _lifespan_factory():
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Startup
         app.state.connection_manager = manager
+        await cache_manager.init_cache()  # ← تهيئة Redis
+
         yield
+
+        # Shutdown
+        await cache_manager.close()  # ← إغلاق Redis
 
     return lifespan
 
+
 def _maybe_train_classifier() -> None:
-    if (
-        settings.environment.lower() != "test"
-        and not (
-            Path("content_classifier.joblib").exists()
-            and Path("content_vectorizer.joblib").exists()
-        )
+    if settings.environment.lower() != "test" and not (
+        Path("content_classifier.joblib").exists()
+        and Path("content_vectorizer.joblib").exists()
     ):
         train_content_classifier()
 
 
 def create_app() -> FastAPI:
+    """
+    Application Factory to create and configure the FastAPI application.
+    Integrates Logging, Error Handling, Rate Limiting, and Middleware.
+    """
+
+    # Task 4: Setup Logging System first
+    setup_logging(
+        log_level=getattr(settings, "log_level", "INFO"),
+        log_dir=getattr(settings, "log_dir", "logs"),
+        app_name="fast-api",
+        max_bytes=10 * 1024 * 1024,  # 10 MB
+        backup_count=5,
+        use_json=getattr(settings, "use_json_logs", False),
+        use_colors=True,
+    )
+
     _maybe_train_classifier()
     lifespan = _lifespan_factory()
+
     app = FastAPI(
         title="Your API",
         description="API for social media platform with comment filtering and sorting",
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    # Configure App State
     app.state.default_language = settings.default_language
+    app.state.environment = settings.environment
+
+    # Task 2: Initialize Rate Limiter
+    # Note: The exception handler for RateLimitExceeded is now handled
+    # globally in register_exception_handlers (Task 3)
+    app.state.limiter = limiter
+
+    # Configure Middleware and Routes
     _configure_app(app)
     _register_routes(app)
-    _register_exception_handlers(app)
+
+    # Task 3: Register Unified Exception Handlers
+    # This replaces the old _register_exception_handlers function
+    register_exception_handlers(app)
+
+    # Task 7: Setup Monitoring (Prometheus)
+    setup_monitoring(app)
+
+    logger.info("Application startup complete")
+
     return app
 
 
