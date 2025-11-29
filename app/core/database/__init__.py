@@ -36,14 +36,32 @@ elif "sqlite" in SQLALCHEMY_DATABASE_URL:
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     poolclass=QueuePool,
-    pool_size=20,
-    max_overflow=30,
-    pool_timeout=30,
-    pool_recycle=3600,
-    pool_pre_ping=True,
-    echo=False,
-    connect_args=connect_args,
+    # تحسين Pool Settings
+    pool_size=20,  # عدد الاتصالات الدائمة
+    max_overflow=10,  # اتصالات إضافية (خفضناها من 30 إلى 10)
+    pool_timeout=30,  # وقت الانتظار قبل الفشل
+    pool_recycle=3600,  # إعادة تدوير الاتصال كل ساعة
+    pool_pre_ping=True,  # فحص الاتصال قبل الاستخدام
+    # تحسينات الأداء
+    echo=False,  # تعطيل SQL logging في الإنتاج
+    echo_pool=False,  # تعطيل pool logging
+    pool_reset_on_return="rollback",  # إعادة تعيين عند الإرجاع
+    # تحسينات PostgreSQL
+    connect_args=(
+        {
+            **connect_args,
+            "server_settings": {
+                "jit": "off",  # تعطيل JIT للاستعلامات الأسرع
+                "timezone": "utc",  # التوقيت الموحد
+            },
+            "statement_cache_size": 100,  # حجم cache للـ prepared statements
+            "prepared_statement_cache_size": 100,
+        }
+        if "postgresql" in SQLALCHEMY_DATABASE_URL
+        else connect_args
+    ),
 )
+
 
 # 2. إنشاء الـ SessionLocal
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

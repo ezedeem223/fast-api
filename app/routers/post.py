@@ -39,7 +39,6 @@ import uuid
 from io import BytesIO
 from cachetools import TTLCache
 
-
 # Import local modules
 from .. import models, schemas, oauth2, notifications
 from app.core.config import settings
@@ -283,6 +282,7 @@ async def create_posts(
 
     # Task 5: Invalidate cache list when new post is created
     await cache_manager.invalidate("posts:list:*")
+    await cache_manager.invalidate(f"user:profile:*{current_user.id}*")
 
     return result
 
@@ -333,19 +333,24 @@ def report_post(
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(
+async def delete_post(
     id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
     """Delete a post if the requester is the owner."""
     service.delete_post(post_id=id, current_user=current_user)
+
+    # Invalidate caches
+    await cache_manager.invalidate("posts:list:*")
+    await cache_manager.invalidate(f"post:{id}")
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put("/{id}", response_model=schemas.Post)
 @limiter.limit("20/hour")
-def update_post(
+async def update_post(
     request: Request,
     id: int,
     updated_post: schemas.PostCreate,
@@ -355,12 +360,18 @@ def update_post(
     """
     Update an existing post with new content and information using the shared service layer.
     """
-    return service.update_post(
+    result = service.update_post(
         post_id=id,
         payload=updated_post,
         current_user=current_user,
         analyze_content_fn=analyze_content,
     )
+
+    # Invalidate caches
+    await cache_manager.invalidate("posts:list:*")
+    await cache_manager.invalidate(f"post:{id}")
+
+    return result
 
 
 @router.post("/short_videos/", status_code=status.HTTP_201_CREATED)

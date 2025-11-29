@@ -11,6 +11,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from typing import List
 
+
 # Importing local modules
 from .. import models, schemas, oauth2
 from app.modules.users import UserService
@@ -23,6 +24,8 @@ from ..i18n import (
     ALL_LANGUAGES,
     get_translated_content,
 )  # Assuming get_translated_content is defined here
+from app.core.cache.redis_cache import cache, cache_manager  # أضف في الـ imports
+
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -126,7 +129,8 @@ def update_public_key(
 
 
 @router.get("/{id}", response_model=schemas.UserOut)
-def get_user(
+@cache(prefix="user:profile", ttl=300, include_user=False)  # ← أضف هذا
+async def get_user(
     id: int,
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
@@ -188,7 +192,7 @@ async def get_user_content(
 
 
 @router.put("/profile", response_model=schemas.UserProfileOut)
-def update_user_profile(
+async def update_user_profile(
     profile_update: schemas.UserProfileUpdate,
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
@@ -199,6 +203,10 @@ def update_user_profile(
     """
     updated_profile = service.update_profile(current_user, profile_update)
     log_user_event(service.db, current_user.id, "update_profile")
+
+    # Invalidate user cache
+    await cache_manager.invalidate(f"user:profile:*{current_user.id}*")
+
     return updated_profile
 
 
@@ -311,6 +319,10 @@ async def upload_profile_image(
     Upload the user's profile image.
     """
     service.upload_profile_image(current_user, file)
+
+    # Invalidate user cache
+    await cache_manager.invalidate(f"user:profile:*{current_user.id}*")
+
     return {"info": "Profile image uploaded successfully."}
 
 
@@ -483,8 +495,6 @@ def mark_notification_as_read(
     return service.mark_notification_as_read(notification_id, current_user)
 
 
-
-
 @router.post("/users/{user_id}/suspend")
 def suspend_user(
     user_id: int,
@@ -530,4 +540,3 @@ def get_language_options():
     Get available language options.
     """
     return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]
-

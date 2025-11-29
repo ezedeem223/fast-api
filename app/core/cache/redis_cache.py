@@ -14,6 +14,7 @@ import redis.asyncio as redis
 from fastapi import Request, Response
 
 from app.core.config import settings
+import asyncio  # أضف هذا في قسم الـ imports في أعلى الملف
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,136 @@ class RedisCache:
             logger.info(f"Invalidated cache pattern: {pattern}")
         except Exception as e:
             logger.error(f"Cache invalidation error for pattern {pattern}: {e}")
+
+    async def set_many(self, items: dict, ttl: int = None) -> None:
+        """Set multiple key-value pairs at once."""
+        if not self.enabled or not self.redis:
+            return
+        try:
+            pipe = self.redis.pipeline()
+            for key, value in items.items():
+                serialized = json.dumps(value, default=str)
+                pipe.set(key, serialized, ex=ttl or self.default_ttl)
+            await pipe.execute()
+        except Exception as e:
+            logger.error(f"Cache set_many error: {e}")
+
+    async def get_many(self, keys: list) -> dict:
+        """Get multiple values at once."""
+        if not self.enabled or not self.redis:
+            return {}
+        try:
+            pipe = self.redis.pipeline()
+            for key in keys:
+                pipe.get(key)
+            results = await pipe.execute()
+
+            return {
+                key: json.loads(value) if value else None
+                for key, value in zip(keys, results)
+            }
+        except Exception as e:
+            logger.error(f"Cache get_many error: {e}")
+            return {}
+
+    async def exists(self, key: str) -> bool:
+        """Check if key exists in cache."""
+        if not self.enabled or not self.redis:
+            return False
+        try:
+            return await self.redis.exists(key) > 0
+        except Exception as e:
+            logger.error(f"Cache exists error for key {key}: {e}")
+            return False
+
+    async def increment(self, key: str, amount: int = 1) -> int:
+        """Increment a counter in cache."""
+        if not self.enabled or not self.redis:
+            return 0
+        try:
+            return await self.redis.incrby(key, amount)
+        except Exception as e:
+            logger.error(f"Cache increment error for key {key}: {e}")
+            return 0
+
+    async def set_with_tags(
+        self, key: str, value: Any, tags: list, ttl: int = None
+    ) -> None:
+        """Set a value with associated tags for grouped invalidation."""
+        if not self.enabled or not self.redis:
+            return
+        try:
+            # Store the actual value
+            await self.set(key, value, ttl)
+
+            # Store tag associations
+            pipe = self.redis.pipeline()
+            for tag in tags:
+                tag_key = f"tag:{tag}"
+                pipe.sadd(tag_key, key)
+                if ttl:
+                    pipe.expire(tag_key, ttl)
+            await pipe.execute()
+        except Exception as e:
+            logger.error(f"Cache set_with_tags error for key {key}: {e}")
+
+    async def invalidate_by_tag(self, tag: str) -> None:
+        """Invalidate all keys associated with a tag."""
+        if not self.enabled or not self.redis:
+            return
+        try:
+            tag_key = f"tag:{tag}"
+            keys = await self.redis.smembers(tag_key)
+            if keys:
+                await self.redis.delete(*keys)
+                await self.redis.delete(tag_key)
+            logger.info(f"Invalidated cache by tag: {tag}")
+        except Exception as e:
+            logger.error(f"Cache invalidation by tag error for {tag}: {e}")
+
+    # ===== Helper Functions =====
+
+
+def cache_key_user(prefix: str, user_id: int, **kwargs) -> str:
+    """Generate cache key for user-specific data."""
+    params = "_".join(f"{k}={v}" for k, v in sorted(kwargs.items()))
+    return f"{prefix}:user:{user_id}:{params}" if params else f"{prefix}:user:{user_id}"
+
+
+def cache_key_list(prefix: str, **kwargs) -> str:
+    """Generate cache key for list data."""
+    params = "_".join(f"{k}={v}" for k, v in sorted(kwargs.items()))
+    return f"{prefix}:list:{params}" if params else f"{prefix}:list"
+
+
+async def cached_query(cache_key: str, query_fn, ttl: int = 300, tags: list = None):
+    """
+    Generic function to cache query results.
+
+    Usage:
+        posts = await cached_query(
+            cache_key="posts:user:123",
+            query_fn=lambda: db.query(Post).filter(...).all(),
+            ttl=600,
+            tags=["posts", "user:123"]
+        )
+    """
+    # Try to get from cache
+    cached_data = await cache_manager.get(cache_key)
+    if cached_data is not None:
+        logger.debug(f"Cache hit: {cache_key}")
+        return cached_data
+
+    # Execute query
+    result = await query_fn() if asyncio.iscoroutinefunction(query_fn) else query_fn()
+
+    # Store in cache
+    if tags:
+        await cache_manager.set_with_tags(cache_key, result, tags, ttl)
+    else:
+        await cache_manager.set(cache_key, result, ttl)
+
+    return result
 
 
 # Global cache instance

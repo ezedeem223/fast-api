@@ -16,6 +16,7 @@ from app.modules.notifications.service import (
 from app.modules.notifications.analytics import NotificationAnalyticsService
 from app.firebase_config import send_push_notification  # Firebase push notifications
 from app.core.middleware.rate_limit import limiter
+from app.core.cache.redis_cache import cache, cache_manager  # أضف هذا
 
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
 @router.get("/", response_model=List[schemas.NotificationOut])
+@cache(prefix="notifications", ttl=60, include_user=True)  # ← أضف هذا
 async def get_notifications(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -55,48 +57,19 @@ async def get_notifications(
     return await notification_service.execute_query(query, skip, limit)
 
 
-@router.get("/feed", response_model=schemas.NotificationFeedResponse)
-async def get_notification_feed(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    cursor: Optional[int] = Query(None, ge=1),
-    limit: int = Query(25, ge=1, le=100),
-    include_read: bool = False,
-    include_archived: bool = False,
-    category: Optional[NotificationCategory] = None,
-    priority: Optional[NotificationPriority] = None,
-    status: Optional[NotificationStatus] = None,
-    mark_seen: bool = True,
-    mark_read: bool = False,
-):
-    """
-    Provide a cursor-based feed for the in-app notifications center.
-    """
-    notification_service = NotificationService(db)
-    return await notification_service.get_notification_feed(
-        user_id=current_user.id,
-        cursor=cursor,
-        limit=limit,
-        include_read=include_read,
-        include_archived=include_archived,
-        category=category,
-        priority=priority,
-        status=status,
-        mark_seen=mark_seen,
-        mark_read=mark_read,
-    )
-
-
-@router.get("/summary", response_model=schemas.NotificationSummary)
-async def get_notification_summary(
+@router.get("/unread-count", response_model=Dict[str, int])
+async def get_unread_count(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    Return badge-friendly counts of unread and unseen notifications.
+    الحصول على عدد الإشعارات غير المقروءة
+    Get the count of unread notifications.
     """
     notification_service = NotificationService(db)
-    return await notification_service.get_unread_summary(current_user.id)
+    return {
+        "unread_count": await notification_service.get_unread_count(current_user.id)
+    }
 
 
 @router.put("/{notification_id}/read")
@@ -108,15 +81,19 @@ async def mark_notification_as_read(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    تحديث حالة قراءة الإشعار
+    تعليم إشعار محدد كمقروء
     Mark a specific notification as read.
     """
     notification_service = NotificationService(db)
-    # Service method handles marking the notification as read
-    return await notification_service.mark_as_read(notification_id, current_user.id)
+    result = await notification_service.mark_as_read(notification_id, current_user.id)
+
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
+
+    return result
 
 
-@router.put("/read-all")
+@router.put("/mark-all-read")
 @limiter.limit("10/minute")
 async def mark_all_notifications_as_read(
     request: Request,
@@ -124,29 +101,16 @@ async def mark_all_notifications_as_read(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    تحديث حالة قراءة جميع الإشعارات
+    تعليم جميع الإشعارات كمقروءة
     Mark all notifications as read.
     """
     notification_service = NotificationService(db)
-    return await notification_service.mark_all_as_read(current_user.id)
+    result = await notification_service.mark_all_as_read(current_user.id)
 
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
 
-@router.put("/{notification_id}/archive")
-@limiter.limit("50/minute")
-async def archive_notification(
-    request: Request,
-    notification_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    """
-    أرشفة إشعار محدد
-    Archive a specific notification.
-    """
-    notification_service = NotificationService(db)
-    return await notification_service.archive_notification(
-        notification_id, current_user.id
-    )
+    return result
 
 
 @router.delete("/{notification_id}")
@@ -162,12 +126,60 @@ async def delete_notification(
     Delete a specific notification.
     """
     notification_service = NotificationService(db)
-    return await notification_service.delete_notification(
+    result = await notification_service.delete_notification(
         notification_id, current_user.id
     )
 
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
 
-# === Preferences Management ===
+    return result
+
+
+@router.put("/{notification_id}/archive")
+@limiter.limit("50/minute")
+async def archive_notification(
+    request: Request,
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    أرشفة إشعار محدد
+    Archive a specific notification.
+    """
+    notification_service = NotificationService(db)
+    result = await notification_service.archive_notification(
+        notification_id, current_user.id
+    )
+
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
+
+    return result
+
+
+@router.delete("/clear-all")
+@limiter.limit("5/minute")
+async def clear_all_notifications(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    حذف جميع الإشعارات المقروءة
+    Clear all read notifications.
+    """
+    notification_service = NotificationService(db)
+    result = await notification_service.clear_all_read(current_user.id)
+
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
+
+    return result
+
+
+# === Notification Preferences ===
 
 
 @router.get("/preferences", response_model=schemas.NotificationPreferencesOut)
@@ -176,15 +188,15 @@ async def get_notification_preferences(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    الحصول على تفضيلات الإشعارات للمستخدم
-    Retrieve the user's notification preferences.
+    الحصول على إعدادات الإشعارات للمستخدم
+    Get user's notification preferences.
     """
     notification_service = NotificationService(db)
-    return await notification_service.get_user_preferences(current_user.id)
+    return await notification_service.get_preferences(current_user.id)
 
 
 @router.put("/preferences", response_model=schemas.NotificationPreferencesOut)
-@limiter.limit("20/hour")
+@limiter.limit("20/minute")
 async def update_notification_preferences(
     request: Request,
     preferences: schemas.NotificationPreferencesUpdate,
@@ -192,231 +204,348 @@ async def update_notification_preferences(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    تحديث تفضيلات الإشعارات
-    Update the user's notification preferences.
+    تحديث إعدادات الإشعارات
+    Update notification preferences.
     """
     notification_service = NotificationService(db)
-    return await notification_service.update_user_preferences(
-        current_user.id, preferences
+    return await notification_service.update_preferences(current_user.id, preferences)
+
+
+# === Bulk Operations ===
+
+
+@router.post("/send-bulk")
+@limiter.limit("5/hour")
+async def send_bulk_notifications(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    bulk_request: schemas.BulkNotificationRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    إرسال إشعارات جماعية (للمسؤولين فقط)
+    Send bulk notifications (admin only).
+    """
+    # Check if user is admin
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    notification_manager = NotificationManager(db)
+    result = await notification_manager.send_bulk_notifications(
+        user_ids=bulk_request.user_ids,
+        content=bulk_request.content,
+        notification_type=bulk_request.notification_type,
+        category=bulk_request.category,
+        priority=bulk_request.priority,
+        background_tasks=background_tasks,
     )
 
-
-# === Analytics and Statistics ===
-
-
-@router.get("/unread-count")
-async def get_unread_notifications_count(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    """
-    الحصول على عدد الإشعارات غير المقروءة
-    Get the count of unread notifications.
-    """
-    notification_service = NotificationService(db)
-    count = await notification_service.get_unread_count(current_user.id)
-    return {"unread_count": count}
+    return result
 
 
-@router.get("/statistics", response_model=schemas.NotificationStatistics)
-async def get_notification_statistics(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    days: int = Query(30, ge=1, le=365),
-):
-    """
-    الحصول على إحصائيات الإشعارات
-    Retrieve notification statistics for a specified period.
-    """
-    analytics = NotificationAnalyticsService(db)
-    return await analytics.get_user_statistics(current_user.id, days)
-
-
-@router.get("/analytics")
-async def get_notification_analytics(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_admin),
-    days: int = Query(default=30, ge=1, le=365),
-):
-    """
-    الحصول على تحليلات متقدمة للإشعارات (للمسؤولين فقط)
-    Get advanced analytics for notifications (admin only).
-    """
-    analytics = NotificationAnalyticsService(db)
-    return await analytics.get_detailed_analytics(days)
-
-
-@router.get("/delivery-stats", response_model=dict)
-async def get_delivery_statistics(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_admin),
-):
-    """
-    الحصول على إحصائيات تسليم الإشعارات (للمسؤولين فقط)
-    Get delivery statistics for notifications (admin only).
-    """
-    notification_service = NotificationService(db)
-    return await notification_service.get_delivery_statistics()
-
-
-# === Testing and Debugging ===
-
-
-@router.post("/test-channels")
-@limiter.limit("5/hour")
-async def test_notification_channels(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
-    background_tasks: BackgroundTasks = None,
-):
-    """
-    اختبار قنوات الإشعارات المختلفة
-    Test different notification channels.
-    """
-    notification_manager = NotificationManager(db, background_tasks)
-    return await notification_manager.test_all_channels(current_user.id)
-
-
-@router.post("/bulk", response_model=List[schemas.NotificationOut])
-@limiter.limit("5/hour")
-async def create_bulk_notifications(
-    request: Request,
-    notifications: List[schemas.NotificationCreate],
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_admin),
-):
-    """
-    إنشاء إشعارات متعددة دفعة واحدة (للمسؤولين فقط)
-    Create bulk notifications (admin only).
-    """
-    notification_service = NotificationService(db, background_tasks)
-    return await notification_service.bulk_create_notifications(notifications)
-
-
-@router.put("/cleanup")
-@limiter.limit("3/day")
-async def cleanup_old_notifications(
-    request: Request,
-    days: int = Query(default=30, ge=1, le=365),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_admin),
-):
-    """
-    تنظيف الإشعارات القديمة (للمسؤولين فقط)
-    Clean up old notifications (admin only).
-    """
-    notification_service = NotificationService(db)
-    await notification_service.cleanup_old_notifications(days)
-    return {"message": f"تم أرشفة الإشعارات الأقدم من {days} يوم"}
-
-
-# === Additional Endpoints from Second File ===
-
-
-@router.post("/retry")
-@limiter.limit("10/hour")
-async def retry_failed_notifications(
+@router.put("/bulk-mark-read")
+@limiter.limit("20/minute")
+async def bulk_mark_as_read(
     request: Request,
     notification_ids: List[int],
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    إعادة محاولة إرسال الإشعارات الفاشلة
-    Retry sending failed notifications (admin only).
+    تعليم عدة إشعارات كمقروءة
+    Mark multiple notifications as read.
     """
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized")
     notification_service = NotificationService(db)
-    results = []
-    for notification_id in notification_ids:
-        # Retry each failed notification using the service method
-        success = await notification_service.retry_failed_notification(notification_id)
-        results.append({"notification_id": notification_id, "success": success})
-    return {"results": results}
-
-
-@router.post("/send-push")
-@limiter.limit("100/hour")
-async def send_push(
-    request: Request,
-    notification: schemas.PushNotification,
-    current_user: models.User = Depends(oauth2.get_current_user),
-):
-    """
-    إرسال إشعار دفع عبر Firebase
-    Send a push notification using Firebase.
-    """
-    response = send_push_notification(
-        token=notification.device_token,
-        title=notification.title,
-        body=notification.content,
-        data=notification.extra_data,
+    result = await notification_service.bulk_mark_as_read(
+        notification_ids, current_user.id
     )
-    return {"success": bool(response), "message_id": response if response else None}
+
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
+
+    return result
 
 
-@router.get("/statistics/delivery", response_model=Dict[str, Any])
-async def get_delivery_stats(
+@router.delete("/bulk-delete")
+@limiter.limit("20/minute")
+async def bulk_delete_notifications(
+    request: Request,
+    notification_ids: List[int],
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     """
-    الحصول على إحصائيات تسليم الإشعارات بالتفصيل
-    Get detailed delivery statistics for notifications (admin only).
+    حذف عدة إشعارات
+    Delete multiple notifications.
+    """
+    notification_service = NotificationService(db)
+    result = await notification_service.bulk_delete(notification_ids, current_user.id)
+
+    # Invalidate cache - أضف هذا
+    await cache_manager.invalidate(f"notifications:*u{current_user.id}*")
+
+    return result
+
+
+# === Scheduled Notifications ===
+
+
+@router.post("/schedule")
+@limiter.limit("10/hour")
+async def schedule_notification(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    schedule_request: schemas.ScheduleNotificationRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    جدولة إشعار ليتم إرساله لاحقاً
+    Schedule a notification to be sent later.
+    """
+    notification_manager = NotificationManager(db)
+    return await notification_manager.schedule_notification(
+        user_id=schedule_request.user_id,
+        content=schedule_request.content,
+        scheduled_for=schedule_request.scheduled_for,
+        notification_type=schedule_request.notification_type,
+        category=schedule_request.category,
+        priority=schedule_request.priority,
+        background_tasks=background_tasks,
+    )
+
+
+@router.get("/scheduled", response_model=List[schemas.NotificationOut])
+async def get_scheduled_notifications(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=100),
+):
+    """
+    الحصول على الإشعارات المجدولة
+    Get scheduled notifications.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.get_scheduled_notifications(
+        current_user.id, skip, limit
+    )
+
+
+@router.delete("/scheduled/{notification_id}")
+@limiter.limit("50/minute")
+async def cancel_scheduled_notification(
+    request: Request,
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    إلغاء إشعار مجدول
+    Cancel a scheduled notification.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.cancel_scheduled_notification(
+        notification_id, current_user.id
+    )
+
+
+# === Push Notifications ===
+
+
+@router.post("/register-device")
+@limiter.limit("20/minute")
+async def register_device_token(
+    request: Request,
+    device_data: schemas.DeviceTokenRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    تسجيل رمز جهاز للإشعارات الفورية
+    Register a device token for push notifications.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.register_device_token(
+        user_id=current_user.id,
+        device_token=device_data.device_token,
+        device_type=device_data.device_type,
+    )
+
+
+@router.delete("/unregister-device")
+@limiter.limit("20/minute")
+async def unregister_device_token(
+    request: Request,
+    device_token: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    إلغاء تسجيل رمز جهاز
+    Unregister a device token.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.unregister_device_token(
+        user_id=current_user.id,
+        device_token=device_token,
+    )
+
+
+@router.post("/test-push")
+@limiter.limit("5/hour")
+async def test_push_notification(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    إرسال إشعار تجريبي
+    Send a test push notification.
+    """
+    notification_manager = NotificationManager(db)
+    return await notification_manager.send_test_notification(
+        user_id=current_user.id,
+        background_tasks=background_tasks,
+    )
+
+
+# === Analytics ===
+
+
+@router.get("/analytics", response_model=schemas.NotificationAnalyticsOut)
+async def get_notification_analytics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    days: int = Query(30, ge=1, le=365),
+):
+    """
+    الحصول على تحليلات الإشعارات
+    Get notification analytics.
+    """
+    analytics_service = NotificationAnalyticsService(db)
+    return await analytics_service.get_user_analytics(current_user.id, days)
+
+
+@router.get("/analytics/delivery-stats", response_model=Dict[str, Any])
+async def get_delivery_statistics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    days: int = Query(7, ge=1, le=90),
+):
+    """
+    الحصول على إحصائيات التسليم
+    Get delivery statistics.
+    """
+    analytics_service = NotificationAnalyticsService(db)
+    return await analytics_service.get_delivery_stats(current_user.id, days)
+
+
+@router.get("/analytics/engagement", response_model=Dict[str, Any])
+async def get_engagement_metrics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    days: int = Query(30, ge=1, le=365),
+):
+    """
+    الحصول على مقاييس التفاعل
+    Get engagement metrics.
+    """
+    analytics_service = NotificationAnalyticsService(db)
+    return await analytics_service.get_engagement_metrics(current_user.id, days)
+
+
+# === Groups ===
+
+
+@router.get("/groups", response_model=List[schemas.NotificationGroupOut])
+async def get_notification_groups(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=100),
+):
+    """
+    الحصول على مجموعات الإشعارات المُدمجة
+    Get grouped notifications.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.get_notification_groups(
+        user_id=current_user.id,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.put("/groups/{group_id}/expand")
+async def expand_notification_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    توسيع مجموعة إشعارات لعرض جميع الإشعارات فيها
+    Expand a notification group to show all notifications.
+    """
+    notification_service = NotificationService(db)
+    return await notification_service.expand_group(group_id, current_user.id)
+
+
+# === Admin Endpoints ===
+
+
+@router.get("/admin/stats", response_model=Dict[str, Any])
+async def get_system_notification_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    days: int = Query(7, ge=1, le=90),
+):
+    """
+    الحصول على إحصائيات النظام (للمسؤولين فقط)
+    Get system-wide notification statistics (admin only).
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
-    notification_service = NotificationService(db)
-    stats = await notification_service.get_delivery_statistics()
-    return stats
+
+    analytics_service = NotificationAnalyticsService(db)
+    return await analytics_service.get_system_stats(days)
 
 
-# === Comment Notification Handler Class ===
-
-
-class CommentNotificationHandler:
+@router.post("/admin/retry-failed")
+@limiter.limit("5/hour")
+async def retry_failed_notifications(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
     """
-    A class to handle comment-related notifications.
+    إعادة محاولة إرسال الإشعارات الفاشلة (للمسؤولين فقط)
+    Retry failed notifications (admin only).
     """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
 
-    def __init__(self, db: Session, background_tasks: BackgroundTasks):
-        # Initialize with the database session and background tasks
-        self.db = db
-        self.background_tasks = background_tasks
-        self.notification_service = NotificationService(db, background_tasks)
+    notification_manager = NotificationManager(db)
+    return await notification_manager.retry_failed_notifications(background_tasks)
 
-    async def handle_new_comment(self, comment: models.Comment, post: models.Post):
-        """
-        معالجة إشعارات التعليقات الجديدة
-        Handle new comment notifications.
-        """
-        # Notify the post owner if the comment is from a different user
-        if comment.owner_id != post.owner_id:
-            await self.notification_service.create_notification(
-                user_id=post.owner_id,
-                content=f"{comment.owner.username} commented on your post",
-                notification_type="new_comment",
-                priority=NotificationPriority.MEDIUM,
-                category=NotificationCategory.SOCIAL,
-                link=f"/post/{post.id}#comment-{comment.id}",
-            )
 
-        # If the comment is a reply, notify the parent comment owner
-        if comment.parent_id:
-            parent_comment = (
-                self.db.query(models.Comment)
-                .filter(models.Comment.id == comment.parent_id)
-                .first()
-            )
-            if parent_comment and parent_comment.owner_id != comment.owner_id:
-                await self.notification_service.create_notification(
-                    user_id=parent_comment.owner_id,
-                    content=f"{comment.owner.username} replied to your comment",
-                    notification_type="comment_reply",
-                    priority=NotificationPriority.MEDIUM,
-                    category=NotificationCategory.SOCIAL,
-                    link=f"/post/{post.id}#comment-{comment.id}",
-                )
+@router.get("/admin/delivery-logs", response_model=List[schemas.DeliveryLogOut])
+async def get_delivery_logs(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, le=500),
+    status: Optional[str] = None,
+):
+    """
+    الحصول على سجلات التسليم (للمسؤولين فقط)
+    Get delivery logs (admin only).
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    analytics_service = NotificationAnalyticsService(db)
+    return await analytics_service.get_delivery_logs(skip, limit, status)
