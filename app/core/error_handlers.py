@@ -5,7 +5,7 @@ Provides unified error response format and logging.
 
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Union
 
 from fastapi import FastAPI, Request, status
@@ -46,7 +46,7 @@ def create_error_response(
             "message": message,
             "details": details or {},
         },
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     if path:
@@ -112,12 +112,21 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
-        return create_error_response(
+        content = {
+            "success": False,
+            "error": {
+                "code": "validation_error",
+                "message": "Request validation failed",
+                "details": {"errors": errors},
+            },
+            "detail": exc.errors(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "path": request.url.path,
+        }
+
+        return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            error_code="validation_error",
-            message="Request validation failed",
-            details={"errors": errors},
-            path=request.url.path,
+            content=content,
         )
 
     @app.exception_handler(RateLimitExceeded)

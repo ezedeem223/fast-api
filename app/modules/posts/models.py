@@ -30,6 +30,7 @@ from app.core.database import Base
 from app.core.db_defaults import timestamp_default
 from app.modules.users.associations import post_mentions
 
+
 def _array_type(item_type):
     """
     Return an ARRAY type that gracefully falls back to JSON on SQLite.
@@ -49,7 +50,10 @@ def _tsvector_type():
     """
     Provide a TSVector column that degrades to TEXT for SQLite.
     """
-    return PG_TSVECTOR().with_variant(Text, "sqlite").with_variant(Text, "sqlite+pysqlite")
+    return (
+        PG_TSVECTOR().with_variant(Text, "sqlite").with_variant(Text, "sqlite+pysqlite")
+    )
+
 
 post_hashtags = Table(
     "post_hashtags",
@@ -91,9 +95,13 @@ class Reaction(Base):
 
     __tablename__ = "reactions"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=True)
-    comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True)
+    comment_id = Column(
+        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+    )
     reaction_type = Column(
         Enum("like", "love", "haha", "wow", "sad", "angry", name="reaction_type"),
         nullable=False,
@@ -117,10 +125,16 @@ class Comment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default())
+    created_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default()
+    )
     updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
     parent_id = Column(
         Integer,
         ForeignKey("comments.id", ondelete="CASCADE"),
@@ -128,7 +142,9 @@ class Comment(Base):
     )
     image_url = Column(String, nullable=True)
     video_url = Column(String, nullable=True)
-    sticker_id = Column(Integer, ForeignKey("stickers.id", ondelete="SET NULL"), nullable=True)
+    sticker_id = Column(
+        Integer, ForeignKey("stickers.id", ondelete="SET NULL"), nullable=True
+    )
     language = Column(String, nullable=False, default="en")
     is_edited = Column(Boolean, default=False)
     is_flagged = Column(Boolean, default=False)
@@ -161,14 +177,20 @@ class Comment(Base):
         back_populates="parent",
         cascade="all, delete-orphan",
     )
-    reactions = relationship("Reaction", back_populates="comment", cascade="all, delete-orphan")
-    reports = relationship("Report", back_populates="comment", cascade="all, delete-orphan")
+    reactions = relationship(
+        "Reaction", back_populates="comment", cascade="all, delete-orphan"
+    )
+    reports = relationship(
+        "Report", back_populates="comment", cascade="all, delete-orphan"
+    )
     edit_history = relationship(
         "CommentEditHistory",
         back_populates="comment",
         cascade="all, delete-orphan",
     )
-    sticker = relationship("Sticker", back_populates="comments", foreign_keys=[sticker_id])
+    sticker = relationship(
+        "Sticker", back_populates="comments", foreign_keys=[sticker_id]
+    )
 
     __table_args__ = (
         Index("ix_comments_post_id", "post_id"),
@@ -189,8 +211,12 @@ class Post(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default()
     )
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True)
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=True
+    )
     votes = Column(Integer, default=0)
     media_url = Column(String)
     media_type = Column(String)
@@ -204,7 +230,9 @@ class Post(Base):
     category_id = Column(Integer, ForeignKey("post_categories.id"), nullable=True)
     scheduled_time = Column(DateTime(timezone=True), nullable=True)
     is_published = Column(Boolean, default=False)
-    original_post_id = Column(Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True)
+    original_post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="SET NULL"), nullable=True
+    )
     is_repost = Column(Boolean, default=False)
     repost_count = Column(Integer, default=0)
     allow_reposts = Column(Boolean, default=True)
@@ -225,8 +253,12 @@ class Post(Base):
     flag_reason = Column(String, nullable=True)
     search_vector = Column(_tsvector_type())
     share_scope = Column(String, default="public")
-    shared_with_community_id = Column(Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True)
+    shared_with_community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
+    )
     score = Column(Float, default=0.0, index=True)
+    quality_score = Column(Float, default=0.0)  # درجة الجودة (0-100)
+    originality_score = Column(Float, default=0.0)  # درجة الأصالة (0-100)
     sharing_settings = Column(_jsonb_type(), default={})
 
     __table_args__ = (
@@ -235,20 +267,37 @@ class Post(Base):
     )
 
     owner = relationship("User", back_populates="posts", foreign_keys=[owner_id])
-    reactions = relationship("Reaction", back_populates="post", cascade="all, delete-orphan")
+    reactions = relationship(
+        "Reaction", back_populates="post", cascade="all, delete-orphan"
+    )
     original_post = relationship("Post", remote_side=[id], backref="reposts")
-    mentioned_users = relationship("User", secondary=post_mentions, back_populates="mentions")
+    mentioned_users = relationship(
+        "User", secondary=post_mentions, back_populates="mentions"
+    )
     hashtags = relationship("Hashtag", secondary=post_hashtags)
-    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
-    community = relationship("Community", back_populates="posts", foreign_keys=[community_id])
-    reports = relationship("Report", back_populates="post", cascade="all, delete-orphan")
-    votes_rel = relationship("Vote", back_populates="post", cascade="all, delete-orphan")
-    repost_stats = relationship("RepostStatistics", uselist=False, back_populates="post")
+    comments = relationship(
+        "Comment", back_populates="post", cascade="all, delete-orphan"
+    )
+    community = relationship(
+        "Community", back_populates="posts", foreign_keys=[community_id]
+    )
+    reports = relationship(
+        "Report", back_populates="post", cascade="all, delete-orphan"
+    )
+    votes_rel = relationship(
+        "Vote", back_populates="post", cascade="all, delete-orphan"
+    )
+    repost_stats = relationship(
+        "RepostStatistics", uselist=False, back_populates="post"
+    )
     poll_options = relationship("PollOption", back_populates="post")
     poll = relationship("Poll", back_populates="post", uselist=False)
     category = relationship("PostCategory", back_populates="posts")
     vote_statistics = relationship(
-        "PostVoteStatistics", back_populates="post", uselist=False, cascade="all, delete-orphan"
+        "PostVoteStatistics",
+        back_populates="post",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
 
@@ -268,7 +317,9 @@ class PostVoteStatistics(Base):
     sad_count = Column(Integer, default=0)
     angry_count = Column(Integer, default=0)
     last_updated = Column(
-        DateTime(timezone=True), server_default=timestamp_default(), onupdate=timestamp_default()
+        DateTime(timezone=True),
+        server_default=timestamp_default(),
+        onupdate=timestamp_default(),
     )
 
     post = relationship("Post", back_populates="vote_statistics")
@@ -347,9 +398,7 @@ class PostCategory(Base):
     children = relationship(
         "PostCategory", back_populates="parent", cascade="all, delete-orphan"
     )
-    parent = relationship(
-        "PostCategory", back_populates="children", remote_side=[id]
-    )
+    parent = relationship("PostCategory", back_populates="children", remote_side=[id])
 
 
 class SocialMediaAccount(Base):
@@ -394,6 +443,53 @@ class SocialMediaPost(Base):
     account = relationship("SocialMediaAccount", back_populates="posts")
 
 
+class PostRelation(Base):
+    """
+    Living Memory System: Stores semantic or temporal connections between posts.
+    نظام الذاكرة الحية: يخزن الروابط الدلالية أو الزمنية بين المنشورات.
+    """
+
+    __tablename__ = "post_relations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
+    target_post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # درجة التشابه (0.0 إلى 1.0) لتحديد مدى قوة العلاقة
+    similarity_score = Column(Float, default=0.0)
+
+    # نوع العلاقة: 'semantic' (محتوى مشابه)، 'temporal' (نفس الوقت من العام)، 'series' (سلسلة)
+    relation_type = Column(String, default="semantic", nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+
+    # العلاقات:
+    # source_post: المنشور الجديد الذي "تذكر" شيئاً.
+    # related_memories: القائمة التي ستظهر في PostOut لهذا المنشور.
+    source_post = relationship(
+        "Post", foreign_keys=[source_post_id], backref="related_memories"
+    )
+
+    # target_post: المنشور القديم (الذكرى).
+    target_post = relationship(
+        "Post", foreign_keys=[target_post_id], backref="cited_in_memories"
+    )
+
+    __table_args__ = (
+        # منع تكرار نفس الرابط بين نفس المنشورين
+        Index(
+            "ix_post_relations_source_target",
+            "source_post_id",
+            "target_post_id",
+            unique=True,
+        ),
+    )
+
+
 __all__ = [
     "CopyrightType",
     "SocialMediaType",
@@ -410,4 +506,5 @@ __all__ = [
     "SocialMediaAccount",
     "SocialMediaPost",
     "post_hashtags",
+    "PostRelation",
 ]

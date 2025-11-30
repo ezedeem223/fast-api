@@ -13,8 +13,13 @@ from datetime import datetime
 
 from .. import models, schemas, oauth2
 from app.core.database import get_db
-from app.modules.communities.service import CommunityService
-from app.modules.communities.models import Community, CommunityMember
+from app.notifications import queue_email_notification, schedule_email_notification
+
+# Service موجودة في مجلد services
+from app.services.community.service import CommunityService
+
+# Models موجودة في مجلد modules
+from app.modules.community.models import Community, CommunityMember
 from app.core.middleware.rate_limit import limiter
 from app.core.cache.redis_cache import cache, cache_manager  # أضف هذا
 
@@ -167,7 +172,7 @@ async def delete_community(
 # ==========================================
 
 
-@router.post("/{community_id}/join", response_model=schemas.CommunityMemberOut)
+@router.post("/{community_id}/join", response_model=dict)
 async def join_community(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -179,7 +184,7 @@ async def join_community(
     """
     member = service.join_community(
         community_id=community_id,
-        user=current_user,
+        current_user=current_user,
     )
 
     # Invalidate caches
@@ -187,7 +192,7 @@ async def join_community(
     await cache_manager.invalidate(f"community:detail:*{community_id}*")
     await cache_manager.invalidate(f"community:members:*{community_id}*")
 
-    return schemas.CommunityMemberOut.model_validate(member)
+    return member
 
 
 @router.post("/{community_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
@@ -342,7 +347,33 @@ async def create_community_post(
         community_id=community_id,
         payload=post_data,
         current_user=current_user,
-        background_tasks=background_tasks,
+    )
+
+    # Invalidate caches
+    await cache_manager.invalidate(f"community:posts:*{community_id}*")
+    await cache_manager.invalidate("posts:list:*")
+
+    return schemas.PostOut.model_validate(new_post)
+
+
+@router.post(
+    "/{community_id}/post",
+    status_code=status.HTTP_201_CREATED,
+    response_model=schemas.PostOut,
+)
+async def create_community_post_legacy(
+    community_id: int,
+    post_data: schemas.PostCreate,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: CommunityService = Depends(get_community_service),
+):
+    """
+    Legacy alias to support clients using /post instead of /posts for community posts.
+    """
+    new_post = service.create_community_post(
+        community_id=community_id,
+        payload=post_data,
+        current_user=current_user,
     )
 
     # Invalidate caches

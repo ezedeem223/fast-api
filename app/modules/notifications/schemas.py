@@ -78,6 +78,12 @@ class NotificationAnalytics(BaseModel):
     most_interacted_types: List[Dict[str, Union[str, int]]]
 
 
+class NotificationAnalyticsOut(NotificationAnalytics):
+    """Wrapper for analytics output."""
+
+    pass
+
+
 class NotificationGroupOut(BaseModel):
     id: int
     group_type: str
@@ -96,6 +102,10 @@ class NotificationDeliveryLogOut(BaseModel):
     delivery_channel: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# Alias for router compatibility
+DeliveryLogOut = NotificationDeliveryLogOut
 
 
 class NotificationWithLogs(BaseModel):
@@ -151,6 +161,31 @@ class PushNotification(BaseModel):
     extra_data: Dict[str, Any] = Field(default_factory=dict)
 
 
+# --- New Request Models required by Router ---
+
+
+class BulkNotificationRequest(BaseModel):
+    user_ids: List[int]
+    content: str
+    notification_type: str = "system"
+    category: str = "info"
+    priority: str = "normal"
+
+
+class ScheduleNotificationRequest(BaseModel):
+    user_id: int
+    content: str
+    scheduled_for: datetime
+    notification_type: str = "system"
+    category: str = "info"
+    priority: str = "normal"
+
+
+class DeviceTokenRequest(BaseModel):
+    device_token: str
+    device_type: str = "android"  # or 'ios', 'web'
+
+
 __all__ = [
     "NotificationPreferencesUpdate",
     "NotificationPreferencesOut",
@@ -160,11 +195,16 @@ __all__ = [
     "NotificationDeliveryStatus",
     "NotificationStatistics",
     "NotificationAnalytics",
+    "NotificationAnalyticsOut",
     "NotificationGroupOut",
     "NotificationDeliveryLogOut",
+    "DeliveryLogOut",
     "NotificationWithLogs",
     "NotificationOut",
     "NotificationSummary",
     "NotificationFeedResponse",
     "PushNotification",
+    "BulkNotificationRequest",
+    "ScheduleNotificationRequest",
+    "DeviceTokenRequest",
 ]

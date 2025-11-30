@@ -2,11 +2,12 @@
 Query optimization helpers for eager loading and pagination.
 """
 
-from typing import Any, List, Type, Dict, Optional
-from sqlalchemy.orm import Query, joinedload, selectinload, contains_eager
-from sqlalchemy import desc, asc, func
 import base64
 import json
+from typing import Any, Dict, List, Optional, Type
+
+from sqlalchemy import asc, desc, func
+from sqlalchemy.orm import Query, contains_eager, joinedload, selectinload
 
 
 def with_joined_loads(query: Query, *relationships) -> Query:
@@ -58,11 +59,13 @@ def optimize_post_query(query: Query) -> Query:
 
     Prevents N+1 queries when fetching posts with related data.
     """
+    from app.modules.posts.models import Comment, Post
+
     return query.options(
-        joinedload("owner"),  # Always load post owner
-        selectinload("comments").joinedload("owner"),  # Load comments with their owners
-        selectinload("reactions"),  # Load reactions
-        selectinload("vote_statistics"),  # Load vote stats
+        joinedload(Post.owner),  # Always load post owner
+        selectinload(Post.comments).joinedload(Comment.owner),  # Load comments with their owners
+        selectinload(Post.reactions),  # Load reactions
+        selectinload(Post.vote_statistics),  # Load vote stats
     )
 
 
@@ -70,11 +73,13 @@ def optimize_comment_query(query: Query) -> Query:
     """
     Optimize queries for Comment model.
     """
+    from app.modules.posts.models import Comment
+
     return query.options(
-        joinedload("owner"),  # Load comment owner
-        joinedload("post"),  # Load parent post
-        selectinload("reactions"),  # Load reactions
-        selectinload("replies").joinedload("owner"),  # Load replies with owners
+        joinedload(Comment.owner),  # Load comment owner
+        joinedload(Comment.post),  # Load parent post
+        selectinload(Comment.reactions),  # Load reactions
+        selectinload(Comment.replies).joinedload(Comment.owner),  # Load replies with owners
     )
 
 
@@ -82,11 +87,13 @@ def optimize_user_query(query: Query) -> Query:
     """
     Optimize queries for User model.
     """
+    from app.modules.users.models import User
+
     return query.options(
-        selectinload("posts"),
-        selectinload("comments"),
-        selectinload("followers"),
-        selectinload("following"),
+        selectinload(User.posts),
+        selectinload(User.comments),
+        selectinload(User.followers),
+        selectinload(User.following),
     )
 
 

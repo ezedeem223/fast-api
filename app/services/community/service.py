@@ -134,6 +134,50 @@ class CommunityService:
 
         return new_community
 
+    def get_communities(
+        self,
+        *,
+        skip: int = 0,
+        limit: int = 20,
+        search: Optional[str] = None,
+        category: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        sort_by: str = "created_at",
+        order: str = "desc",
+    ) -> List[Community]:
+        """
+        Lightweight community listing used by the router and tests.
+        """
+        query = self.db.query(Community)
+
+        if search:
+            ilike_pattern = f"%{search}%"
+            query = query.filter(
+                or_(Community.name.ilike(ilike_pattern), Community.description.ilike(ilike_pattern))
+            )
+
+        if category:
+            query = query.join(CommunityCategory, isouter=True).join(
+                Category, Category.id == CommunityCategory.category_id, isouter=True
+            )
+            query = query.filter(Category.name == category)
+
+        if is_active is not None:
+            query = query.filter(Community.is_active.is_(is_active))
+
+        sort_mapping = {
+            "created_at": Community.created_at,
+            "member_count": Community.member_count,
+            "name": Community.name,
+        }
+        sort_column = sort_mapping.get(sort_by, Community.created_at)
+        if order == "asc":
+            query = query.order_by(asc(sort_column))
+        else:
+            query = query.order_by(desc(sort_column))
+
+        return query.offset(skip).limit(limit).all()
+
     async def list_communities(
         self,
         *,

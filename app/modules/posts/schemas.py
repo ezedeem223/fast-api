@@ -22,6 +22,7 @@ if TYPE_CHECKING:  # pragma: no cover
         UserOut,
     )
 
+
 class ReactionBase(BaseModel):
     reaction_type: ReactionType
 
@@ -94,7 +95,7 @@ class HashtagCreate(HashtagBase):
 
 class Hashtag(HashtagBase):
     id: int
-    followers_count: int
+    followers_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,6 +128,7 @@ class PostCategory(PostCategoryBase):
     children: List["PostCategory"] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
 
 PostCategory.model_rebuild()
 
@@ -189,6 +191,20 @@ class Post(PostBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PostRelationOut(BaseModel):
+    """Schema for displaying a related memory (Living Memory)."""
+
+    target_post_id: int
+    similarity_score: float
+    relation_type: str
+    created_at: datetime
+    # نقوم بتضمين تفاصيل المنشور القديم (الذكرى)
+    # نستخدم 'Post' هنا لأنها معرفة بالأعلى، مما يتجنب المشاكل الدائرية
+    target_post: Optional[Post] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PostOut(Post):
     community: Optional["CommunityOutRef"] = None
     privacy_level: PrivacyLevel = PrivacyLevel.PUBLIC
@@ -213,7 +229,11 @@ class PostOut(Post):
     media_url: Optional[str] = None
     media_type: Optional[str] = None
     media_text: Optional[str] = None
-
+    media_text: Optional[str] = None
+    related_memories: List[PostRelationOut] = Field(default_factory=list)
+    quality_score: Optional[float] = 0.0
+    originality_score: Optional[float] = 0.0
+    # score موجود بالفعل في المخطط، فلا داعي لإضافته
     model_config = ConfigDict(from_attributes=True)
 
 

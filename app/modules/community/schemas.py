@@ -30,16 +30,68 @@ class CommunityUpdate(BaseModel):
     tags: Optional[List[int]] = None
 
 
+class CommunitySettingsUpdate(BaseModel):
+    """Schema for updating community settings."""
+
+    is_private: Optional[bool] = None
+    requires_approval: Optional[bool] = None
+    language: Optional[str] = None
+
+
+class CommunityRuleBase(BaseModel):
+    rule: str
+
+
+class CommunityRuleCreate(CommunityRuleBase):
+    pass
+
+
+class CommunityRuleUpdate(CommunityRuleBase):
+    pass
+
+
+class CommunityRuleOut(CommunityRuleBase):
+    id: int
+    community_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityMemberBase(BaseModel):
+    role: str  # Changed from Enum to str to avoid circular imports if Enum is moved
+    activity_score: int
+
+
+class CommunityMemberOut(CommunityMemberBase):
+    user: "UserOut"
+    join_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CommunityOut(CommunityBase):
     id: int
     created_at: datetime
     owner_id: int
     owner: "UserOut"
     member_count: int
-    members: List["CommunityMemberOut"]
+    members: List["CommunityMemberOut"] = []
     rules: List["CommunityRuleOut"] = []
     category: Optional[Any] = None
     tags: List[Any] = Field(default_factory=list)
+    is_active: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CommunityDetailOut(CommunityOut):
+    """Detailed view of a community, can include extra fields if needed."""
+
+    is_private: bool = False
+    requires_approval: bool = False
+    language: str = "en"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,33 +117,18 @@ class CommunityStatistics(CommunityStatisticsBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CommunityStatsOut(CommunityStatisticsBase):
+    """Schema for outputting community statistics."""
+
+    pass
+
+
 class CommunityOverview(BaseModel):
     id: int
     name: str
     description: str
     member_count: int
     is_active: bool
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CommunityRuleBase(BaseModel):
-    rule: str
-
-
-class CommunityRuleCreate(CommunityRuleBase):
-    pass
-
-
-class CommunityRuleUpdate(CommunityRuleBase):
-    pass
-
-
-class CommunityRuleOut(CommunityRuleBase):
-    id: int
-    community_id: int
-    created_at: datetime
-    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -143,9 +180,8 @@ class CommunityRole(str, Enum):
     MEMBER = "member"
 
 
-class CommunityMemberBase(BaseModel):
+class MemberRoleUpdate(BaseModel):
     role: CommunityRole
-    activity_score: int
 
 
 class CommunityMemberCreate(CommunityMemberBase):
@@ -156,20 +192,13 @@ class CommunityMemberUpdate(CommunityMemberBase):
     pass
 
 
-class CommunityMemberOut(CommunityMemberBase):
-    user: "UserOut"
-    join_date: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class CommunityInvitationBase(BaseModel):
     community_id: int
     invitee_id: int
 
 
 class CommunityInvitationCreate(CommunityInvitationBase):
-    pass
+    user_id: int  # Added for consistency with router usage
 
 
 class CommunityInvitationOut(BaseModel):
@@ -211,6 +240,10 @@ __all__ = [
     "CommunityMemberUpdate",
     "CommunityOut",
     "CommunityOutRef",
+    "CommunityDetailOut",  # <--- Added
+    "CommunitySettingsUpdate",  # <--- Added
+    "MemberRoleUpdate",  # <--- Added
+    "CommunityStatsOut",  # <--- Added
     "CommunityOverview",
     "CommunityOverviewAnalytics",
     "CommunityRole",

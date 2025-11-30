@@ -1,5 +1,6 @@
 import os
-
+from typing import Any
+import warnings
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -12,6 +13,17 @@ from app.core.database import Base, get_db
 from app.main import app
 from app.oauth2 import create_access_token
 
+
+class AttrDict(dict):
+    """Dict with attribute-style access for fixtures."""
+
+    def __getattr__(self, item: str) -> Any:
+        try:
+            return self[item]
+        except KeyError as exc:
+            raise AttributeError(item) from exc
+
+# إعدادات بيئة الاختبار
 os.environ["APP_ENV"] = "test"
 os.environ["DISABLE_EXTERNAL_NOTIFICATIONS"] = "1"
 os.environ["ENABLE_TRANSLATION"] = "0"
@@ -23,6 +35,17 @@ object.__setattr__(settings, "redis_client", None)
 
 settings.database_url = settings.test_database_url
 os.environ["DATABASE_URL"] = settings.test_database_url
+# Disable rate limiting in tests explicitly
+from app.core.middleware import rate_limit  # noqa: E402
+if hasattr(rate_limit.limiter, "enabled"):
+    rate_limit.limiter.enabled = False
+
+# Silence noisy deprecation warnings from third-party libs during tests
+warnings.filterwarnings(
+    "ignore",
+    message="datetime.datetime.utcnow\\(\\) is deprecated",
+    category=DeprecationWarning,
+)
 
 
 def _init_test_engine():
@@ -44,12 +67,15 @@ Base.metadata.create_all(bind=engine)
 
 @pytest.fixture(scope="function")
 def session():
+    """إنشاء جلسة قاعدة بيانات جديدة لكل اختبار"""
     with engine.begin() as connection:
         if engine.dialect.name == "sqlite":
             for table in reversed(Base.metadata.sorted_tables):
                 connection.execute(table.delete())
         else:
-            table_names = ", ".join(f'"{tbl.name}"' for tbl in Base.metadata.sorted_tables)
+            table_names = ", ".join(
+                f'"{tbl.name}"' for tbl in Base.metadata.sorted_tables
+            )
             if table_names:
                 connection.execute(
                     text(f"TRUNCATE {table_names} RESTART IDENTITY CASCADE")
@@ -59,6 +85,12 @@ def session():
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(scope="function")
+def db_session(session):
+    """اسم مستعار لـ session للتوافق مع الاختبارات التي تستخدم db_session"""
+    return session
 
 
 @pytest.fixture(scope="function")
@@ -81,10 +113,12 @@ def test_user(client):
     assert res.status_code == 201
     new_user = res.json()
     with TestingSessionLocal() as db:
-        db.query(models.User).filter(models.User.id == new_user["id"]).update({"is_verified": True})
+        db.query(models.User).filter(models.User.id == new_user["id"]).update(
+            {"is_verified": True}
+        )
         db.commit()
     new_user["password"] = user_data["password"]
-    return new_user
+    return AttrDict(new_user)
 
 
 @pytest.fixture(scope="function")
@@ -94,10 +128,29 @@ def test_user2(client):
     assert res.status_code == 201
     new_user = res.json()
     with TestingSessionLocal() as db:
-        db.query(models.User).filter(models.User.id == new_user["id"]).update({"is_verified": True})
+        db.query(models.User).filter(models.User.id == new_user["id"]).update(
+            {"is_verified": True}
+        )
         db.commit()
     new_user["password"] = user_data["password"]
-    return new_user
+    return AttrDict(new_user)
+
+
+@pytest.fixture(scope="function")
+def token(test_user):
+    return create_access_token({"user_id": test_user["id"]})
+
+
+@pytest.fixture(scope="function")
+def test_user_token_headers(token):
+    """توفير ترويسة المصادقة مباشرة"""
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(scope="function")
+def authorized_client(client, token):
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
 
 
 @pytest.fixture(scope="function")
@@ -127,20 +180,13 @@ def test_comment(session, test_post, test_user):
 
 
 @pytest.fixture(scope="function")
-def token(test_user):
-    return create_access_token({"user_id": test_user["id"]})
-
-
-@pytest.fixture(scope="function")
-def authorized_client(client, token):
-    client.headers.update({"Authorization": f"Bearer {token}"})
-    return client
-
-
-@pytest.fixture(scope="function")
 def test_posts(test_user, session, test_user2):
     posts_data = [
-        {"title": "first title", "content": "first content", "owner_id": test_user["id"]},
+        {
+            "title": "first title",
+            "content": "first content",
+            "owner_id": test_user["id"],
+        },
         {"title": "2nd title", "content": "2nd content", "owner_id": test_user["id"]},
         {"title": "3rd title", "content": "3rd content", "owner_id": test_user["id"]},
         {"title": "3rd title", "content": "3rd content", "owner_id": test_user2["id"]},

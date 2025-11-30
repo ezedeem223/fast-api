@@ -1,13 +1,30 @@
 # app/core/middleware/rate_limit.py
+import os
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from fastapi import Request
 from slowapi.errors import RateLimitExceeded
 
-# إعداد limiter مع redis أو memory (حسب الإعدادات)
-limiter = Limiter(
-    key_func=get_remote_address, default_limits=["300 per minute", "5000 per day"]
-)
+from app.core.config import settings
+
+
+class _NoOpLimiter:
+    """Disable rate limiting when running tests."""
+
+    def limit(self, *args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
+
+# Use a no-op limiter in tests to keep fixtures deterministic.
+if os.getenv("APP_ENV", settings.environment).lower() == "test":
+    limiter = _NoOpLimiter()
+else:
+    limiter = Limiter(
+        key_func=get_remote_address, default_limits=["300 per minute", "5000 per day"]
+    )
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):

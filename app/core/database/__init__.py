@@ -1,76 +1,62 @@
 """Core database access helpers with optimized connection pooling."""
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
-# ========================================================
-# Task 6: Build Database URL & Optimize Connection
-# ========================================================
 
-# بناء رابط الاتصال يدوياً لأن settings.database_url قد يكون None
-# إذا كانت القيم موجودة بشكل منفصل في .env
+def build_engine(database_url: str):
+    """
+    Construct a SQLAlchemy engine with the same defaults used by the app.
+    Tests and utility scripts rely on this for lightweight engines (e.g., SQLite).
+    """
+    connect_args = {}
+    if "postgresql" in database_url:
+        connect_args = {
+            "options": "-c timezone=utc",
+            "application_name": "fastapi_app",
+            "server_settings": {"jit": "off", "timezone": "utc"},
+            "statement_cache_size": 100,
+            "prepared_statement_cache_size": 100,
+        }
+    elif "sqlite" in database_url:
+        connect_args = {"check_same_thread": False}
+
+    return create_engine(
+        database_url,
+        poolclass=QueuePool,
+        pool_size=20,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=3600,
+        pool_pre_ping=True,
+        echo=False,
+        echo_pool=False,
+        pool_reset_on_return="rollback",
+        connect_args=connect_args,
+    )
+
+
 if hasattr(settings, "database_url") and settings.database_url:
     SQLALCHEMY_DATABASE_URL = str(settings.database_url)
 else:
-    # بناء الرابط لـ PostgreSQL
     SQLALCHEMY_DATABASE_URL = (
         f"postgresql://{settings.database_username}:{settings.database_password}"
         f"@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"
     )
 
-# تحديد Connect Args بناءً على نوع القاعدة لتفادي الأخطاء
-connect_args = {}
-if "postgresql" in SQLALCHEMY_DATABASE_URL:
-    connect_args = {
-        "options": "-c timezone=utc",
-        "application_name": "fastapi_app",
-    }
-elif "sqlite" in SQLALCHEMY_DATABASE_URL:
-    connect_args = {"check_same_thread": False}
+# Application engine
+engine = build_engine(SQLALCHEMY_DATABASE_URL)
 
-# 1. إنشاء الـ Engine مع Pooling
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    poolclass=QueuePool,
-    # تحسين Pool Settings
-    pool_size=20,  # عدد الاتصالات الدائمة
-    max_overflow=10,  # اتصالات إضافية (خفضناها من 30 إلى 10)
-    pool_timeout=30,  # وقت الانتظار قبل الفشل
-    pool_recycle=3600,  # إعادة تدوير الاتصال كل ساعة
-    pool_pre_ping=True,  # فحص الاتصال قبل الاستخدام
-    # تحسينات الأداء
-    echo=False,  # تعطيل SQL logging في الإنتاج
-    echo_pool=False,  # تعطيل pool logging
-    pool_reset_on_return="rollback",  # إعادة تعيين عند الإرجاع
-    # تحسينات PostgreSQL
-    connect_args=(
-        {
-            **connect_args,
-            "server_settings": {
-                "jit": "off",  # تعطيل JIT للاستعلامات الأسرع
-                "timezone": "utc",  # التوقيت الموحد
-            },
-            "statement_cache_size": 100,  # حجم cache للـ prepared statements
-            "prepared_statement_cache_size": 100,
-        }
-        if "postgresql" in SQLALCHEMY_DATABASE_URL
-        else connect_args
-    ),
-)
-
-
-# 2. إنشاء الـ SessionLocal
+# Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# 3. تعريف الـ Base
+# Declarative base
 Base = declarative_base()
 
 
-# 4. دالة الحصول على DB Session
 def get_db():
     """Provide a database session."""
     db = SessionLocal()
@@ -95,6 +81,7 @@ try:
         "SessionLocal",
         "engine",
         "get_db",
+        "build_engine",
         "with_joined_loads",
         "with_select_loads",
         "paginate_query",
@@ -104,4 +91,4 @@ try:
     ]
 except ImportError:
     # Fallback if query_helpers.py is missing
-    __all__ = ["Base", "SessionLocal", "engine", "get_db"]
+    __all__ = ["Base", "SessionLocal", "engine", "get_db", "build_engine"]

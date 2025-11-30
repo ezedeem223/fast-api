@@ -28,6 +28,7 @@ from app.core.database import Base
 from app.core.db_defaults import timestamp_default
 from app.modules.users.associations import post_mentions, user_hashtag_follows
 
+
 def _array_type(item_type):
     """
     Return an ARRAY type that automatically falls back to JSON for SQLite.
@@ -79,6 +80,7 @@ class User(Base):
     )
     phone_number = Column(String)
     is_verified = Column(Boolean, default=False)
+    social_credits = Column(Float, default=0.0, index=True, nullable=False)
     verification_document = Column(String, nullable=True)
     otp_secret = Column(String, nullable=True)
     is_2fa_enabled = Column(Boolean, default=False)

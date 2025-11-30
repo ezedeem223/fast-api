@@ -201,6 +201,7 @@ class UserOut(UserBase):
     public_key: Optional[str] = None
     followers_count: int
     is_verified: bool
+    social_credits: float = 0.0
 
     model_config = ConfigDict(from_attributes=True)
 

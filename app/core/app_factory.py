@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from http import HTTPStatus
 from pathlib import Path
 
@@ -280,6 +281,10 @@ def create_app() -> FastAPI:
     # Note: The exception handler for RateLimitExceeded is now handled
     # globally in register_exception_handlers (Task 3)
     app.state.limiter = limiter
+    if hasattr(limiter, "enabled"):
+        limiter.enabled = settings.environment.lower() != "test" and (
+            os.getenv("APP_ENV", settings.environment).lower() != "test"
+        )
 
     # Configure Middleware and Routes
     _configure_app(app)

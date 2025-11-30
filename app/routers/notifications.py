@@ -72,6 +72,49 @@ async def get_unread_count(
     }
 
 
+@router.get("/summary", response_model=Dict[str, Any])
+async def get_notification_summary(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Return aggregate counts for unread/unseen notifications."""
+    notification_service = NotificationService(db)
+    return await notification_service.get_unread_summary(current_user.id)
+
+
+@router.get("/feed", response_model=Dict[str, Any])
+async def get_notification_feed(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    cursor: Optional[int] = None,
+    limit: int = Query(20, ge=1, le=100),
+    include_read: bool = False,
+    include_archived: bool = False,
+    category: Optional[NotificationCategory] = None,
+    priority: Optional[NotificationPriority] = None,
+    status: Optional[NotificationStatus] = None,
+    mark_read: bool = False,
+):
+    """Cursor-paginated notification feed that marks fetched items as seen."""
+    notification_service = NotificationService(db)
+    result = await notification_service.get_notification_feed(
+        user_id=current_user.id,
+        cursor=cursor,
+        limit=limit,
+        include_read=include_read,
+        include_archived=include_archived,
+        category=category,
+        priority=priority,
+        status=status,
+        mark_read=mark_read,
+    )
+
+    result["notifications"] = [
+        schemas.NotificationOut.model_validate(n) for n in result["notifications"]
+    ]
+    return result
+
+
 @router.put("/{notification_id}/read")
 @limiter.limit("100/minute")
 async def mark_notification_as_read(

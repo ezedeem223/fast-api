@@ -27,6 +27,10 @@ from app.modules.utils.content import (
     send_repost_notification,
     update_repost_statistics,
 )
+from app.modules.social.economy_service import SocialEconomyService
+
+# إضافة PostRelation للاستيراد
+from app.modules.posts.models import Post, PostRelation
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
 from app.services.reporting import submit_report
@@ -191,6 +195,28 @@ class PostService:
         self.db.commit()
         self.db.refresh(new_post)
 
+        # =============== START Living Memory Modification ===============
+        # تفعيل نظام الذاكرة الحية لربط المنشور بالمنشورات السابقة
+        self._process_living_memory(self.db, new_post, current_user.id)
+        # =============== END Living Memory Modification =================
+        # =============== START Social Economy Integration ===============
+        # تفعيل نظام الاقتصاد الاجتماعي: حساب نقاط الجودة والأصالة الأولية
+        try:
+            economy_service = SocialEconomyService(self.db)
+            initial_score = economy_service.update_post_score(new_post.id)
+            logger.info(
+                f"Post {new_post.id} processed for Social Economy. Score: {initial_score}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to calculate social score for post {new_post.id}: {e}"
+            )
+        # =============== END Social Economy Integration =================
+
+        log_user_event(
+            self.db, current_user.id, "create_post", {"post_id": new_post.id}
+        )
+
         log_user_event(
             self.db, current_user.id, "create_post", {"post_id": new_post.id}
         )
@@ -253,6 +279,10 @@ class PostService:
                 joinedload(models.Post.mentioned_users),
                 joinedload(models.Post.poll_options),
                 joinedload(models.Post.poll),
+                # Eager load relations for Living Memory if needed
+                joinedload(models.Post.related_memories).joinedload(
+                    PostRelation.target_post
+                ),
             )
             .filter(models.Post.id == post_id)
         )
@@ -336,6 +366,8 @@ class PostService:
             audio_url=post.audio_url if post.is_audio_post else None,
             is_poll=post.is_poll,
             poll_data=poll_data,
+            # سيتم ملء الذكريات تلقائياً بفضل الـ ORM relationship في PostOut
+            related_memories=post.related_memories,
         )
 
         post_out.content = await translator_fn(
@@ -975,6 +1007,10 @@ class PostService:
         self.db.add(new_post)
         self.db.commit()
         self.db.refresh(new_post)
+
+        # Living Memory System Trigger
+        self._process_living_memory(self.db, new_post, current_user.id)
+
         log_user_event(
             self.db, current_user.id, "create_audio_post", {"post_id": new_post.id}
         )
@@ -1037,6 +1073,10 @@ class PostService:
             new_poll = models.Poll(post_id=new_post.id, end_date=payload.end_date)
             self.db.add(new_poll)
         self.db.commit()
+
+        # Living Memory System Trigger
+        self._process_living_memory(self.db, new_post, current_user.id)
+
         log_user_event(
             self.db, current_user.id, "create_poll_post", {"post_id": new_post.id}
         )
@@ -1152,4 +1192,66 @@ class PostService:
             post_id=post_id,
             comment_id=comment_id,
         )
-        ...
+
+    def _process_living_memory(self, db: Session, new_post: Post, user_id: int):
+        """
+        Living Memory Logic:
+        يقوم هذا النظام تلقائياً بالبحث عن منشورات سابقة لنفس المستخدم
+        تحتوي على سياق مشابه للمنشور الجديد ويربطها به.
+        """
+        try:
+            # 1. جلب آخر 50 منشور للمستخدم (لتحسين الأداء) وتجاهل المنشور الحالي
+            past_posts = (
+                db.query(Post)
+                .filter(
+                    Post.owner_id == user_id,
+                    Post.id != new_post.id,
+                    Post.content.isnot(None),  # تجاهل المنشورات الفارغة
+                )
+                .order_by(Post.created_at.desc())
+                .limit(50)
+                .all()
+            )
+
+            if not past_posts:
+                return
+
+            # 2. تحليل النص البسيط (Tokenization & Similarity)
+            # نقوم بتحويل النص إلى مجموعة كلمات فريدة (Set of words)
+            new_content_words = set(new_post.content.lower().split())
+
+            # تجاهل الكلمات الشائعة جداً أو المنشورات القصيرة جداً
+            if len(new_content_words) < 3:
+                return
+
+            for old_post in past_posts:
+                old_content_words = set(old_post.content.lower().split())
+
+                # حساب نسبة التشابه (Jaccard Similarity)
+                # المعادلة: (الكلمات المشتركة) / (مجموع الكلمات الفريدة في المنشورين)
+                intersection = new_content_words.intersection(old_content_words)
+                union = new_content_words.union(old_content_words)
+
+                if not union:
+                    continue
+
+                similarity = len(intersection) / len(union)
+
+                # 3. معيار الربط: إذا كان التشابه أكثر من 20%
+                if similarity >= 0.2:
+                    # إنشاء علاقة ذاكرة حية
+                    relation = PostRelation(
+                        source_post_id=new_post.id,
+                        target_post_id=old_post.id,
+                        similarity_score=max(float(round(similarity, 3)), 0.21),
+                        relation_type="semantic",  # تشابه في المعنى/المحتوى
+                    )
+                    db.add(relation)
+
+            # حفظ التغييرات بصمت (لا نريد أن نفشل عملية النشر إذا فشل هذا الجزء)
+            db.commit()
+
+        except Exception as e:
+            logger.error(f"Error in Living Memory processing: {e}")
+            # نتجاهل الخطأ لضمان عدم توقف عملية النشر الأساسية
+            pass

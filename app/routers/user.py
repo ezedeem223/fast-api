@@ -24,7 +24,7 @@ from ..i18n import (
     ALL_LANGUAGES,
     get_translated_content,
 )  # Assuming get_translated_content is defined here
-from app.core.cache.redis_cache import cache, cache_manager  # أضف في الـ imports
+from app.core.cache.redis_cache import cache, cache_manager
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -62,7 +62,8 @@ async def create_user(
 
 
 @router.get("/users/{user_id}/followers", response_model=schemas.FollowersListOut)
-@cache(expire=300)
+# استبدل expire بـ ttl وأضف prefix لتمييز الكاش
+@cache(prefix="user_profile", ttl=300)
 async def get_user_followers(
     user_id: int,
     service: UserService = Depends(get_user_service),
