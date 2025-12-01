@@ -16773,3 +16773,659 @@ TypeError: 'related_to_post_id' is an invalid keyword argument for Post
 2025-12-01 20:20:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
 2025-12-01 20:20:39 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
 2025-12-01 20:20:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:39:52 | INFO     | root:setup_logging:216 | Logging configured. Level: INFO, Directory: logs
+2025-12-01 20:39:53 | INFO     | apscheduler.scheduler:add_job:454 | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-12-01 20:39:53 | INFO     | apscheduler.scheduler:add_job:454 | Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-12-01 20:39:53 | INFO     | apscheduler.scheduler:_real_add_job:895 | Added job "_clean_old_statistics_job" to job store "default"
+2025-12-01 20:39:53 | INFO     | apscheduler.scheduler:_real_add_job:895 | Added job "update_all_communities_statistics" to job store "default"
+2025-12-01 20:39:53 | INFO     | apscheduler.scheduler:start:181 | Scheduler started
+2025-12-01 20:39:53 | INFO     | app.core.app_factory:create_app:300 | Application startup complete
+2025-12-01 20:39:57 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:39:57 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:39:58 | INFO     | app.utils:log_user_event:17 | User Event - User: 2, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:39:58 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:39:58 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to temp@example.com
+2025-12-01 20:39:58 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:39:58 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/search/ "HTTP/1.1 200 OK"
+2025-12-01 20:39:59 | INFO     | root:setup_logging:216 | Logging configured. Level: INFO, Directory: logs
+2025-12-01 20:39:59 | INFO     | app.core.app_factory:create_app:300 | Application startup complete
+2025-12-01 20:39:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/languages "HTTP/1.1 200 OK"
+2025-12-01 20:39:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/protected-resource "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:39:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/protected-resource "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:39:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:00 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:00 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:40:00 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:00 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello123@gmail.com
+2025-12-01 20:40:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:40:00 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:01 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:01 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:03 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:03 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:04 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:04 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:40:04 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:04 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:05 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:40:05 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/communities/ "HTTP/1.1 200 OK"
+2025-12-01 20:40:05 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:06 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:06 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:40:06 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:07 | INFO     | app.utils:log_user_event:17 | User Event - User: 2, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:40:07 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:07 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello3@gmail.com
+2025-12-01 20:40:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:40:07 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/join "HTTP/1.1 200 OK"
+2025-12-01 20:40:07 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:08 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:08 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:40:08 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:08 | INFO     | app.utils:log_user_event:17 | User Event - User: 2, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:40:08 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:08 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello3@gmail.com
+2025-12-01 20:40:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:40:09 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/join "HTTP/1.1 200 OK"
+2025-12-01 20:40:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/join "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:09 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:10 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities "HTTP/1.1 307 Temporary Redirect"
+2025-12-01 20:40:10 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:40:10 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:10 | INFO     | app.utils:log_user_event:17 | User Event - User: 2, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:40:10 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:10 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello3@gmail.com
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/post "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:10 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/post "HTTP/1.1 201 Created"
+2025-12-01 20:40:11 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:11 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /posts/
+2025-12-01 20:40:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:12 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:12 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /posts/
+2025-12-01 20:40:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:12 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:13 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:13 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:13 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/9999 "HTTP/1.1 404 Not Found"
+2025-12-01 20:40:13 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:40:13 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:40:14 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:14 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: PUT http://testserver/posts/4 "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:15 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:15 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/4 "HTTP/1.1 403 Forbidden"
+2025-12-01 20:40:16 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/9999 "HTTP/1.1 404 Not Found"
+2025-12-01 20:40:16 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:17 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:17 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /posts/
+2025-12-01 20:40:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:17 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:18 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:18 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:18 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/?limit=2&skip=1 "HTTP/1.1 200 OK"
+2025-12-01 20:40:18 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:18 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:19 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:19 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:19 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/?search=first "HTTP/1.1 200 OK"
+2025-12-01 20:40:20 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:20 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 201 Created"
+2025-12-01 20:40:20 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:21 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 201 Created"
+2025-12-01 20:40:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/download/test_file.txt "HTTP/1.1 200 OK"
+2025-12-01 20:40:21 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 404 Not Found"
+2025-12-01 20:40:22 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:22 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:22 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:23 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:23 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 413 Request Entity Too Large"
+2025-12-01 20:40:31 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/protected-resource "HTTP/1.1 200 OK"
+2025-12-01 20:40:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/protected-resource "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:40:32 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:32 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:32 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:32 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:32 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: follow_user, Metadata: {'followed_id': 2}
+2025-12-01 20:40:32 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:32 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:32 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:32 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/2 "HTTP/1.1 201 Created"
+2025-12-01 20:40:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:33 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: follow_user, Metadata: {'followed_id': 2}
+2025-12-01 20:40:33 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/2 "HTTP/1.1 201 Created"
+2025-12-01 20:40:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/follow/2 "HTTP/1.1 204 No Content"
+2025-12-01 20:40:34 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:34 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:34 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/1 "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:35 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: follow_user, Metadata: {'followed_id': 2}
+2025-12-01 20:40:35 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/2 "HTTP/1.1 201 Created"
+2025-12-01 20:40:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/2 "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:36 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:36 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/follow/2 "HTTP/1.1 404 Not Found"
+2025-12-01 20:40:37 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:37 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:37 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/9999 "HTTP/1.1 404 Not Found"
+2025-12-01 20:40:37 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:37 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:38 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /follow/0
+2025-12-01 20:40:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/0 "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:38 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:38 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /follow/-1
+2025-12-01 20:40:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/-1 "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:38 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/1 "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:40:39 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:40 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/conversations "HTTP/1.1 201 Created"
+2025-12-01 20:40:40 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:41 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:41 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:41 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/conversations "HTTP/1.1 201 Created"
+2025-12-01 20:40:42 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '2016d3fd-0ad2-4075-b739-ad942c7aa1b7'}
+2025-12-01 20:40:42 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:42 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:42 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:42 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/conversations/2016d3fd-0ad2-4075-b739-ad942c7aa1b7/messages "HTTP/1.1 201 Created"
+2025-12-01 20:40:42 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/conversations/2016d3fd-0ad2-4075-b739-ad942c7aa1b7/messages "HTTP/1.1 200 OK"
+2025-12-01 20:40:42 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:42 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:43 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:43 | INFO     | app.services.posts.post_service:create_post:231 | Post 2 processed for Social Economy. Score: 54.0
+2025-12-01 20:40:43 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 2}
+2025-12-01 20:40:43 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:40:43 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:40:43 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:43 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/2 "HTTP/1.1 200 OK"
+2025-12-01 20:40:44 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:44 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:44 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:44 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:45 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '1_2'}
+2025-12-01 20:40:45 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:45 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '1_1'}
+2025-12-01 20:40:45 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/inbox "HTTP/1.1 200 OK"
+2025-12-01 20:40:46 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:46 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:47 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '1_2'}
+2025-12-01 20:40:47 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/ "HTTP/1.1 200 OK"
+2025-12-01 20:40:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:48 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '1_2'}
+2025-12-01 20:40:48 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:49 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:50 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:40:50 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:51 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:51 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:51 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:40:51 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 201 Created"
+2025-12-01 20:40:51 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:51 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:52 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 400 Bad Request"
+2025-12-01 20:40:52 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:40:53 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:40:53 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/send_file "HTTP/1.1 413 Request Entity Too Large"
+2025-12-01 20:41:01 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/download/nonexistent.txt "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:03 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:03 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:03 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:04 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:04 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /message/
+2025-12-01 20:41:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:04 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:04 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:05 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:05 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:05 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/?skip=0&limit=10 "HTTP/1.1 200 OK"
+2025-12-01 20:41:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/?skip=10&limit=10 "HTTP/1.1 200 OK"
+2025-12-01 20:41:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/?skip=20&limit=10 "HTTP/1.1 200 OK"
+2025-12-01 20:41:06 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:06 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:07 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/message/ "HTTP/1.1 200 OK"
+2025-12-01 20:41:07 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:07 | INFO     | app.services.posts.post_service:create_post:231 | Post 1 processed for Social Economy. Score: 34.0
+2025-12-01 20:41:07 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:07 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:41:07 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:41:07 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:08 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:08 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:08 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:08 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_comment, Metadata: {'comment_id': 1, 'post_id': 1}
+2025-12-01 20:41:09 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:41:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/comments/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:09 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:09 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:09 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:10 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:41:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:10 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:10 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:11 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:11 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: follow_user, Metadata: {'followed_id': 2}
+2025-12-01 20:41:11 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:41:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/follow/2 "HTTP/1.1 201 Created"
+2025-12-01 20:41:11 | INFO     | app.notifications:send_real_time_notification:54 | Real-time notification sent to user 1
+2025-12-01 20:41:11 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:11 | INFO     | app.services.posts.post_service:create_post:231 | Post 1 processed for Social Economy. Score: 34.0
+2025-12-01 20:41:11 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:11 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:41:11 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:41:11 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:11 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:12 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:12 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:12 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: send_message, Metadata: {'conversation_id': '1_2'}
+2025-12-01 20:41:12 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:41:12 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/message/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:13 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:13 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:14 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:14 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_community, Metadata: {'community_id': 1}
+2025-12-01 20:41:14 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:41:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:14 | INFO     | app.utils:log_user_event:17 | User Event - User: 2, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:41:14 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:14 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello3@gmail.com
+2025-12-01 20:41:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:41:14 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:41:14 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/communities/1/join "HTTP/1.1 200 OK"
+2025-12-01 20:41:15 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/notifications/summary "HTTP/1.1 200 OK"
+2025-12-01 20:41:15 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:15 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/notifications/feed?limit=2 "HTTP/1.1 200 OK"
+2025-12-01 20:41:16 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:16 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:17 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/ "HTTP/1.1 200 OK"
+2025-12-01 20:41:17 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:17 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:18 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:18 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:18 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:41:18 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:18 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello123@gmail.com
+2025-12-01 20:41:18 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:41:19 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:19 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:19 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:20 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:20 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:20 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/ "HTTP/1.1 200 OK"
+2025-12-01 20:41:21 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:21 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:21 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/1 "HTTP/1.1 200 OK"
+2025-12-01 20:41:22 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:22 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:23 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:23 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:23 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/88888 "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:23 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:23 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:24 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:24 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:24 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:24 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:24 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:25 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:25 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:25 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/posts/1 "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:25 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:25 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:25 | INFO     | app.services.posts.post_service:create_post:231 | Post 1 processed for Social Economy. Score: 34.0
+2025-12-01 20:41:25 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:25 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:41:25 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:41:25 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:25 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:25 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:26 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:26 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:26 | INFO     | app.services.posts.post_service:create_post:231 | Post 1 processed for Social Economy. Score: 34.0
+2025-12-01 20:41:26 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:26 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:41:26 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:41:26 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:26 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:26 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:27 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:27 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:27 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:27 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:27 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:28 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:28 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:28 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:28 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:28 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/1 "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:29 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:29 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:29 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:29 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:29 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: delete_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:29 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/1 "HTTP/1.1 204 No Content"
+2025-12-01 20:41:30 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:30 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:30 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:30 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:30 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/8000000 "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:31 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:31 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:31 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/posts/4 "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:32 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:32 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: PUT http://testserver/posts/1 "HTTP/1.1 200 OK"
+2025-12-01 20:41:33 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:33 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:34 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:34 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:34 | INFO     | httpx:_send_single_request:1025 | HTTP Request: PUT http://testserver/posts/4 "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:34 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:34 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: PUT http://testserver/posts/1 "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:35 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:35 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:36 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: PUT http://testserver/posts/8000000 "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:36 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:36 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/reels/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:37 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:37 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:37 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/reels/active?community_id=1 "HTTP/1.1 200 OK"
+2025-12-01 20:41:38 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: DELETE http://testserver/reels/1 "HTTP/1.1 200 OK"
+2025-12-01 20:41:38 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:38 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/reels/1/view "HTTP/1.1 200 OK"
+2025-12-01 20:41:39 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:39 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/report/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:40 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/report/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:40 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:40 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:41 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/report/ "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:41 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:41 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:41 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/report/ "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:42 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:42 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:42 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:42 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:43 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/search/ "HTTP/1.1 200 OK"
+2025-12-01 20:41:43 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:43 | WARNING  | app.routers.search:search:120 | Typesense search failed, using default search: typesense error
+2025-12-01 20:41:43 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/search/ "HTTP/1.1 200 OK"
+2025-12-01 20:41:44 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:44 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:44 | INFO     | app.services.posts.post_service:create_post:231 | Post 1 processed for Social Economy. Score: 59.0
+2025-12-01 20:41:44 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_post, Metadata: {'post_id': 1}
+2025-12-01 20:41:44 | INFO     | app.routers.post:share_on_twitter:105 | Twitter credentials not configured; skipping share.
+2025-12-01 20:41:44 | INFO     | app.routers.post:share_on_facebook:137 | Facebook credentials not configured; skipping share.
+2025-12-01 20:41:44 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:44 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:44 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/posts/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:45 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:45 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/reactions/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:46 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:46 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:46 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: create_comment, Metadata: {'comment_id': 1, 'post_id': 1}
+2025-12-01 20:41:46 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:41:46 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:46 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:46 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/comments/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:46 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:46 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:47 | INFO     | app.utils:log_user_event:17 | User Event - User: 1, Event: login, Metadata: {'ip': 'testclient', 'user_agent': 'testclient'}
+2025-12-01 20:41:47 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:47 | INFO     | app.notifications:send_login_notification:181 | Login notification sent to hello123@gmail.com
+2025-12-01 20:41:47 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 200 OK"
+2025-12-01 20:41:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:48 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:48 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:49 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:49 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:49 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:50 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/login "HTTP/1.1 403 Forbidden"
+2025-12-01 20:41:50 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:50 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/users/1 "HTTP/1.1 200 OK"
+2025-12-01 20:41:51 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:51 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:51 | INFO     | httpx:_send_single_request:1025 | HTTP Request: GET http://testserver/users/99999 "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:52 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:52 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/verify "HTTP/1.1 200 OK"
+2025-12-01 20:41:52 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:52 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/verify "HTTP/1.1 400 Bad Request"
+2025-12-01 20:41:53 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:53 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:54 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:54 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:54 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:41:54 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:54 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:54 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:55 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:55 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:55 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:41:55 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:55 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:55 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:56 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:56 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:56 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:41:56 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:56 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:56 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:57 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 404 Not Found"
+2025-12-01 20:41:57 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:57 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:58 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:58 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:58 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 401 Unauthorized"
+2025-12-01 20:41:58 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:58 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:59 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:41:59 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /vote/
+2025-12-01 20:41:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:41:59 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:41:59 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:00 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:42:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:00 | WARNING  | app.core.error_handlers:validation_exception_handler:106 | Validation error on /vote/
+2025-12-01 20:42:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 422 Unprocessable Entity"
+2025-12-01 20:42:00 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:42:00 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:01 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:42:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:01 | INFO     | app.notifications:create_notification:876 | Notification created for user 1
+2025-12-01 20:42:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:01 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:42:01 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:02 | INFO     | app.notifications:send_email_notification:70 | Email sending skipped in test environment.
+2025-12-01 20:42:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/users/ "HTTP/1.1 201 Created"
+2025-12-01 20:42:02 | INFO     | app.notifications:create_notification:876 | Notification created for user 2
+2025-12-01 20:42:02 | INFO     | httpx:_send_single_request:1025 | HTTP Request: POST http://testserver/vote/ "HTTP/1.1 201 Created"

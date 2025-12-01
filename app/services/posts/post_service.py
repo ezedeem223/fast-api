@@ -1209,18 +1209,28 @@ class PostService:
 
     def _process_living_memory(self, db: Session, new_post: Post, user_id: int):
         """
-        Living Memory Logic:
+        Living Memory Logic (Optimized):
         يقوم هذا النظام تلقائياً بالبحث عن منشورات سابقة لنفس المستخدم
-        تحتوي على سياق مشابه للمنشور الجديد ويربطها به.
+        تحتوي على سياق مشابه للمنشور الجديد ويربطها به، مع تجنب التكرار.
         """
         try:
-            # 1. جلب آخر 50 منشور للمستخدم (لتحسين الأداء) وتجاهل المنشور الحالي
+            # 0. التحقق من العلاقات الموجودة مسبقاً (مثل الربط اليدوي) لتجنب تعارض القيود (Unique Constraint)
+            existing_relations = (
+                db.query(PostRelation.target_post_id)
+                .filter(PostRelation.source_post_id == new_post.id)
+                .all()
+            )
+            existing_target_ids = {r[0] for r in existing_relations}
+
+            # 1. جلب آخر 50 منشور للمستخدم (لتحسين الأداء)
             past_posts = (
                 db.query(Post)
                 .filter(
                     Post.owner_id == user_id,
                     Post.id != new_post.id,
                     Post.content.isnot(None),  # تجاهل المنشورات الفارغة
+                    # استثناء المنشورات المرتبطة بالفعل من البحث لتقليل الحمل
+                    ~Post.id.in_(existing_target_ids) if existing_target_ids else True,
                 )
                 .order_by(Post.created_at.desc())
                 .limit(50)
@@ -1230,14 +1240,18 @@ class PostService:
             if not past_posts:
                 return
 
-            # 2. تحليل النص البسيط (Tokenization & Similarity)
+            # 2. تحليل النص البسيط (Tokenization)
             new_content_words = set(new_post.content.lower().split())
 
-            # تجاهل الكلمات الشائعة جداً أو المنشورات القصيرة جداً
+            # تجاهل المنشورات القصيرة جداً التي لا تعطي سياقاً مفيداً
             if len(new_content_words) < 3:
                 return
 
             for old_post in past_posts:
+                # حماية إضافية (Double Check)
+                if old_post.id in existing_target_ids:
+                    continue
+
                 old_content_words = set(old_post.content.lower().split())
 
                 # حساب نسبة التشابه (Jaccard Similarity)
@@ -1249,20 +1263,23 @@ class PostService:
 
                 similarity = len(intersection) / len(union)
 
-                # 3. معيار الربط: إذا كان التشابه أكثر من 20%
+                # 3. معيار الربط: إذا كان التشابه 20% أو أكثر
                 if similarity >= 0.2:
                     relation = PostRelation(
                         source_post_id=new_post.id,
                         target_post_id=old_post.id,
                         similarity_score=max(float(round(similarity, 3)), 0.21),
-                        relation_type="semantic",  # تشابه في المعنى/المحتوى
+                        relation_type="semantic",
                     )
                     db.add(relation)
+                    # نضيف المعرف للمجموعة لمنع تكراره في نفس الجلسة
+                    existing_target_ids.add(old_post.id)
 
             db.commit()
 
         except Exception as e:
             logger.error(f"Error in Living Memory processing: {e}")
+            # لا نوقف النظام إذا فشلت العملية الخلفية
             pass
 
     # === الميزة 1.2: الخط الزمني الديناميكي (Dynamic Timeline) ===
