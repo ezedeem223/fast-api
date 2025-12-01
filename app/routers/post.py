@@ -41,6 +41,10 @@ from cachetools import TTLCache
 
 # Import local modules
 from .. import models, schemas, oauth2, notifications
+
+# --- [تعديل هام] استيراد مخططات المنشورات المحددة للوصول إلى TimelinePoint و MemoryItem ---
+from app.modules.posts import schemas as post_module_schemas
+
 from app.core.config import settings
 from app.core.database import get_db
 from ..analytics import analyze_content
@@ -262,7 +266,7 @@ async def get_post(
 async def create_posts(
     request: Request,
     background_tasks: BackgroundTasks,
-    post: schemas.PostCreate,
+    post: post_module_schemas.PostCreate,  # Updated to use correct schema from modules
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
@@ -532,18 +536,34 @@ def get_posts_with_mentions(
     )
 
 
-@router.get("/memories/on-this-day", response_model=List[schemas.PostOut])
+# === [إضافة جديدة] الميزة 1.3: إعادة الاكتشاف (حدث في مثل هذا اليوم) ===
+@router.get("/memories/daily", response_model=List[post_module_schemas.MemoryItem])
 @cache(prefix="memories:daily", ttl=3600, include_user=True)
-def get_on_this_day_memories(
+def discover_daily_memories(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
-    limit: int = 10,
 ):
     """
-    Living Memory: Get posts created on this day in previous years.
-    استرجاع ذكريات 'في مثل هذا اليوم'.
+    1.3 Rediscovery: Get 'On This Day' memories.
+    استرجاع ذكريات 'في مثل هذا اليوم' من سنوات سابقة باستخدام المخطط الجديد.
     """
-    return service.get_memories_on_this_day(current_user=current_user, limit=limit)
+    return service.get_on_this_day_memories(current_user.id)
+
+
+# === [إضافة جديدة] الميزة 1.2: الخط الزمني الديناميكي ===
+@router.get(
+    "/users/{user_id}/timeline", response_model=List[post_module_schemas.TimelinePoint]
+)
+def get_user_evolution_timeline(
+    user_id: int,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    service: PostService = Depends(get_post_service),
+):
+    """
+    1.2 Dynamic Timeline: Get user evolution timeline.
+    الحصول على خط التطور الزمني للمستخدم (إحصائيات شهرية).
+    """
+    return service.get_user_timeline(user_id)
 
 
 @router.post(

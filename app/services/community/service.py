@@ -776,6 +776,8 @@ class CommunityService:
                 "mentioned_usernames",
                 "is_help_request",
                 "analyze_content",
+                "related_to_post_id",
+                "relation_type",
             }
         )
 

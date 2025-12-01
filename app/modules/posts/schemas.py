@@ -173,6 +173,8 @@ class PostBase(BaseModel):
 class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = Field(default_factory=list)
+    related_to_post_id: Optional[int] = None  # لربط المنشور بمنشور قديم
+    relation_type: Optional[str] = "continuation"  # نوع العلاقة (استكمال، رد...)
     is_help_request: bool = False
     category_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
@@ -353,5 +355,25 @@ class Comment(CommentBase):
     deleted_at: Optional[datetime]
     edit_history: List[CommentEditHistoryOut] = []
     replies: List["Comment"] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TimelinePoint(BaseModel):
+    year: int
+    month: int
+    posts_count: int
+    total_score: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemoryItem(BaseModel):
+    post_id: int
+    title: str
+    snippet: str
+    created_at: datetime
+    years_ago: int
+    type: str
 
     model_config = ConfigDict(from_attributes=True)

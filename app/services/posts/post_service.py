@@ -13,10 +13,15 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, desc, and_
 from sqlalchemy.orm import Session, joinedload
 
-from app import models, schemas
+from app import models
+
+# نستخدم اسم مستعار لتجنب الخلط بين المخططات العامة ومخططات المنشورات
+from app import schemas as global_schemas
+from app.modules.posts import schemas as post_schemas  # المخططات المحدثة للمنشورات
+
 from app.celery_worker import schedule_post_publication
 from app.content_filter import check_content, filter_content
 from app.modules.community import Community, CommunityMember
@@ -28,8 +33,6 @@ from app.modules.utils.content import (
     update_repost_statistics,
 )
 from app.modules.social.economy_service import SocialEconomyService
-
-# إضافة PostRelation للاستيراد
 from app.modules.posts.models import Post, PostRelation
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
@@ -82,10 +85,12 @@ class PostService:
 
     def _prepare_post_response(
         self, post: models.Post, owner: Optional[models.User] = None
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         """Ensure ORM posts expose the virtual fields expected by schemas."""
         owner = owner or getattr(post, "owner", None)
-        default_privacy = getattr(owner, "privacy_level", schemas.PrivacyLevel.PUBLIC)
+        default_privacy = getattr(
+            owner, "privacy_level", post_schemas.PrivacyLevel.PUBLIC
+        )
         if (
             not hasattr(post, "privacy_level")
             or getattr(post, "privacy_level", None) is None
@@ -93,16 +98,18 @@ class PostService:
             setattr(post, "privacy_level", default_privacy)
         if not hasattr(post, "poll_data"):
             setattr(post, "poll_data", None)
-        return schemas.PostOut.model_validate(post, from_attributes=True)
+        return post_schemas.PostOut.model_validate(post, from_attributes=True)
 
-    def _prepare_post_list(self, posts: List[models.Post]) -> List[schemas.PostOut]:
+    def _prepare_post_list(
+        self, posts: List[models.Post]
+    ) -> List[post_schemas.PostOut]:
         return [self._prepare_post_response(post) for post in posts]
 
     def create_post(
         self,
         *,
         background_tasks: BackgroundTasks,
-        payload: schemas.PostCreate,
+        payload: post_schemas.PostCreate,
         current_user: models.User,
         queue_email_fn: Callable,
         schedule_email_fn: Callable,
@@ -195,12 +202,29 @@ class PostService:
         self.db.commit()
         self.db.refresh(new_post)
 
-        # =============== START Living Memory Modification ===============
-        # تفعيل نظام الذاكرة الحية لربط المنشور بالمنشورات السابقة
+        # === [START] Feature 1.4: Time-Spanning Conversations (Manual Linking) ===
+        if payload.related_to_post_id:
+            original_post = (
+                self.db.query(Post)
+                .filter(Post.id == payload.related_to_post_id)
+                .first()
+            )
+            if original_post:
+                relation = PostRelation(
+                    source_post_id=new_post.id,
+                    target_post_id=original_post.id,
+                    relation_type=payload.relation_type or "continuation",
+                    similarity_score=1.0,
+                )
+                self.db.add(relation)
+                self.db.commit()
+        # === [END] Feature 1.4 ===
+
+        # === [START] Feature 1.1: Living Memory (Automatic Linking) ===
         self._process_living_memory(self.db, new_post, current_user.id)
-        # =============== END Living Memory Modification =================
-        # =============== START Social Economy Integration ===============
-        # تفعيل نظام الاقتصاد الاجتماعي: حساب نقاط الجودة والأصالة الأولية
+        # === [END] Feature 1.1 ===
+
+        # === [START] Feature 2: Social Economy ===
         try:
             economy_service = SocialEconomyService(self.db)
             initial_score = economy_service.update_post_score(new_post.id)
@@ -211,11 +235,7 @@ class PostService:
             logger.error(
                 f"Failed to calculate social score for post {new_post.id}: {e}"
             )
-        # =============== END Social Economy Integration =================
-
-        log_user_event(
-            self.db, current_user.id, "create_post", {"post_id": new_post.id}
-        )
+        # === [END] Feature 2 ===
 
         log_user_event(
             self.db, current_user.id, "create_post", {"post_id": new_post.id}
@@ -270,7 +290,7 @@ class PostService:
         post_id: int,
         current_user: models.User,
         translator_fn,
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         post_query = (
             self.db.query(models.Post)
             .options(
@@ -279,7 +299,7 @@ class PostService:
                 joinedload(models.Post.mentioned_users),
                 joinedload(models.Post.poll_options),
                 joinedload(models.Post.poll),
-                # Eager load relations for Living Memory if needed
+                # Eager load relations for Living Memory
                 joinedload(models.Post.related_memories).joinedload(
                     PostRelation.target_post
                 ),
@@ -310,7 +330,7 @@ class PostService:
             comment_data = comment.__dict__.copy()
             comment_data["replies"] = []
             comment_data["reactions"] = [
-                schemas.Reaction(
+                post_schemas.Reaction(
                     id=r.id, user_id=r.user_id, reaction_type=r.reaction_type
                 )
                 for r in comment.reactions
@@ -329,15 +349,15 @@ class PostService:
         poll_data = None
         if post.is_poll:
             poll_options = [
-                schemas.PollOption(id=option.id, option_text=option.option_text)
+                post_schemas.PollOption(id=option.id, option_text=option.option_text)
                 for option in post.poll_options
             ]
-            poll_data = schemas.PollData(
+            poll_data = post_schemas.PollData(
                 options=poll_options,
                 end_date=post.poll[0].end_date if post.poll else None,
             )
 
-        post_out = schemas.PostOut(
+        post_out = post_schemas.PostOut(
             id=post.id,
             title=post.title,
             content=post.content,
@@ -345,19 +365,20 @@ class PostService:
             owner_id=post.owner_id,
             owner=post.owner,
             reactions=[
-                schemas.Reaction(
+                post_schemas.Reaction(
                     id=r.id, user_id=r.user_id, reaction_type=r.reaction_type
                 )
                 for r in post.reactions
             ],
             reaction_counts=[
-                schemas.ReactionCount(reaction_type=r.reaction_type, count=r.count)
+                post_schemas.ReactionCount(reaction_type=r.reaction_type, count=r.count)
                 for r in reaction_counts
             ],
             community_id=post.community_id,
             comments=comments,
             mentioned_users=[
-                schemas.UserOut.model_validate(user) for user in post.mentioned_users
+                post_schemas.UserOut.model_validate(user)
+                for user in post.mentioned_users
             ],
             sentiment=post.sentiment,
             sentiment_score=post.sentiment_score,
@@ -366,7 +387,6 @@ class PostService:
             audio_url=post.audio_url if post.is_audio_post else None,
             is_poll=post.is_poll,
             poll_data=poll_data,
-            # سيتم ملء الذكريات تلقائياً بفضل الـ ORM relationship في PostOut
             related_memories=post.related_memories,
         )
 
@@ -377,8 +397,8 @@ class PostService:
         return post_out
 
     def search_posts(
-        self, *, search: schemas.PostSearch, current_user: models.User
-    ) -> list[schemas.PostOut]:
+        self, *, search: post_schemas.PostSearch, current_user: models.User
+    ) -> list[post_schemas.PostOut]:
         query = self.db.query(models.Post)
         if search.keyword:
             query = query.filter(
@@ -392,11 +412,11 @@ class PostService:
                 models.Hashtag.name == search.hashtag
             )
         posts = query.all()
-        return [schemas.PostOut.model_validate(post) for post in posts]
+        return [post_schemas.PostOut.model_validate(post) for post in posts]
 
     def get_scheduled_posts(
         self, *, current_user: models.User
-    ) -> List[schemas.PostOut]:
+    ) -> List[post_schemas.PostOut]:
         scheduled_posts = (
             self.db.query(models.Post)
             .filter(
@@ -406,7 +426,7 @@ class PostService:
             )
             .all()
         )
-        return [schemas.PostOut.model_validate(post) for post in scheduled_posts]
+        return [post_schemas.PostOut.model_validate(post) for post in scheduled_posts]
 
     def upload_file_post(
         self,
@@ -414,7 +434,7 @@ class PostService:
         file: UploadFile,
         current_user: models.User,
         media_dir: Path,
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -459,7 +479,7 @@ class PostService:
         self,
         *,
         post_id: int,
-        payload: schemas.PostCreate,
+        payload: post_schemas.PostCreate,
         current_user: models.User,
         analyze_content_fn: Callable[[str], dict] | None = None,
     ) -> models.Post:
@@ -569,7 +589,7 @@ class PostService:
         current_user: models.User,
         limit_followed: int = 10,
         limit_others: int = 5,
-    ) -> List[schemas.Post]:
+    ) -> List[global_schemas.Post]:
         followed_users = (
             self.db.query(models.Follow.followed_id)
             .filter(models.Follow.follower_id == current_user.id)
@@ -634,9 +654,9 @@ class PostService:
         self,
         *,
         post_id: int,
-        payload: schemas.RepostCreate,
+        payload: post_schemas.RepostCreate,
         current_user: models.User,
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         original_post = (
             self.db.query(models.Post).filter(models.Post.id == post_id).first()
         )
@@ -718,7 +738,7 @@ class PostService:
         post_id: int,
         skip: int,
         limit: int,
-    ) -> List[schemas.PostOut]:
+    ) -> List[post_schemas.PostOut]:
         post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
         if not post:
             raise HTTPException(
@@ -738,7 +758,7 @@ class PostService:
         self,
         post: models.Post,
         user: models.User,
-        payload: schemas.RepostCreate,
+        payload: post_schemas.RepostCreate,
     ) -> bool:
         if not post.allow_reposts:
             return False
@@ -803,7 +823,7 @@ class PostService:
 
     def toggle_allow_reposts(
         self, *, post_id: int, current_user: models.User
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
         if not post:
             raise HTTPException(
@@ -821,7 +841,7 @@ class PostService:
 
     def toggle_archive_post(
         self, *, post_id: int, current_user: models.User
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         post_query = self.db.query(models.Post).filter(models.Post.id == post_id)
         post = post_query.first()
         if post is None:
@@ -846,7 +866,7 @@ class PostService:
         post_id: int,
         current_user: models.User,
         analyze_content_fn: Callable[[str], dict],
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
         if not post:
             raise HTTPException(
@@ -873,7 +893,7 @@ class PostService:
         limit: int,
         search: str,
         include_archived: bool,
-    ) -> List[schemas.PostOut]:
+    ) -> List[post_schemas.PostOut]:
         query = self.db.query(models.Post).filter(
             models.Post.mentioned_users.any(id=current_user.id)
         )
@@ -893,14 +913,9 @@ class PostService:
         search: str,
         translate: bool,
         translator_fn,
-    ) -> list[schemas.PostOut]:
+    ) -> list[post_schemas.PostOut]:
         """
         List posts with optimized eager loading to prevent N+1 queries.
-
-        Improvements:
-        - Eager loading of owner and related data
-        - Better query structure
-        - Proper pagination with validation
         """
 
         # Build base query with vote aggregation
@@ -918,7 +933,6 @@ class PostService:
             )
 
         # Apply eager loading optimization (prevent N+1 queries)
-        # This loads owner, comments, reactions in efficient way
         query = optimize_post_query(query)
 
         # Order by score descending
@@ -953,7 +967,7 @@ class PostService:
                         "Skipping translation for post %s due to TypeError", post_obj.id
                     )
 
-            result.append(schemas.PostOut.model_validate(post_obj))
+            result.append(post_schemas.PostOut.model_validate(post_obj))
 
         return result
 
@@ -984,7 +998,7 @@ class PostService:
         analyze_content_fn: Callable[[str], dict],
         queue_email_fn: Callable,
         mention_notifier_fn,
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
@@ -1034,7 +1048,7 @@ class PostService:
         *,
         skip: int,
         limit: int,
-    ) -> List[schemas.PostOut]:
+    ) -> List[post_schemas.PostOut]:
         posts = (
             self.db.query(models.Post)
             .filter(models.Post.is_audio_post.is_(True))
@@ -1049,10 +1063,10 @@ class PostService:
         self,
         *,
         background_tasks: BackgroundTasks,
-        payload: schemas.PollCreate,
+        payload: post_schemas.PollCreate,
         current_user: models.User,
         queue_email_fn: Callable,
-    ) -> schemas.PostOut:
+    ) -> post_schemas.PostOut:
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
@@ -1217,7 +1231,6 @@ class PostService:
                 return
 
             # 2. تحليل النص البسيط (Tokenization & Similarity)
-            # نقوم بتحويل النص إلى مجموعة كلمات فريدة (Set of words)
             new_content_words = set(new_post.content.lower().split())
 
             # تجاهل الكلمات الشائعة جداً أو المنشورات القصيرة جداً
@@ -1228,7 +1241,6 @@ class PostService:
                 old_content_words = set(old_post.content.lower().split())
 
                 # حساب نسبة التشابه (Jaccard Similarity)
-                # المعادلة: (الكلمات المشتركة) / (مجموع الكلمات الفريدة في المنشورين)
                 intersection = new_content_words.intersection(old_content_words)
                 union = new_content_words.union(old_content_words)
 
@@ -1239,7 +1251,6 @@ class PostService:
 
                 # 3. معيار الربط: إذا كان التشابه أكثر من 20%
                 if similarity >= 0.2:
-                    # إنشاء علاقة ذاكرة حية
                     relation = PostRelation(
                         source_post_id=new_post.id,
                         target_post_id=old_post.id,
@@ -1248,37 +1259,76 @@ class PostService:
                     )
                     db.add(relation)
 
-            # حفظ التغييرات بصمت (لا نريد أن نفشل عملية النشر إذا فشل هذا الجزء)
             db.commit()
 
         except Exception as e:
             logger.error(f"Error in Living Memory processing: {e}")
-            # نتجاهل الخطأ لضمان عدم توقف عملية النشر الأساسية
             pass
 
-    def get_memories_on_this_day(
-        self, *, current_user: models.User, limit: int = 10
-    ) -> List[schemas.PostOut]:
+    # === الميزة 1.2: الخط الزمني الديناميكي (Dynamic Timeline) ===
+    def get_user_timeline(self, user_id: int) -> list[dict]:
         """
-        Living Memory 1.3: Rediscovery Algorithm (On This Day).
-        استرجاع المنشورات التي تم نشرها في مثل هذا اليوم من سنوات سابقة.
+        تجميع إحصائيات المستخدم شهرياً لرسم خط التطور البياني.
         """
-        today = datetime.now().date()
-
-        memories = (
-            self.db.query(models.Post)
-            .filter(
-                models.Post.owner_id == current_user.id,
-                models.Post.is_archived.is_(False),
-                # مطابقة الشهر واليوم الحاليين
-                extract("month", models.Post.created_at) == today.month,
-                extract("day", models.Post.created_at) == today.day,
-                # التأكد أنها من سنوات سابقة (ليست اليوم)
-                extract("year", models.Post.created_at) < today.year,
+        timeline_query = (
+            self.db.query(
+                func.extract("year", Post.created_at).label("year"),
+                func.extract("month", Post.created_at).label("month"),
+                func.count(Post.id).label("posts_count"),
+                func.sum(Post.score).label("total_score"),
             )
-            .order_by(models.Post.created_at.desc())
-            .limit(limit)
+            .filter(Post.owner_id == user_id, Post.is_deleted == False)
+            .group_by("year", "month")
+            .order_by(desc("year"), desc("month"))
             .all()
         )
 
-        return self._prepare_post_list(memories)
+        return [
+            {
+                "year": int(t.year),
+                "month": int(t.month),
+                "posts_count": t.posts_count,
+                "total_score": t.total_score or 0,
+            }
+            for t in timeline_query
+        ]
+
+    # === الميزة 1.3: إعادة الاكتشاف (حدث في مثل هذا اليوم) ===
+    def get_on_this_day_memories(self, user_id: int) -> list[dict]:
+        """
+        البحث عن منشورات كتبها المستخدم في نفس اليوم والشهر لكن في سنوات سابقة.
+        """
+        today = datetime.utcnow()
+
+        memories = (
+            self.db.query(Post)
+            .filter(
+                Post.owner_id == user_id,
+                Post.is_deleted == False,
+                extract("month", Post.created_at) == today.month,
+                extract("day", Post.created_at) == today.day,
+                extract("year", Post.created_at) < today.year,
+            )
+            .order_by(Post.created_at.desc())
+            .all()
+        )
+
+        results = []
+        for post in memories:
+            years_ago = today.year - post.created_at.year
+            results.append(
+                {
+                    "post_id": post.id,
+                    "title": post.title,
+                    "snippet": (
+                        post.content[:100] + "..."
+                        if len(post.content) > 100
+                        else post.content
+                    ),
+                    "created_at": post.created_at,
+                    "years_ago": years_ago,
+                    "type": "on_this_day",
+                }
+            )
+
+        return results

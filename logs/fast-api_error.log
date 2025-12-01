@@ -5011,3 +5011,549 @@ Exception: None
 
 (Background on this error at: https://sqlalche.me/e/20/f405)
 Exception: None
+2025-12-01 19:56:49 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:56:50 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:56:51 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:56:53 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:56:53 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:56:54 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 19:58:00 | ERROR    | app.core.error_handlers:general_exception_handler:175 | Unhandled exception: 'related_to_post_id' is an invalid keyword argument for Post
+Exception: (<class 'TypeError'>, TypeError("'related_to_post_id' is an invalid keyword argument for Post"), <traceback object at 0x000001E87EA9AA80>)
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+  |     yield
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 190, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 680, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 177, in __call__
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 175, in __call__
+    |     await self.app(scope, receive, send_wrapper)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\ip_ban.py", line 16, in ip_ban_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\headers.py", line 12, in add_language_header
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\language.py", line 13, in language_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\logging_middleware.py", line 35, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 756, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 776, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 297, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 77, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 72, in app
+    |     response = await func(request)
+    |                ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 301, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\routers\community.py", line 373, in create_community_post_legacy
+    |     new_post = service.create_community_post(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\services\community\service.py", line 782, in create_community_post
+    |     new_post = Post(
+    |                ^^^^^
+    |   File "<string>", line 4, in __init__
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    |     with util.safe_reraise():
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    |     raise exc_value.with_traceback(exc_tb)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    |     manager.original_init(*mixed[1:], **kwargs)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2167, in _declarative_constructor
+    |     raise TypeError(
+    | TypeError: 'related_to_post_id' is an invalid keyword argument for Post
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 177, in __call__
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 175, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\ip_ban.py", line 16, in ip_ban_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\headers.py", line 12, in add_language_header
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\language.py", line 13, in language_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\logging_middleware.py", line 35, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 756, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 776, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 72, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\routers\community.py", line 373, in create_community_post_legacy
+    new_post = service.create_community_post(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\services\community\service.py", line 782, in create_community_post
+    new_post = Post(
+               ^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2167, in _declarative_constructor
+    raise TypeError(
+TypeError: 'related_to_post_id' is an invalid keyword argument for Post
+2025-12-01 20:00:19 | ERROR    | app.core.error_handlers:general_exception_handler:175 | Unhandled exception: 'related_to_post_id' is an invalid keyword argument for Post
+Exception: (<class 'TypeError'>, TypeError("'related_to_post_id' is an invalid keyword argument for Post"), <traceback object at 0x000001BE060C7980>)
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 87, in collapse_excgroups
+  |     yield
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 190, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 680, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 177, in __call__
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 175, in __call__
+    |     await self.app(scope, receive, send_wrapper)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\ip_ban.py", line 16, in ip_ban_middleware
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\headers.py", line 12, in add_language_header
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\language.py", line 13, in language_middleware
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    |     with collapse_excgroups():
+    |   File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\logging_middleware.py", line 35, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    |     raise app_exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 756, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 776, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 297, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 77, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 72, in app
+    |     response = await func(request)
+    |                ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 301, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\routers\community.py", line 373, in create_community_post_legacy
+    |     new_post = service.create_community_post(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\kglou\Desktop\fastapi\app\services\community\service.py", line 782, in create_community_post
+    |     new_post = Post(
+    |                ^^^^^
+    |   File "<string>", line 4, in __init__
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    |     with util.safe_reraise():
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    |     raise exc_value.with_traceback(exc_tb)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    |     manager.original_init(*mixed[1:], **kwargs)
+    |   File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2167, in _declarative_constructor
+    |     raise TypeError(
+    | TypeError: 'related_to_post_id' is an invalid keyword argument for Post
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 177, in __call__
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\prometheus_fastapi_instrumentator\middleware.py", line 175, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\ip_ban.py", line 16, in ip_ban_middleware
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\headers.py", line 12, in add_language_header
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\language.py", line 13, in language_middleware
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 189, in __call__
+    with collapse_excgroups():
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_utils.py", line 93, in collapse_excgroups
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 191, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\core\middleware\logging_middleware.py", line 35, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 165, in call_next
+    raise app_exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\base.py", line 151, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 756, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 776, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\starlette\routing.py", line 72, in app
+    response = await func(request)
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\routers\community.py", line 373, in create_community_post_legacy
+    new_post = service.create_community_post(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kglou\Desktop\fastapi\app\services\community\service.py", line 782, in create_community_post
+    new_post = Post(
+               ^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\kglou\Desktop\fastapi\venv\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2167, in _declarative_constructor
+    raise TypeError(
+TypeError: 'related_to_post_id' is an invalid keyword argument for Post
+2025-12-01 20:02:32 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:33 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:34 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:34 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:35 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:35 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 20:02:35 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None

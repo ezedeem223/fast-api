@@ -104,3 +104,39 @@ def test_living_memory_api_integration(
         # في حالة الفشل، نتحقق يدوياً هل تم الإنشاء في الخلفية أم لا
         # هذا يساعدنا في تصحيح الأخطاء (Debugging)
         print("\n⚠️ API Warning: related_memories list is empty in response.")
+
+def test_living_memory_is_user_scoped(db_session, test_user, test_user2):
+    """Ensure related memories are only created within the same user's history."""
+    post_user1 = Post(
+        owner_id=test_user.id,
+        title="Travel Plans",
+        content="Planning a trip to Japan next spring",
+        is_safe_content=True,
+    )
+    db_session.add(post_user1)
+    db_session.commit()
+    db_session.refresh(post_user1)
+
+    post_user2 = Post(
+        owner_id=test_user2.id,
+        title="Trip Thoughts",
+        content="Planning a trip to Japan next spring",
+        is_safe_content=True,
+    )
+    db_session.add(post_user2)
+    db_session.commit()
+    db_session.refresh(post_user2)
+
+    service = PostService(db_session)
+    service._process_living_memory(db_session, post_user2, test_user2.id)
+
+    relation = (
+        db_session.query(PostRelation)
+        .filter(
+            PostRelation.source_post_id == post_user2.id,
+            PostRelation.target_post_id == post_user1.id,
+        )
+        .first()
+    )
+
+    assert relation is None, "Living Memory should not link posts across different users"
