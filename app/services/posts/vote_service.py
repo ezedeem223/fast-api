@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Dict
 
 from fastapi import BackgroundTasks, HTTPException, status
@@ -17,11 +18,13 @@ from app.notifications import (
     schedule_email_notification,
     create_notification,
 )
+
 from app.modules.utils.common import get_user_display_name
 from app.modules.utils.analytics import (
     update_post_score,
     update_post_vote_statistics,
 )
+from app.modules.social.economy_service import SocialEconomyService
 
 
 class VoteService:
@@ -80,6 +83,16 @@ class VoteService:
 
         update_post_score(self.db, post)
 
+        # =============== START Social Economy Update ===============
+        try:
+            economy_service = SocialEconomyService(self.db)
+            economy_service.update_post_score(post.id)
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"Error updating social score after vote: {e}"
+            )
+        # =============== END Social Economy Update =================
+
         queue_email_fn(
             background_tasks,
             to=post.owner.email,
@@ -93,9 +106,7 @@ class VoteService:
             body=f"Your post '{post.title}' has received a new vote.",
         )
 
-        vote_broadcast_message = (
-            f"User {current_user.id} has voted on post {post.id}."
-        )
+        vote_broadcast_message = f"User {current_user.id} has voted on post {post.id}."
         vote_broadcast = notification_manager.broadcast
         if asyncio.iscoroutinefunction(vote_broadcast):
             background_tasks.add_task(
@@ -114,9 +125,7 @@ class VoteService:
             post.id,
         )
 
-        background_tasks.add_task(
-            update_post_vote_statistics, self.db, payload.post_id
-        )
+        background_tasks.add_task(update_post_vote_statistics, self.db, payload.post_id)
         return {"message": message}
 
     def remove_reaction(
@@ -143,6 +152,16 @@ class VoteService:
 
         post = self.db.query(Post).filter(Post.id == post_id).first()
         update_post_score(self.db, post)
+
+        # =============== START Social Economy Update ===============
+        try:
+            economy_service = SocialEconomyService(self.db)
+            economy_service.update_post_score(post.id)
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"Error updating social score after removing vote: {e}"
+            )
+        # =============== END Social Economy Update =================
 
         actor_name = get_user_display_name(current_user)
         queue_email_fn(
@@ -184,9 +203,7 @@ class VoteService:
         ):
             raise HTTPException(status_code=403, detail="Not authorized to view voters")
 
-        voters_query = (
-            self.db.query(User).join(Vote).filter(Vote.post_id == post_id)
-        )
+        voters_query = self.db.query(User).join(Vote).filter(Vote.post_id == post_id)
         total_count = voters_query.count()
         voters = voters_query.offset(skip).limit(limit).all()
 

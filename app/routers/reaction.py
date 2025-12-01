@@ -7,6 +7,7 @@ from typing import List
 from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.core.middleware.rate_limit import limiter
+from app.modules.social.economy_service import SocialEconomyService
 
 
 router = APIRouter(prefix="/reactions", tags=["Reactions"])
@@ -47,6 +48,12 @@ def create_reaction(
         HTTPException: If neither or both of post_id and comment_id are provided,
                        or if the target post/comment does not exist.
     """
+    # Prefer explicit query params but fall back to payload fields
+    if post_id is None and getattr(reaction, "post_id", None) is not None:
+        post_id = reaction.post_id
+    if comment_id is None and hasattr(reaction, "comment_id"):
+        comment_id = getattr(reaction, "comment_id")
+
     if post_id is None and comment_id is None:
         raise HTTPException(
             status_code=400, detail="Either post_id or comment_id must be provided"
@@ -107,6 +114,21 @@ def create_reaction(
     db.add(new_reaction)
     db.commit()
     db.refresh(new_reaction)
+
+    # Update social economy score for the related post
+    target_post_id = post_id
+    if not target_post_id and comment_id:
+        target_post_id = (
+            db.query(models.Comment.post_id)
+            .filter(models.Comment.id == comment_id)
+            .scalar()
+        )
+    if target_post_id:
+        try:
+            SocialEconomyService(db).update_post_score(target_post_id)
+        except Exception:
+            pass
+
     return new_reaction
 
 

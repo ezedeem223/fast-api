@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
@@ -1255,3 +1255,30 @@ class PostService:
             logger.error(f"Error in Living Memory processing: {e}")
             # نتجاهل الخطأ لضمان عدم توقف عملية النشر الأساسية
             pass
+
+    def get_memories_on_this_day(
+        self, *, current_user: models.User, limit: int = 10
+    ) -> List[schemas.PostOut]:
+        """
+        Living Memory 1.3: Rediscovery Algorithm (On This Day).
+        استرجاع المنشورات التي تم نشرها في مثل هذا اليوم من سنوات سابقة.
+        """
+        today = datetime.now().date()
+
+        memories = (
+            self.db.query(models.Post)
+            .filter(
+                models.Post.owner_id == current_user.id,
+                models.Post.is_archived.is_(False),
+                # مطابقة الشهر واليوم الحاليين
+                extract("month", models.Post.created_at) == today.month,
+                extract("day", models.Post.created_at) == today.day,
+                # التأكد أنها من سنوات سابقة (ليست اليوم)
+                extract("year", models.Post.created_at) < today.year,
+            )
+            .order_by(models.Post.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return self._prepare_post_list(memories)

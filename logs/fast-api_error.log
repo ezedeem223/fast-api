@@ -4963,3 +4963,51 @@ Exception: None
 
 (Background on this error at: https://sqlalche.me/e/20/f405)
 Exception: None
+2025-12-01 17:50:52 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:50:53 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:50:54 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:50:54 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:07 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:08 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:08 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:08 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:43 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:44 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:44 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-01 17:53:44 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None

@@ -162,7 +162,8 @@ def update_post_score(db: Session, post: Post):
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
     score = score / (age_hours + 2) ** 1.8
 
-    post.score = score
+    # Avoid regressions when another scoring system already set a higher score
+    post.score = max(post.score or 0, score)
     db.commit()
 
 

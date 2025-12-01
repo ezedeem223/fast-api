@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TYPE_CHECKING
 
@@ -34,6 +35,7 @@ from app.modules.utils.events import log_user_event
 from app.modules.utils.common import get_user_display_name
 from app.modules.utils.translation import get_translated_content
 from app.modules.utils.analytics import update_post_score
+from app.modules.social.economy_service import SocialEconomyService
 
 if TYPE_CHECKING:
     from app import schemas
@@ -95,6 +97,17 @@ class CommentService:
         self.db.commit()
         self.db.refresh(new_comment)
 
+        # =============== START Social Economy Update ===============
+        try:
+            # Update post score because comments increase engagement
+            economy_service = SocialEconomyService(self.db)
+            economy_service.update_post_score(schema.post_id)
+        except Exception as e:
+            logging.getLogger(__name__).error(
+                f"Error updating social score after comment: {e}"
+            )
+        # =============== END Social Economy Update =================
+
         commenter_name = get_user_display_name(current_user)
         log_user_event(
             self.db,
@@ -141,14 +154,10 @@ class CommentService:
             body=f"A new comment has been added to your post '{post.title}'.",
         )
 
-        broadcast_message = (
-            f"User {current_user.id} has commented on post {post.id}."
-        )
+        broadcast_message = f"User {current_user.id} has commented on post {post.id}."
         comment_broadcast = notification_module.manager.broadcast
         if asyncio.iscoroutinefunction(comment_broadcast):
-            background_tasks.add_task(
-                asyncio.run, comment_broadcast(broadcast_message)
-            )
+            background_tasks.add_task(asyncio.run, comment_broadcast(broadcast_message))
         else:
             comment_broadcast(broadcast_message)
 
@@ -196,7 +205,11 @@ class CommentService:
                 detail="Not authorized to edit this comment",
             )
 
-        if edit_window and datetime.now(comment.created_at.tzinfo) - comment.created_at > edit_window:
+        if (
+            edit_window
+            and datetime.now(comment.created_at.tzinfo) - comment.created_at
+            > edit_window
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Edit window has expired",
@@ -308,7 +321,9 @@ class CommentService:
             Comment.post_id == post_id, Comment.parent_id.is_(None)
         )
 
-        order_column = Comment.likes_count if sort_by == "likes_count" else Comment.created_at
+        order_column = (
+            Comment.likes_count if sort_by == "likes_count" else Comment.created_at
+        )
         query = query.order_by(
             desc(order_column) if sort_order == "desc" else asc(order_column)
         )
@@ -343,7 +358,9 @@ class CommentService:
 
         query = self.db.query(Comment).filter(Comment.parent_id == comment_id)
 
-        order_column = Comment.likes_count if sort_by == "likes_count" else Comment.created_at
+        order_column = (
+            Comment.likes_count if sort_by == "likes_count" else Comment.created_at
+        )
         query = query.order_by(
             desc(order_column) if sort_order == "desc" else asc(order_column)
         )
@@ -362,9 +379,7 @@ class CommentService:
         self.db.commit()
         return {"message": "Comment liked successfully"}
 
-    def toggle_highlight(
-        self, *, comment_id: int, current_user: User
-    ) -> Comment:
+    def toggle_highlight(self, *, comment_id: int, current_user: User) -> Comment:
         comment = self.db.query(Comment).filter(Comment.id == comment_id).first()
         if not comment:
             raise HTTPException(status_code=404, detail="Comment not found")
@@ -453,9 +468,7 @@ class CommentService:
                 )
 
         comment.is_pinned = not comment.is_pinned
-        comment.pinned_at = (
-            datetime.now(timezone.utc) if comment.is_pinned else None
-        )
+        comment.pinned_at = datetime.now(timezone.utc) if comment.is_pinned else None
 
         self.db.commit()
         self.db.refresh(comment)
