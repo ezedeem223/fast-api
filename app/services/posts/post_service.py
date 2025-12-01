@@ -1214,7 +1214,7 @@ class PostService:
         تحتوي على سياق مشابه للمنشور الجديد ويربطها به، مع تجنب التكرار.
         """
         try:
-            # 0. التحقق من العلاقات الموجودة مسبقاً (مثل الربط اليدوي) لتجنب تعارض القيود (Unique Constraint)
+            # 0. التحقق من العلاقات الموجودة مسبقاً (مثل الربط اليدوي) لتجنب تعارض القيود
             existing_relations = (
                 db.query(PostRelation.target_post_id)
                 .filter(PostRelation.source_post_id == new_post.id)
@@ -1228,8 +1228,8 @@ class PostService:
                 .filter(
                     Post.owner_id == user_id,
                     Post.id != new_post.id,
-                    Post.content.isnot(None),  # تجاهل المنشورات الفارغة
-                    # استثناء المنشورات المرتبطة بالفعل من البحث لتقليل الحمل
+                    Post.content.isnot(None),
+                    # استثناء المنشورات المرتبطة بالفعل من البحث
                     ~Post.id.in_(existing_target_ids) if existing_target_ids else True,
                 )
                 .order_by(Post.created_at.desc())
@@ -1243,12 +1243,11 @@ class PostService:
             # 2. تحليل النص البسيط (Tokenization)
             new_content_words = set(new_post.content.lower().split())
 
-            # تجاهل المنشورات القصيرة جداً التي لا تعطي سياقاً مفيداً
             if len(new_content_words) < 3:
                 return
 
             for old_post in past_posts:
-                # حماية إضافية (Double Check)
+                # حماية إضافية
                 if old_post.id in existing_target_ids:
                     continue
 
@@ -1276,6 +1275,11 @@ class PostService:
                     existing_target_ids.add(old_post.id)
 
             db.commit()
+
+        except Exception as e:
+            logger.error(f"Error in Living Memory processing: {e}")
+            # لا نوقف النظام إذا فشلت العملية الخلفية
+            pass
 
         except Exception as e:
             logger.error(f"Error in Living Memory processing: {e}")
