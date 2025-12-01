@@ -363,6 +363,40 @@ class UserStatistics(Base):
     user = relationship("User", back_populates="statistics")
 
 
+# === [ADDITION START] ===
+class Badge(Base):
+    """Represents an expertise badge definition (e.g., 'Python Expert')."""
+
+    __tablename__ = "badges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)  # e.g., "Coding Guru"
+    description = Column(String)
+    category = Column(String)  # e.g., "Technology", "Cooking"
+    level = Column(Integer, default=1)  # 1=Novice, 2=Intermediate, 3=Expert
+    icon_url = Column(String, nullable=True)
+
+    # Thresholds required to earn this badge automatically
+    required_posts = Column(Integer, default=0)
+    required_score = Column(Float, default=0.0)
+
+
+class UserBadge(Base):
+    """Link between users and the badges they have earned."""
+
+    __tablename__ = "user_badges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    badge_id = Column(Integer, ForeignKey("badges.id", ondelete="CASCADE"))
+    earned_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+
+    user = relationship("User", backref="earned_badges")
+    badge = relationship("Badge")
+
+
+# === [ADDITION END] ===
+
 __all__ = [
     "UserType",
     "VerificationStatus",
@@ -376,4 +410,6 @@ __all__ = [
     "UserEvent",
     "UserSession",
     "UserStatistics",
+    "Badge",
+    "UserBadge",
 ]

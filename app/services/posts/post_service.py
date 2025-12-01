@@ -228,6 +228,9 @@ class PostService:
         try:
             economy_service = SocialEconomyService(self.db)
             initial_score = economy_service.update_post_score(new_post.id)
+            # === [ADDITION] Trigger Badge Check ===
+            economy_service.check_and_award_badges(current_user.id)
+            # =====================================
             logger.info(
                 f"Post {new_post.id} processed for Social Economy. Score: {initial_score}"
             )
@@ -1275,11 +1278,6 @@ class PostService:
                     existing_target_ids.add(old_post.id)
 
             db.commit()
-
-        except Exception as e:
-            logger.error(f"Error in Living Memory processing: {e}")
-            # لا نوقف النظام إذا فشلت العملية الخلفية
-            pass
 
         except Exception as e:
             logger.error(f"Error in Living Memory processing: {e}")

@@ -109,3 +109,37 @@ class SocialEconomyService:
 
         self.db.commit()
         return total_score
+
+    # === [ADDITION START] ===
+    def check_and_award_badges(self, user_id: int):
+        """
+        Check if the user qualifies for any new badges based on their stats.
+        This should be called after a post is created or a score is updated.
+        """
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return
+
+        # Get all badges the user doesn't have yet
+        existing_badge_ids = [
+            b.badge_id
+            for b in self.db.query(UserBadge).filter(UserBadge.user_id == user_id).all()
+        ]
+        potential_badges = (
+            self.db.query(Badge).filter(~Badge.id.in_(existing_badge_ids)).all()
+        )
+
+        for badge in potential_badges:
+            # Check thresholds (Dynamic Logic)
+            posts_ok = user.post_count >= badge.required_posts
+            score_ok = user.social_credits >= badge.required_score
+
+            if posts_ok and score_ok:
+                # Award the badge!
+                new_badge = UserBadge(user_id=user.id, badge_id=badge.id)
+                self.db.add(new_badge)
+                # Notification logic can be added here
+
+        self.db.commit()
+
+    # === [ADDITION END] ===
