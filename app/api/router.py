@@ -15,6 +15,7 @@ from app.routers import (
     follow,
     hashtag,
     message,
+    fact_checking,
     moderation,
     moderator,
     auth,
@@ -34,6 +35,7 @@ from app.routers import (
     support,
     user,
     vote,
+    wellness,
 )
 
 api_router = APIRouter()
@@ -80,5 +82,7 @@ api_router.include_router(report.router)
 api_router.include_router(search.router)
 api_router.include_router(banned_words.router)
 api_router.include_router(amenhotep.router)
+api_router.include_router(fact_checking.router)
+api_router.include_router(wellness.router)
 
 # api_router.include_router(social_posts.router)  # Disabled pending module review

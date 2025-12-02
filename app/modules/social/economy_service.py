@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from app.modules.posts.models import Post, Reaction
-from app.modules.users.models import User
+from app.modules.users.models import User, UserBadge
 import math
 
 

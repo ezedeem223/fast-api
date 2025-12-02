@@ -129,6 +129,50 @@ from app.modules.social import (
     Vote,
     Report,
     Follow,
+    ExpertiseBadge,
+)
+
+from app.modules.fact_checking import (
+    FactCheckStatus,
+    Fact,
+    FactVerification,
+    FactCorrection,
+    CredibilityBadge,
+    FactVote,
+    MisinformationWarning,
+)
+
+from app.modules.wellness import (
+    DigitalWellnessMetrics,
+    WellnessAlert,
+    WellnessSession,
+    WellnessGoal,
+    WellnessMode,
+    WellnessLevel,
+    UsagePattern,
+)
+
+from app.modules.marketplace import (
+    ContentListing,
+    ContentPurchase,
+    ContentSubscription,
+    ContentReview,
+)
+
+from app.modules.learning import (
+    LearningPath,
+    LearningModule,
+    LearningEnrollment,
+    Certificate,
+)
+
+from app.modules.local_economy import (
+    LocalMarketListing,
+    LocalMarketInquiry,
+    LocalMarketTransaction,
+    DigitalCooperative,
+    CooperativeMember,
+    CooperativeTransaction,
 )
 
 __all__ = [
@@ -229,4 +273,33 @@ __all__ = [
     "Vote",
     "Report",
     "Follow",
+    "ExpertiseBadge",
+    "FactCheckStatus",
+    "Fact",
+    "FactVerification",
+    "FactCorrection",
+    "CredibilityBadge",
+    "FactVote",
+    "MisinformationWarning",
+    "DigitalWellnessMetrics",
+    "WellnessAlert",
+    "WellnessSession",
+    "WellnessGoal",
+    "WellnessMode",
+    "WellnessLevel",
+    "UsagePattern",
+    "ContentListing",
+    "ContentPurchase",
+    "ContentSubscription",
+    "ContentReview",
+    "LearningPath",
+    "LearningModule",
+    "LearningEnrollment",
+    "Certificate",
+    "LocalMarketListing",
+    "LocalMarketInquiry",
+    "LocalMarketTransaction",
+    "DigitalCooperative",
+    "CooperativeMember",
+    "CooperativeTransaction",
 ]

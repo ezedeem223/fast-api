@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import enum
 
+from datetime import datetime, timezone
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -73,8 +75,12 @@ class Vote(Base):
 
     __tablename__ = "votes"
 
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    post_id = Column(
+        Integer, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
+    )
 
     user = relationship("User", back_populates="votes")
     post = relationship("Post", back_populates="votes_rel")
@@ -88,9 +94,15 @@ class Report(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     report_reason = Column(String, nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=True)
-    comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True)
-    reporter_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    reported_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    comment_id = Column(
+        Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True
+    )
+    reporter_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    reported_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default()
     )
@@ -105,8 +117,12 @@ class Report(Base):
     ai_detected = Column(Boolean, default=False)
     ai_confidence = Column(Float, nullable=True)
 
-    reporter = relationship("User", foreign_keys=[reporter_id], back_populates="reports")
-    reported_user = relationship("User", foreign_keys=[reported_user_id], back_populates="reports_received")
+    reporter = relationship(
+        "User", foreign_keys=[reporter_id], back_populates="reports"
+    )
+    reported_user = relationship(
+        "User", foreign_keys=[reported_user_id], back_populates="reports_received"
+    )
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     post = relationship("Post", back_populates="reports")
     comment = relationship("Comment", back_populates="reports")
@@ -119,15 +135,60 @@ class Follow(Base):
 
     __tablename__ = "follows"
 
-    follower_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    followed_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    follower_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    followed_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default()
     )
     is_mutual = Column(Boolean, default=False)
 
-    follower = relationship("User", back_populates="following", foreign_keys=[follower_id])
-    followed = relationship("User", back_populates="followers", foreign_keys=[followed_id])
+    follower = relationship(
+        "User", back_populates="following", foreign_keys=[follower_id]
+    )
+    followed = relationship(
+        "User", back_populates="followers", foreign_keys=[followed_id]
+    )
+
+
+# app/modules/social/models.py - إضافة
+
+
+class ExpertiseBadge(Base):
+    """نموذج شارات الخبرة"""
+
+    __tablename__ = "expertise_badges"
+
+    id = Column(Integer, primary_key=True)
+
+    # المستخدم
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # الخبرة
+    category = Column(
+        String, nullable=False
+    )  # "programming", "design", "writing", etc.
+    level = Column(Integer, default=1)  # 1-4 (مبتدئ إلى خبير)
+
+    # الإحصائيات
+    posts_count = Column(Integer, default=0)
+    engagement_score = Column(Float, default=0.0)
+    community_votes = Column(Integer, default=0)
+
+    # التحقق
+    is_verified = Column(Boolean, default=False)
+    verified_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    # الأوقات
+    earned_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+
+    # العلاقات
+    user = relationship("User", foreign_keys=[user_id])
+    verifier = relationship("User", foreign_keys=[verified_by])
 
 
 __all__ = [
@@ -137,4 +198,5 @@ __all__ = [
     "Vote",
     "Report",
     "Follow",
+    "ExpertiseBadge",
 ]

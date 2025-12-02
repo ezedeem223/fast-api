@@ -7,6 +7,7 @@ from .models import (
     Vote,
     Report,
     Follow,
+    ExpertiseBadge,
 )
 from .service import FollowService
 
@@ -17,5 +18,6 @@ __all__ = [
     "Vote",
     "Report",
     "Follow",
+    "ExpertiseBadge",
     "FollowService",
 ]

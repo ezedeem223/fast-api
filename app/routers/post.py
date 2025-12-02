@@ -283,7 +283,6 @@ async def create_posts(
         mention_notifier_fn=notifications.send_mention_notification,
         analyze_content_fn=analyze_content,
     )
-
     # Task 5: Invalidate cache list when new post is created
     await cache_manager.invalidate("posts:list:*")
     await cache_manager.invalidate(f"user:profile:*{current_user.id}*")
