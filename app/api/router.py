@@ -36,6 +36,8 @@ from app.routers import (
     user,
     vote,
     wellness,
+    collaboration,
+    impact,
 )
 
 api_router = APIRouter()
@@ -84,5 +86,7 @@ api_router.include_router(banned_words.router)
 api_router.include_router(amenhotep.router)
 api_router.include_router(fact_checking.router)
 api_router.include_router(wellness.router)
+api_router.include_router(collaboration.router)
+api_router.include_router(impact.router)
 
 # api_router.include_router(social_posts.router)  # Disabled pending module review

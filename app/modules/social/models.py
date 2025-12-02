@@ -14,6 +14,8 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     Float,
+    JSON,
+    Text,
 )
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy import Enum as SAEnum
@@ -191,6 +193,58 @@ class ExpertiseBadge(Base):
     verifier = relationship("User", foreign_keys=[verified_by])
 
 
+# ==========================================
+# التأثير الاجتماعي (Social Impact)
+# ==========================================
+class ImpactCertificate(Base):
+    """
+    Verifiable certificate of social impact issued to a user.
+    """
+
+    __tablename__ = "impact_certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title = Column(String, nullable=False)
+    description = Column(String)
+
+    # Stores metrics like {"trees_planted": 50, "people_helped": 100}
+    impact_metrics = Column(JSON, default={})
+
+    issued_at = Column(TIMESTAMP(timezone=True), server_default=timestamp_default())
+    issuer_authority = Column(String, nullable=True, default="System")
+
+    user = relationship("User", backref="impact_certificates")
+
+
+# ==========================================
+# الاتصال عبر الحدود اللغوية (Cultural Context)
+# ==========================================
+class CulturalDictionaryEntry(Base):
+    """
+    Crowdsourced dictionary for cultural terms and idioms.
+    """
+
+    __tablename__ = "cultural_dictionary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    term = Column(String, nullable=False, index=True)
+    definition = Column(Text, nullable=False)
+    cultural_context = Column(
+        Text, nullable=False, doc="Explanation of usage, origin, and nuance"
+    )
+    language = Column(String, nullable=False, default="ar")
+
+    submitted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    approved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+
+    is_verified = Column(Boolean, default=False)
+
+    submitter = relationship("User", foreign_keys=[submitted_by])
+
+
 __all__ = [
     "ReportStatus",
     "Hashtag",
@@ -199,4 +253,6 @@ __all__ = [
     "Report",
     "Follow",
     "ExpertiseBadge",
+    "ImpactCertificate",
+    "CulturalDictionaryEntry",
 ]

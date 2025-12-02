@@ -153,7 +153,15 @@ class User(Base):
     auto_translate = Column(Boolean, default=True)
     suspension_end_date = Column(DateTime, nullable=True)
     language = Column(String, nullable=False, default="en")
+    # [Cross-Cultural Communication]
+    is_cultural_ambassador = Column(
+        Boolean, default=False, doc="Designated as a bridge between cultures"
+    )
 
+    # [Privacy First] - Key for E2E encryption if needed globally
+    e2e_public_key = Column(
+        String, nullable=True, doc="Public key for End-to-End encryption"
+    )
     token_blacklist = relationship("TokenBlacklist", back_populates="user")
     posts = relationship("Post", back_populates="owner", cascade="all, delete-orphan")
     comments = relationship(
@@ -395,6 +403,36 @@ class UserBadge(Base):
     badge = relationship("Badge")
 
 
+# ==========================================
+# 7. الخصوصية أولاً (Privacy First) - Multi-Identity
+# ==========================================
+class UserIdentity(Base):
+    """
+    Links multiple user accounts to a single real-world identity
+    without exposing the link publicly.
+    """
+
+    __tablename__ = "user_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # The 'master' account (hidden from public view usually)
+    main_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # The linked account (e.g., a pseudonym or business profile)
+    linked_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    relationship_type = Column(String, default="alias")  # alias, business, backup
+    linked_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+
+    main_user = relationship(
+        "User", foreign_keys=[main_user_id], backref="sub_identities"
+    )
+    linked_user = relationship("User", foreign_keys=[linked_user_id])
+
+
 # === [ADDITION END] ===
 
 __all__ = [
@@ -412,4 +450,5 @@ __all__ = [
     "UserStatistics",
     "Badge",
     "UserBadge",
+    "UserIdentity",
 ]

@@ -17,6 +17,7 @@ from .models import (
     SocialMediaAccount,
     SocialMediaPost,
     post_hashtags,
+    LivingTestimony,
 )
 from .schemas import (
     ReactionBase,
@@ -62,6 +63,7 @@ __all__ = [
     "SocialMediaAccount",
     "SocialMediaPost",
     "post_hashtags",
+    "LivingTestimony",
     "ReactionBase",
     "ReactionCreate",
     "ReactionCount",

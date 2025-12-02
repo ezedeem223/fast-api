@@ -96,7 +96,9 @@ class CommunityService:
                 .first()
             )
             if not category:
-                raise HTTPException(status_code=404, detail="Selected category not found")
+                raise HTTPException(
+                    status_code=404, detail="Selected category not found"
+                )
             new_community.category = category
 
         if payload.tags:
@@ -153,7 +155,10 @@ class CommunityService:
         if search:
             ilike_pattern = f"%{search}%"
             query = query.filter(
-                or_(Community.name.ilike(ilike_pattern), Community.description.ilike(ilike_pattern))
+                or_(
+                    Community.name.ilike(ilike_pattern),
+                    Community.description.ilike(ilike_pattern),
+                )
             )
 
         if category:
@@ -245,7 +250,7 @@ class CommunityService:
         if not community:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
-        )
+            )
 
         community.name = await get_translated_content(
             community.name, current_user, community.language
@@ -262,7 +267,9 @@ class CommunityService:
         payload: CommunityUpdate,
         current_user: User,
     ) -> Community:
-        community = self.db.query(Community).filter(Community.id == community_id).first()
+        community = (
+            self.db.query(Community).filter(Community.id == community_id).first()
+        )
         if not community:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
@@ -393,7 +400,9 @@ class CommunityService:
         invitations: List[CommunityInvitationCreate],
         current_user: User,
     ) -> List[CommunityInvitation]:
-        community = self.db.query(Community).filter(Community.id == community_id).first()
+        community = (
+            self.db.query(Community).filter(Community.id == community_id).first()
+        )
         if not community:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
@@ -669,7 +678,9 @@ class CommunityService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
             )
 
-        member = next((m for m in community.members if m.user_id == current_user.id), None)
+        member = next(
+            (m for m in community.members if m.user_id == current_user.id), None
+        )
         if member:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -738,7 +749,9 @@ class CommunityService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
             )
 
-        member = next((m for m in community.members if m.user_id == current_user.id), None)
+        member = next(
+            (m for m in community.members if m.user_id == current_user.id), None
+        )
         if not member:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -896,7 +909,9 @@ class CommunityService:
 
         vote_filters = [Post.community_id == community_id]
         vote_date_col = getattr(Vote, "created_at", None)
-        vote_query = self.db.query(func.count(Vote.user_id)).join(Post, Vote.post_id == Post.id)
+        vote_query = self.db.query(func.count(Vote.user_id)).join(
+            Post, Vote.post_id == Post.id
+        )
         if vote_date_col is not None:
             vote_filters.append(func.date(vote_date_col) == today)
         stats.total_reactions = vote_query.filter(*vote_filters).scalar() or 0
@@ -937,7 +952,10 @@ class CommunityService:
             total_reactions = getattr(community, "total_reactions", 0) or 0
 
             activity_score = (
-                posts_count * 2 + comment_count * 1 + members_count * 3 + total_reactions
+                posts_count * 2
+                + comment_count * 1
+                + members_count * 3
+                + total_reactions
             )
             growth_rate = self.calculate_community_growth_rate(community.id)
             created_at = getattr(community, "created_at", None)
@@ -964,7 +982,9 @@ class CommunityService:
 
     def calculate_community_growth_rate(self, community_id: int) -> float:
         now = datetime.now(timezone.utc)
-        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        current_month_start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
         previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
 
         current_stats = self.get_community_monthly_stats(
@@ -984,19 +1004,23 @@ class CommunityService:
             )
             * 100,
             "posts": (
-                (current_stats["posts"] - previous_stats["posts"])
-                / previous_stats["posts"]
-            )
-            * 100
-            if previous_stats["posts"] > 0
-            else (100.0 if current_stats["posts"] > 0 else 0.0),
+                (
+                    (current_stats["posts"] - previous_stats["posts"])
+                    / previous_stats["posts"]
+                )
+                * 100
+                if previous_stats["posts"] > 0
+                else (100.0 if current_stats["posts"] > 0 else 0.0)
+            ),
             "engagement": (
-                (current_stats["engagement"] - previous_stats["engagement"])
-                / previous_stats["engagement"]
-            )
-            * 100
-            if previous_stats["engagement"] > 0
-            else (100.0 if current_stats["engagement"] > 0 else 0.0),
+                (
+                    (current_stats["engagement"] - previous_stats["engagement"])
+                    / previous_stats["engagement"]
+                )
+                * 100
+                if previous_stats["engagement"] > 0
+                else (100.0 if current_stats["engagement"] > 0 else 0.0)
+            ),
         }
 
         weighted_growth = (
@@ -1015,7 +1039,8 @@ class CommunityService:
                 func.max(CommunityStatistics.member_count).label("members"),
                 func.sum(CommunityStatistics.post_count).label("posts"),
                 func.sum(
-                    CommunityStatistics.comment_count + CommunityStatistics.total_reactions
+                    CommunityStatistics.comment_count
+                    + CommunityStatistics.total_reactions
                 ).label("engagement"),
             )
             .filter(
@@ -1036,6 +1061,43 @@ class CommunityService:
             "engagement": engagement,
         }
 
+    # أضف هذه الدالة داخل كلاس CommunityService
+    def create_instant_community(
+        self, *, current_user: User, topic: str, duration_hours: int = 24
+    ) -> Community:
+        """
+        Creates a temporary community focused on a specific trending topic.
+        Part of 'Liquid Communities'.
+        """
+        # Generate a unique name based on topic and timestamp
+        timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+        name = f"Instant-{topic[:10]}-{timestamp_str}"
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+
+        new_community = Community(
+            name=name,
+            description=f"Instant community for topic: {topic}",
+            owner_id=current_user.id,
+            is_active=True,
+            is_temporary=True,
+            expires_at=expires_at,
+            privacy_level="public",  # Assuming logic fits existing constraints
+        )
+
+        # Add owner as member
+        owner_member = CommunityMember(
+            user_id=current_user.id,
+            role=CommunityRole.OWNER,
+            join_date=datetime.now(timezone.utc),
+        )
+        new_community.members.append(owner_member)
+
+        self.db.add(new_community)
+        self.db.commit()
+        self.db.refresh(new_community)
+
+        return new_community
 
     def export_community_data(
         self,
@@ -1082,7 +1144,11 @@ class CommunityService:
             )
             for member in community.members:
                 role_attr = getattr(member, "role", CommunityRole.MEMBER)
-                role_display = role_attr.value if isinstance(role_attr, CommunityRole) else role_attr
+                role_display = (
+                    role_attr.value
+                    if isinstance(role_attr, CommunityRole)
+                    else role_attr
+                )
                 joined_at = getattr(member, "join_date", None) or getattr(
                     member, "joined_at", None
                 )
@@ -1097,9 +1163,11 @@ class CommunityService:
                         joined_at.strftime("%Y-%m-%d") if joined_at else "N/A",
                         posts_count,
                         activity_score,
-                        last_active_at.strftime("%Y-%m-%d %H:%M")
-                        if last_active_at
-                        else "N/A",
+                        (
+                            last_active_at.strftime("%Y-%m-%d %H:%M")
+                            if last_active_at
+                            else "N/A"
+                        ),
                     ]
                 )
 
@@ -1117,9 +1185,13 @@ class CommunityService:
             )
             query = self.db.query(Post).filter(Post.community_id == community_id)
             if date_from:
-                query = query.filter(Post.created_at >= datetime.combine(date_from, datetime.min.time()))
+                query = query.filter(
+                    Post.created_at >= datetime.combine(date_from, datetime.min.time())
+                )
             if date_to:
-                query = query.filter(Post.created_at <= datetime.combine(date_to, datetime.max.time()))
+                query = query.filter(
+                    Post.created_at <= datetime.combine(date_to, datetime.max.time())
+                )
             for post in query.all():
                 writer.writerow(
                     [
@@ -1179,4 +1251,3 @@ class CommunityService:
         output.seek(0)
         filename = f"community_{community_id}_{data_type}_{datetime.now().strftime('%Y%m%d')}.csv"
         return output.getvalue(), filename
-

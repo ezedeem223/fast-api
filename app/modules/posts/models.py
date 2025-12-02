@@ -256,6 +256,18 @@ class Post(Base):
     shared_with_community_id = Column(
         Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
     )
+    # [Privacy First]
+    is_encrypted = Column(Boolean, default=False)
+    encryption_key_id = Column(
+        String,
+        nullable=True,
+        doc="ID of the key used, managed by Key Management System",
+    )
+
+    # [Collective Memory]
+    is_living_testimony = Column(
+        Boolean, default=False, doc="Is this post a documented living testimony?"
+    )
     score = Column(Float, default=0.0, index=True)
     quality_score = Column(Float, default=0.0)  # درجة الجودة (0-100)
     originality_score = Column(Float, default=0.0)  # درجة الأصالة (0-100)
@@ -490,6 +502,33 @@ class PostRelation(Base):
     )
 
 
+# ==========================================
+# 15. الشهادات الحية (Living Testimony)
+# ==========================================
+class LivingTestimony(Base):
+    """
+    Specialized model for verified oral histories or testimonies.
+    Linked to a Post that contains the media/text.
+    """
+
+    __tablename__ = "living_testimonies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), unique=True)
+    verified_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    historical_event = Column(
+        String, nullable=True, doc="The event this testimony relates to"
+    )
+    geographic_location = Column(String, nullable=True)
+    recorded_at = Column(DateTime(timezone=True))
+
+    post = relationship("Post", backref="testimony_metadata")
+    verifier = relationship("User")
+
+
 __all__ = [
     "CopyrightType",
     "SocialMediaType",
@@ -507,4 +546,5 @@ __all__ = [
     "SocialMediaPost",
     "post_hashtags",
     "PostRelation",
+    "LivingTestimony",
 ]

@@ -66,7 +66,14 @@ class Community(Base):
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
-
+    is_temporary = Column(
+        Boolean, default=False, doc="Marks the community as instant/temporary"
+    )
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="When this community will be auto-dissolved",
+    )
     community_category = relationship("CommunityCategory", back_populates="communities")
 
     owner = relationship("User", back_populates="owned_communities")
@@ -77,12 +84,18 @@ class Community(Base):
         cascade="all, delete-orphan",
         foreign_keys="[Post.community_id]",
     )
-    reels = relationship("Reel", back_populates="community", cascade="all, delete-orphan")
-    articles = relationship("Article", back_populates="community", cascade="all, delete-orphan")
+    reels = relationship(
+        "Reel", back_populates="community", cascade="all, delete-orphan"
+    )
+    articles = relationship(
+        "Article", back_populates="community", cascade="all, delete-orphan"
+    )
     invitations = relationship(
         "CommunityInvitation", back_populates="community", cascade="all, delete-orphan"
     )
-    rules = relationship("CommunityRule", back_populates="community", cascade="all, delete-orphan")
+    rules = relationship(
+        "CommunityRule", back_populates="community", cascade="all, delete-orphan"
+    )
     statistics = relationship(
         "CommunityStatistics", back_populates="community", cascade="all, delete-orphan"
     )
@@ -185,8 +198,12 @@ class CommunityInvitation(Base):
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
 
     community = relationship("Community", back_populates="invitations")
-    inviter = relationship("User", foreign_keys=[inviter_id], back_populates="sent_invitations")
-    invitee = relationship("User", foreign_keys=[invitee_id], back_populates="received_invitations")
+    inviter = relationship(
+        "User", foreign_keys=[inviter_id], back_populates="sent_invitations"
+    )
+    invitee = relationship(
+        "User", foreign_keys=[invitee_id], back_populates="received_invitations"
+    )
 
 
 class Category(Base):
@@ -221,7 +238,11 @@ class SearchStatistics(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     term = Column(String, nullable=False)
     searches = Column(Integer, default=0)
-    updated_at = Column(DateTime(timezone=True), server_default=timestamp_default(), onupdate=timestamp_default())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=timestamp_default(),
+        onupdate=timestamp_default(),
+    )
 
     user = relationship("User", back_populates="search_history")
 
@@ -251,8 +272,12 @@ class Reel(Base):
     video_url = Column(String, nullable=False)
     description = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False)
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
     expires_at = Column(DateTime(timezone=True), nullable=False)
     is_active = Column(Boolean, default=True, index=True)
     view_count = Column(Integer, default=0)
@@ -272,8 +297,97 @@ class Article(Base):
     created_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=timestamp_default()
     )
-    author_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    community_id = Column(Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
 
     author = relationship("User", back_populates="articles")
     community = relationship("Community", back_populates="articles")
+
+
+# ==========================================
+# 4. المجتمعات السائلة (Liquid Democracy)
+# ==========================================
+class CommunityVoteDelegation(Base):
+    """
+    Allows a user to delegate their voting power to another user within a community.
+    Supports Liquid Democracy.
+    """
+
+    __tablename__ = "community_vote_delegations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+    grantor_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        doc="User giving the vote",
+    )
+    grantee_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        doc="User receiving the vote",
+    )
+
+    # Scope can be 'global' (all votes in community) or specific to a 'category'
+    scope = Column(String, default="global", nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=timestamp_default())
+
+    grantor = relationship(
+        "User", foreign_keys=[grantor_id], backref="delegated_votes_given"
+    )
+    grantee = relationship(
+        "User", foreign_keys=[grantee_id], backref="delegated_votes_received"
+    )
+    community = relationship("Community")
+
+
+# ==========================================
+# 15. الذاكرة الجماعية (Collective Memory)
+# ==========================================
+class CommunityArchive(Base):
+    """Represents a digital archive or museum for the community."""
+
+    __tablename__ = "community_archives"
+
+    id = Column(Integer, primary_key=True, index=True)
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=timestamp_default())
+
+    items = relationship(
+        "DigitalMuseumItem", back_populates="archive", cascade="all, delete-orphan"
+    )
+
+
+class DigitalMuseumItem(Base):
+    """An artifact or item within a community archive."""
+
+    __tablename__ = "digital_museum_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    archive_id = Column(
+        Integer, ForeignKey("community_archives.id", ondelete="CASCADE"), nullable=False
+    )
+    title = Column(String, nullable=False)
+    media_url = Column(String, nullable=False)
+    historical_context = Column(
+        Text, nullable=True, doc="Story or history behind this item"
+    )
+    curated_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    added_at = Column(TIMESTAMP(timezone=True), server_default=timestamp_default())
+
+    archive = relationship("CommunityArchive", back_populates="items")
+    curated_by_user = relationship("User", foreign_keys=[curated_by])

@@ -33,7 +33,7 @@ from app.modules.utils.content import (
     update_repost_statistics,
 )
 from app.modules.social.economy_service import SocialEconomyService
-from app.modules.posts.models import Post, PostRelation
+from app.modules.posts.models import Post, PostRelation, LivingTestimony
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
 from app.services.reporting import submit_report
@@ -98,6 +98,10 @@ class PostService:
             setattr(post, "privacy_level", default_privacy)
         if not hasattr(post, "poll_data"):
             setattr(post, "poll_data", None)
+        if hasattr(post, "testimony_metadata") and post.testimony_metadata:
+            setattr(post, "living_testimony", post.testimony_metadata[0])
+        else:
+            setattr(post, "living_testimony", None)
         return post_schemas.PostOut.model_validate(post, from_attributes=True)
 
     def _prepare_post_list(
@@ -173,6 +177,9 @@ class PostService:
             is_published=payload.scheduled_time is None,
             copyright_type=payload.copyright_type,
             custom_copyright=payload.custom_copyright,
+            is_encrypted=payload.is_encrypted,
+            encryption_key_id=payload.encryption_key_id,
+            is_living_testimony=payload.is_living_testimony,
         )
 
         for hashtag_name in payload.hashtags:
@@ -201,6 +208,12 @@ class PostService:
         self.db.add(new_post)
         self.db.commit()
         self.db.refresh(new_post)
+
+        if getattr(payload, "is_living_testimony", False):
+            testimony = LivingTestimony(post_id=new_post.id)
+            self.db.add(testimony)
+            self.db.commit()
+            self.db.refresh(testimony)
 
         # === [START] Feature 1.4: Time-Spanning Conversations (Manual Linking) ===
         if payload.related_to_post_id:

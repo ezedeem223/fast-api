@@ -8,6 +8,8 @@ from .models import (
     Report,
     Follow,
     ExpertiseBadge,
+    ImpactCertificate,
+    CulturalDictionaryEntry,
 )
 from .service import FollowService
 
@@ -19,5 +21,7 @@ __all__ = [
     "Report",
     "Follow",
     "ExpertiseBadge",
+    "ImpactCertificate",
+    "CulturalDictionaryEntry",
     "FollowService",
 ]

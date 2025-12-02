@@ -59,6 +59,7 @@ from app.modules.posts import (
     SocialMediaAccount,
     SocialMediaPost,
     post_hashtags,
+    LivingTestimony,
 )
 
 from app.modules.notifications.models import (
@@ -130,6 +131,8 @@ from app.modules.social import (
     Report,
     Follow,
     ExpertiseBadge,
+    ImpactCertificate,
+    CulturalDictionaryEntry,
 )
 
 from app.modules.fact_checking import (
@@ -173,6 +176,12 @@ from app.modules.local_economy import (
     DigitalCooperative,
     CooperativeMember,
     CooperativeTransaction,
+)
+
+from app.modules.collaboration import (
+    CollaborativeProject,
+    ProjectContribution,
+    ProjectStatus,
 )
 
 __all__ = [
@@ -220,6 +229,7 @@ __all__ = [
     "PostCategory",
     "SocialMediaAccount",
     "SocialMediaPost",
+    "LivingTestimony",
     "NotificationStatus",
     "NotificationPriority",
     "NotificationCategory",
@@ -302,4 +312,9 @@ __all__ = [
     "DigitalCooperative",
     "CooperativeMember",
     "CooperativeTransaction",
+    "CollaborativeProject",
+    "ProjectContribution",
+    "ProjectStatus",
+    "ImpactCertificate",
+    "CulturalDictionaryEntry",
 ]

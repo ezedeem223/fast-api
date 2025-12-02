@@ -168,6 +168,9 @@ class PostBase(BaseModel):
     copyright_type: CopyrightType = CopyrightType.ALL_RIGHTS_RESERVED
     custom_copyright: Optional[str] = None
     is_archived: bool = False
+    is_encrypted: bool = False
+    encryption_key_id: Optional[str] = None
+    is_living_testimony: bool = False
 
 
 class PostCreate(PostBase):
@@ -228,6 +231,10 @@ class PostOut(Post):
     custom_copyright: Optional[str] = None
     is_archived: bool = False
     archived_at: Optional[datetime] = None
+    is_encrypted: bool = False
+    encryption_key_id: Optional[str] = None
+    is_living_testimony: bool = False
+    living_testimony: Optional["LivingTestimonyOut"] = None
     media_url: Optional[str] = None
     media_type: Optional[str] = None
     media_text: Optional[str] = None
@@ -283,6 +290,17 @@ class PostSearch(BaseModel):
     keyword: Optional[str] = None
     category_id: Optional[int] = None
     hashtag: Optional[str] = None
+
+
+class LivingTestimonyOut(BaseModel):
+    id: int
+    post_id: int
+    verified_by_user_id: Optional[int] = None
+    historical_event: Optional[str] = None
+    geographic_location: Optional[str] = None
+    recorded_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommentStatistics(BaseModel):

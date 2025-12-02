@@ -6561,3 +6561,79 @@ Exception: None
 Exception: None
 2025-12-02 19:39:09 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
 Exception: None
+2025-12-02 20:44:34 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 2: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:44:55 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:44:58 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:45:12 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:45:13 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:45:27 | ERROR    | app.services.posts.post_service:create_post:238 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 20:59:42 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 2: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:00:32 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:00:39 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:01:01 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:01:02 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:01:30 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:08:04 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:05 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:05 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:05 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:05 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:05 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:06 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:06 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:06 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:08:06 | ERROR    | app.utils:is_ip_banned:38 | ProgrammingError checking IP ban for testclient: (psycopg2.ProgrammingError) invalid dsn: invalid connection option "server_settings"
+
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Exception: None
+2025-12-02 21:10:09 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 2: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:10:40 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:10:44 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:11:00 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:11:01 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
+2025-12-02 21:11:22 | ERROR    | app.services.posts.post_service:create_post:251 | Failed to calculate social score for post 1: name 'Badge' is not defined
+Exception: None
