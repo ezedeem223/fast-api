@@ -9,8 +9,6 @@ def test_living_memory_logic(db_session, test_user):
     """
     service = PostService(db_session)
 
-    # 1. إنشاء المنشور الأول (الذكرى القديمة)
-    # نستخدم كلمات مميزة لضمان التطابق
     post1 = Post(
         owner_id=test_user.id,
         title="First Memory",
@@ -21,8 +19,6 @@ def test_living_memory_logic(db_session, test_user):
     db_session.commit()
     db_session.refresh(post1)
 
-    # 2. إنشاء المنشور الثاني (المنشور الجديد)
-    # يحتوي على كلمات مشابهة (python, programming, fastapi)
     post2 = Post(
         owner_id=test_user.id,
         title="New Idea",
@@ -33,12 +29,8 @@ def test_living_memory_logic(db_session, test_user):
     db_session.commit()
     db_session.refresh(post2)
 
-    # 3. تفعيل نظام الذاكرة الحية يدوياً (للاختبار المباشر للدالة)
-    # ملاحظة: في التطبيق الفعلي يتم استدعاؤها داخل create_post
     service._process_living_memory(db_session, post2, test_user.id)
 
-    # 4. التحقق من النتائج
-    # يجب أن يكون هناك رابط في جدول PostRelation
     relation = (
         db_session.query(PostRelation)
         .filter(
@@ -63,7 +55,6 @@ def test_living_memory_api_integration(
     """
     Test that the API response actually includes the related memories.
     """
-    # 1. إنشاء منشور قديم مباشرة في قاعدة البيانات
     old_post = Post(
         owner_id=test_user.id,
         title="Old Memory",
@@ -73,7 +64,6 @@ def test_living_memory_api_integration(
     db_session.add(old_post)
     db_session.commit()
 
-    # 2. إنشاء منشور جديد عبر الـ API (الذي سيشغل الخدمة تلقائياً)
     payload = {
         "title": "Visit to Giza",
         "content": "I am visiting Egypt to see the pyramids and history",
@@ -86,23 +76,16 @@ def test_living_memory_api_integration(
     new_post_data = response.json()
     new_post_id = new_post_data["id"]
 
-    # 3. طلب المنشور الجديد للتأكد من وجود الذكريات في الاستجابة
-    # قد نحتاج لإعادة طلب المنشور لأن الحساب يتم بعد الإنشاء مباشرة
     get_response = client.get(f"/posts/{new_post_id}", headers=test_user_token_headers)
     assert get_response.status_code == 200
     data = get_response.json()
 
-    # التحقق من حقل related_memories
     assert "related_memories" in data
-    # ملاحظة: قد يفشل هذا الجزء إذا كان السيرفر أسرع من الـ DB trigger،
-    # لكن في الكود المتزامن (Synchronous) يجب أن يعمل.
     if len(data["related_memories"]) > 0:
         memory = data["related_memories"][0]
         assert memory["target_post_id"] == old_post.id
         print("\n✅ API Integration Success: Related memories returned in JSON")
     else:
-        # في حالة الفشل، نتحقق يدوياً هل تم الإنشاء في الخلفية أم لا
-        # هذا يساعدنا في تصحيح الأخطاء (Debugging)
         print("\n⚠️ API Warning: related_memories list is empty in response.")
 
 def test_living_memory_is_user_scoped(db_session, test_user, test_user2):

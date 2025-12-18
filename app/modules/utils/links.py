@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from sqlalchemy.orm import Session
 
 from app import models
 from app.link_preview import extract_link_preview
+
+
+def extract_links(text: str) -> list[str]:
+    """Extract http/https links from text; ignore unsupported protocols."""
+    if not text:
+        return []
+    candidates = re.findall(r"(https?://[^\s]+)", text)
+    return [url for url in candidates if url.startswith(("http://", "https://"))]
 
 
 def update_link_preview(db: Session, message_id: int, url: str):
@@ -22,4 +31,4 @@ def update_link_preview(db: Session, message_id: int, url: str):
         db.commit()
 
 
-__all__ = ["update_link_preview"]
+__all__ = ["update_link_preview", "extract_links"]

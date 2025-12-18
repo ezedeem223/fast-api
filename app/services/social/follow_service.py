@@ -1,4 +1,4 @@
-"""Business logic for follow/unfollow flows."""
+"""Business logic for follow/unfollow flows and follower analytics."""
 
 from __future__ import annotations
 
@@ -40,6 +40,11 @@ class FollowService:
         notification_manager=notifications.manager,
         create_notification_fn=create_notification,
     ) -> Dict[str, str]:
+        if getattr(current_user, "is_suspended", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Suspended users cannot follow others",
+            )
         if target_user_id == current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

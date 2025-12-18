@@ -9,6 +9,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class NotificationPreferencesUpdate(BaseModel):
+    """Partial preferences update: unset fields are ignored so clients can send minimal patches."""
     email_notifications: Optional[bool] = None
     push_notifications: Optional[bool] = None
     in_app_notifications: Optional[bool] = None
@@ -19,6 +20,7 @@ class NotificationPreferencesUpdate(BaseModel):
 
 
 class NotificationPreferencesOut(BaseModel):
+    """Full preferences view; categories stored as a loose dict for forward compatibility."""
     id: int
     user_id: int
     email_notifications: bool
@@ -35,6 +37,7 @@ class NotificationPreferencesOut(BaseModel):
 
 
 class NotificationBase(BaseModel):
+    """Shared notification fields used by create/update flows."""
     content: str
     notification_type: str
     priority: Any
@@ -51,6 +54,7 @@ class NotificationCreate(NotificationBase):
 
 
 class NotificationUpdate(BaseModel):
+    """Partial update payload for notifications (read/archive/interaction fields)."""
     is_read: Optional[bool] = None
     is_archived: Optional[bool] = None
     interaction_count: Optional[int] = None
@@ -109,6 +113,7 @@ DeliveryLogOut = NotificationDeliveryLogOut
 
 
 class NotificationWithLogs(BaseModel):
+    """Notification paired with delivery log history for debug/analytics views."""
     delivery_logs: List[NotificationDeliveryLogOut]
     retry_count: int
     status: Any
@@ -116,6 +121,7 @@ class NotificationWithLogs(BaseModel):
 
 
 class NotificationOut(BaseModel):
+    """Notification payload returned to clients; metadata accepts both legacy `notification_metadata` and new `metadata` keys."""
     id: int
     content: str
     notification_type: str

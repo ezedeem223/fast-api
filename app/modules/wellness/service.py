@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+import logging
 from app.modules.wellness.models import (
     DigitalWellnessMetrics,
     WellnessAlert,
@@ -18,7 +19,7 @@ class WellnessService:
 
     @staticmethod
     def get_or_create_metrics(db: Session, user_id: int) -> DigitalWellnessMetrics:
-        """الحصول على أو إنشاء مؤشرات الصحة"""
+        """Fetch existing metrics or create a baseline record to avoid None checks in callers."""
         metrics = (
             db.query(DigitalWellnessMetrics)
             .filter(DigitalWellnessMetrics.user_id == user_id)
@@ -35,13 +36,13 @@ class WellnessService:
 
     @staticmethod
     def update_usage_metrics(db: Session, user_id: int, usage_minutes: int):
-        """تحديث مؤشرات الاستخدام"""
+        if usage_minutes < 0:
+            raise ValueError("usage_minutes cannot be negative")
         metrics = WellnessService.get_or_create_metrics(db, user_id)
 
         metrics.daily_usage_minutes = usage_minutes
         metrics.last_activity_at = datetime.now(timezone.utc)
 
-        # تحديث نمط الاستخدام
         if usage_minutes < 60:
             metrics.usage_pattern = UsagePattern.LIGHT
         elif usage_minutes < 180:
@@ -51,7 +52,6 @@ class WellnessService:
         else:
             metrics.usage_pattern = UsagePattern.EXCESSIVE
 
-        # حساب درجة الصحة
         WellnessService._calculate_wellness_score(metrics)
 
         db.commit()
@@ -66,7 +66,6 @@ class WellnessService:
         message: str,
         recommendation: Optional[str] = None,
     ) -> WellnessAlert:
-        """إنشاء تنبيه صحة"""
         metrics = WellnessService.get_or_create_metrics(db, user_id)
 
         alert = WellnessAlert(
@@ -85,7 +84,6 @@ class WellnessService:
     def start_wellness_session(
         db: Session, user_id: int, session_type: str
     ) -> WellnessSession:
-        """بدء جلسة صحة (راحة، تأمل، وقت بدون إنترنت)"""
         metrics = WellnessService.get_or_create_metrics(db, user_id)
 
         session = WellnessSession(
@@ -98,7 +96,6 @@ class WellnessService:
 
     @staticmethod
     def end_wellness_session(db: Session, session_id: int):
-        """إنهاء جلسة صحة"""
         session = (
             db.query(WellnessSession).filter(WellnessSession.id == session_id).first()
         )
@@ -110,7 +107,10 @@ class WellnessService:
 
             db.commit()
 
-        return session
+            return session
+
+        logging.getLogger(__name__).error("Wellness session not found: %s", session_id)
+        return None
 
     @staticmethod
     def set_wellness_goal(
@@ -120,7 +120,6 @@ class WellnessService:
         target_value: float,
         target_date: Optional[datetime] = None,
     ) -> WellnessGoal:
-        """تعيين هدف صحة"""
         metrics = WellnessService.get_or_create_metrics(db, user_id)
 
         goal = WellnessGoal(
@@ -136,7 +135,6 @@ class WellnessService:
 
     @staticmethod
     def enable_do_not_disturb(db: Session, user_id: int, duration_minutes: int):
-        """تفعيل وضع عدم الإزعاج"""
         mode = db.query(WellnessMode).filter(WellnessMode.user_id == user_id).first()
 
         if not mode:
@@ -149,11 +147,14 @@ class WellnessService:
         )
 
         db.commit()
+        if mode.do_not_disturb_until and mode.do_not_disturb_until.tzinfo is None:
+            mode.do_not_disturb_until = mode.do_not_disturb_until.replace(
+                tzinfo=timezone.utc
+            )
         return mode
 
     @staticmethod
     def enable_mental_health_mode(db: Session, user_id: int, duration_minutes: int):
-        """تفعيل وضع الصحة النفسية"""
         mode = db.query(WellnessMode).filter(WellnessMode.user_id == user_id).first()
 
         if not mode:
@@ -166,35 +167,31 @@ class WellnessService:
         )
 
         db.commit()
+        if mode.mental_health_mode_until and mode.mental_health_mode_until.tzinfo is None:
+            mode.mental_health_mode_until = mode.mental_health_mode_until.replace(
+                tzinfo=timezone.utc
+            )
         return mode
 
     @staticmethod
     def _calculate_wellness_score(metrics: DigitalWellnessMetrics):
-        """حساب درجة الصحة الرقمية"""
         score = 100.0
 
-        # تأثير الاستخدام المفرط
         if metrics.daily_usage_minutes > 360:
             score -= (metrics.daily_usage_minutes - 360) * 0.1
 
-        # تأثير الإجهاد
         score -= metrics.stress_level * 5
 
-        # تأثير القلق
         score -= metrics.anxiety_level * 3
 
-        # تأثير المزاج
         score += (metrics.mood_score - 5) * 5
 
-        # تأثير الإرهاق الرقمي
         score -= metrics.digital_fatigue * 0.5
 
-        # تأثير القلق من المقارنة
         score -= metrics.comparison_anxiety * 0.3
 
         metrics.wellness_score = max(0, min(100, score))
 
-        # تحديث مستوى الصحة
         if metrics.wellness_score >= 80:
             metrics.wellness_level = WellnessLevel.EXCELLENT
         elif metrics.wellness_score >= 60:

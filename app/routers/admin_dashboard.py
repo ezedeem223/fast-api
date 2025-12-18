@@ -1,8 +1,4 @@
-"""
-Admin Dashboard Router Module
-This module provides endpoints for the admin dashboard,
-including analytics and statistics functions.
-"""
+"""Admin dashboard router exposing cached analytics and management endpoints."""
 
 # =====================================================
 # ==================== Imports ========================
@@ -28,7 +24,6 @@ from ..analytics import (
     generate_search_trends_chart,
 )
 
-# استبدال استيراد cache من utils بالاستيراد من cachetools
 from cachetools import cached, TTLCache
 
 # =====================================================
@@ -37,7 +32,6 @@ from cachetools import cached, TTLCache
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 templates = Jinja2Templates(directory="app/templates")
 
-# تعريف كائن التخزين المؤقت للإدارة بمهلة انتهاء 5 دقائق (300 ثانية)
 admin_cache = TTLCache(maxsize=100, ttl=300)
 
 # =====================================================

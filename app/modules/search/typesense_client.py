@@ -1,3 +1,5 @@
+"""Minimal Typesense client wrapper for search offload; cached when enabled."""
+
 from __future__ import annotations
 
 from typing import List, Optional

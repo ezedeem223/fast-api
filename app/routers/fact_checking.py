@@ -1,4 +1,4 @@
-# app/routers/fact_checking.py
+"""Fact checking router for submitting facts, verifications, corrections, and badges."""
 
 from typing import List, Optional
 
@@ -49,7 +49,7 @@ async def submit_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """إضافة حقيقة جديدة للتحقق"""
+    """   """
     fact = FactCheckingService.submit_fact(
         db=db,
         claim=request.claim,
@@ -73,7 +73,7 @@ async def verify_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """التحقق من حقيقة"""
+    """  """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -102,7 +102,7 @@ async def correct_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """تصحيح حقيقة"""
+    """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -128,7 +128,7 @@ async def vote_on_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """التصويت على حقيقة"""
+    """  """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -141,7 +141,7 @@ async def vote_on_fact(
 
 @router.get("/facts/{fact_id}")
 async def get_fact(fact_id: int, db: Session = Depends(get_db)):
-    """الحصول على حقيقة"""
+    """Retrieve a fact by id."""
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -166,7 +166,7 @@ async def list_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """الحصول على قائمة الحقائق"""
+    """   """
     if status:
         facts = FactCheckingService.get_facts_by_status(db, status, skip, limit)
     else:
@@ -190,7 +190,7 @@ async def search_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """البحث عن حقائق"""
+    """  """
     facts = FactCheckingService.search_facts(db, q, skip, limit)
     return [
         {

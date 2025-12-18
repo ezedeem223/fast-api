@@ -1,3 +1,5 @@
+"""User router covering profile, preferences, followers, language, and session endpoints."""
+
 from fastapi import (
     status,
     HTTPException,
@@ -7,6 +9,7 @@ from fastapi import (
     UploadFile,
     File,
     Query,
+    Response,
 )
 from sqlalchemy.orm import Session
 from typing import List
@@ -16,6 +19,7 @@ from typing import List
 from .. import models, schemas, oauth2
 from app.modules.users import UserService
 from app.modules.users.models import User
+from app.modules.users.schemas import IdentityLinkCreate, IdentityOut, DataExportOut
 from app.core.database import get_db
 from ..notifications import send_email_notification
 from ..cache import cache
@@ -31,7 +35,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
-    """Provide a UserService instance for route handlers."""
+    """Endpoint: get_user_service."""
     return UserService(db)
 
 
@@ -44,10 +48,7 @@ async def create_user(
     user: schemas.UserCreate,
     service: UserService = Depends(get_user_service),
 ):
-    """
-    إنشاء مستخدم جديد وإنشاء إشعار بالبريد الإلكتروني
-    Create a new user and send an email notification.
-    """
+    """Create a new user and send an email notification."""
     new_user = service.create_user(user)
 
     # Send email notification asynchronously
@@ -62,7 +63,6 @@ async def create_user(
 
 
 @router.get("/users/{user_id}/followers", response_model=schemas.FollowersListOut)
-# استبدل expire بـ ttl وأضف prefix لتمييز الكاش
 @cache(prefix="user_profile", ttl=300)
 async def get_user_followers(
     user_id: int,
@@ -73,10 +73,7 @@ async def get_user_followers(
     skip: int = 0,
     limit: int = 100,
 ):
-    """
-    الحصول على قائمة المتابعين مع إمكانية الفرز
-    Retrieve a list of followers with sorting options.
-    """
+    """Retrieve a list of followers with sorting options."""
     _, followers, total_count = service.get_user_followers(
         user_id=user_id,
         requesting_user=current_user,
@@ -109,10 +106,7 @@ async def update_followers_settings(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث إعدادات رؤية المتابعين
-    Update user's followers settings.
-    """
+    """Update user's followers settings."""
     return service.update_followers_settings(current_user, settings)
 
 
@@ -122,24 +116,18 @@ def update_public_key(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث المفتاح العام للمستخدم
-    Update the user's public key.
-    """
+    """Update the user's public key."""
     return service.update_public_key(current_user, key_update)
 
 
 @router.get("/{id}", response_model=schemas.UserOut)
-@cache(prefix="user:profile", ttl=300, include_user=False)  # ← أضف هذا
+@cache(prefix="user:profile", ttl=300, include_user=False)  # Cache response for performance.
 async def get_user(
     id: int,
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    الحصول على بيانات المستخدم حسب المعرف
-    Get user details by ID.
-    """
+    """Get user details by ID."""
     user = service.get_user_or_404(id)
 
     # Check privacy settings for profile
@@ -163,10 +151,7 @@ async def verify_user(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    رفع وثيقة التحقق وتفعيل الحساب
-    Upload verification document and verify the user.
-    """
+    """Upload verification document and verify the user."""
     service.verify_user_document(current_user, file)
 
     await send_email_notification(
@@ -185,10 +170,7 @@ async def get_user_content(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ):
-    """
-    الحصول على محتوى المستخدم (المنشورات، التعليقات، المقالات، والفيديوهات القصيرة)
-    Retrieve the user's content including posts, comments, articles, and reels.
-    """
+    """Retrieve the user's content including posts, comments, articles, and reels."""
     return service.get_user_content(current_user, skip, limit)
 
 
@@ -198,10 +180,7 @@ async def update_user_profile(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث الملف الشخصي للمستخدم
-    Update the user's profile.
-    """
+    """Update the user's profile."""
     updated_profile = service.update_profile(current_user, profile_update)
     log_user_event(service.db, current_user.id, "update_profile")
 
@@ -217,10 +196,7 @@ def update_privacy_settings(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث إعدادات الخصوصية للمستخدم
-    Update the user's privacy settings.
-    """
+    """Update the user's privacy settings."""
     return service.update_privacy_settings(current_user, privacy_settings)
 
 
@@ -230,10 +206,7 @@ async def get_user_profile(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    الحصول على الملف الشخصي للمستخدم مع ترجمة الـ bio (في حال تفعيل الترجمة)
-    Get the user profile and translate bio if needed.
-    """
+    """Get the user profile and translate bio if needed."""
     user, metrics = service.get_profile_overview(user_id)
     translated_bio = await get_translated_content(user.bio, current_user, user.language)
 
@@ -260,10 +233,7 @@ def get_user_posts(
     skip: int = 0,
     limit: int = 10,
 ):
-    """
-    الحصول على منشورات المستخدم حسب المعرف
-    Get posts of a user by user ID.
-    """
+    """Get posts of a user by user ID."""
     return service.get_user_posts(user_id, skip, limit)
 
 
@@ -274,10 +244,7 @@ def get_user_articles(
     skip: int = 0,
     limit: int = 10,
 ):
-    """
-    الحصول على مقالات المستخدم حسب المعرف
-    Get articles of a user by user ID.
-    """
+    """Get articles of a user by user ID."""
     return service.get_user_articles(user_id, skip, limit)
 
 
@@ -288,10 +255,7 @@ def get_user_media(
     skip: int = 0,
     limit: int = 10,
 ):
-    """
-    الحصول على وسائط المستخدم (صور وفيديوهات)
-    Get media posts of a user by user ID.
-    """
+    """Get media posts of a user by user ID."""
     return service.get_user_media(user_id, skip, limit)
 
 
@@ -302,10 +266,7 @@ def get_user_likes(
     skip: int = 0,
     limit: int = 10,
 ):
-    """
-    الحصول على المشاركات التي أعجب بها المستخدم
-    Get posts liked by the user.
-    """
+    """Get posts liked by the user."""
     return service.get_user_likes(user_id, skip, limit)
 
 
@@ -315,10 +276,7 @@ async def upload_profile_image(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    رفع صورة الملف الشخصي للمستخدم
-    Upload the user's profile image.
-    """
+    """Upload the user's profile image."""
     service.upload_profile_image(current_user, file)
 
     # Invalidate user cache
@@ -333,10 +291,7 @@ def change_password(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تغيير كلمة المرور للمستخدم
-    Change the user's password.
-    """
+    """Change the user's password."""
     return service.change_password(current_user, password_change)
 
 
@@ -345,10 +300,7 @@ def enable_2fa(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تفعيل المصادقة الثنائية (2FA)
-    Enable Two-Factor Authentication.
-    """
+    """Enable Two-Factor Authentication."""
     return service.enable_2fa(current_user)
 
 
@@ -358,10 +310,7 @@ def verify_2fa(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    التحقق من رمز المصادقة الثنائية
-    Verify the Two-Factor Authentication code.
-    """
+    """Verify the Two-Factor Authentication code."""
     return service.verify_2fa(current_user, otp)
 
 
@@ -370,10 +319,7 @@ def disable_2fa(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تعطيل المصادقة الثنائية (2FA)
-    Disable Two-Factor Authentication.
-    """
+    """Disable Two-Factor Authentication."""
     return service.disable_2fa(current_user)
 
 
@@ -383,10 +329,7 @@ def logout_all_devices(
     current_session: str = Depends(oauth2.get_current_session),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تسجيل الخروج من جميع الأجهزة الأخرى
-    Log out the user from all other devices.
-    """
+    """Log out the user from all other devices."""
     return service.logout_other_sessions(current_user, current_session)
 
 
@@ -396,10 +339,7 @@ def get_suggested_follows(
     current_user: User = Depends(oauth2.get_current_user),
     limit: int = 10,
 ):
-    """
-    الحصول على اقتراحات للمتابعة بناءً على الاهتمامات والاتصالات المشتركة
-    Get suggested users to follow based on shared interests and connections.
-    """
+    """Get suggested users to follow based on shared interests and connections."""
     return service.get_suggested_follows(current_user, limit)
 
 
@@ -409,10 +349,7 @@ async def get_user_analytics(
     current_user: User = Depends(oauth2.get_current_user),
     days: int = Query(30, ge=1, le=365),
 ):
-    """
-    الحصول على إحصائيات المستخدم خلال فترة محددة
-    Get user analytics for a specified period.
-    """
+    """Get user analytics for a specified period."""
     return service.get_user_analytics(current_user, days)
 
 
@@ -421,10 +358,7 @@ async def get_user_settings(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    الحصول على إعدادات المستخدم (واجهة المستخدم وإشعارات)
-    Get user settings (UI and notification settings).
-    """
+    """Get user settings (UI and notification settings)."""
     return service.get_user_settings(current_user)
 
 
@@ -434,10 +368,7 @@ async def update_user_settings(
     current_user: User = Depends(oauth2.get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تحديث إعدادات المستخدم (واجهة المستخدم وإشعارات)
-    Update the user's settings.
-    """
+    """Update the user's settings."""
     return service.update_user_settings(current_user, settings)
 
 
@@ -447,10 +378,7 @@ async def update_block_settings(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث إعدادات الحظر للمستخدم
-    Update the user's block settings.
-    """
+    """Update the user's block settings."""
     return service.update_block_settings(current_user, settings)
 
 
@@ -460,10 +388,7 @@ def update_repost_settings(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث إعدادات إعادة النشر للمستخدم
-    Update the user's repost settings.
-    """
+    """Update the user's repost settings."""
     return service.update_repost_settings(current_user, settings)
 
 
@@ -474,10 +399,7 @@ def get_user_notifications(
     skip: int = 0,
     limit: int = 10,
 ):
-    """
-    الحصول على إشعارات المستخدم
-    Retrieve the user's notifications.
-    """
+    """Retrieve the user's notifications."""
     return service.get_user_notifications(current_user, skip, limit)
 
 
@@ -489,10 +411,7 @@ def mark_notification_as_read(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تعليم إشعار كمقروء
-    Mark a specific notification as read.
-    """
+    """Mark a specific notification as read."""
     return service.mark_notification_as_read(notification_id, current_user)
 
 
@@ -502,10 +421,7 @@ def suspend_user(
     days: int,
     service: UserService = Depends(get_user_service),
 ):
-    """
-    تعليق حساب المستخدم لمدة محددة
-    Suspend the user for a specified number of days.
-    """
+    """Suspend the user for a specified number of days."""
     return service.suspend_user(user_id, days)
 
 
@@ -514,10 +430,7 @@ def unsuspend_user(
     user_id: int,
     service: UserService = Depends(get_user_service),
 ):
-    """
-    رفع تعليق حساب المستخدم
-    Unsuspend the user.
-    """
+    """Unsuspend the user."""
     return service.unsuspend_user(user_id)
 
 
@@ -527,17 +440,61 @@ def update_user_language(
     service: UserService = Depends(get_user_service),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث لغة المستخدم وخيارات الترجمة التلقائية
-    Update the user's preferred language and auto-translate settings.
-    """
+    """Update the user's preferred language and auto-translate settings."""
     return service.update_language_preferences(current_user, language)
 
 
 @router.get("/languages")
 def get_language_options():
-    """
-    الحصول على خيارات اللغات المتاحة
-    Get available language options.
-    """
+    """Endpoint: get_language_options."""
     return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]
+
+@router.get("/me/export", response_model=DataExportOut)
+def export_my_data(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """Export all user-related data."""
+    return service.export_user_data(current_user)
+
+
+@router.delete("/me", status_code=204)
+def delete_my_account(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """Delete the current user's account and related data."""
+    service.delete_account(current_user)
+    return Response(status_code=204)
+
+
+@router.post("/me/identities", response_model=IdentityOut, status_code=201)
+def link_identity(
+    payload: IdentityLinkCreate,
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """Link another account as a private identity."""
+    return service.link_identity(
+        current_user, payload.linked_user_id, payload.relationship_type
+    )
+
+
+@router.get("/me/identities", response_model=List[IdentityOut])
+def list_identities(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """List all linked identities."""
+    return service.list_identities(current_user)
+
+
+@router.delete("/me/identities/{linked_user_id}", status_code=204)
+def remove_identity(
+    linked_user_id: int,
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """Unlink a previously linked identity."""
+    service.remove_identity(current_user, linked_user_id)
+    return Response(status_code=204)

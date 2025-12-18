@@ -1,3 +1,5 @@
+"""Sticker router for packs/categories/reports and media upload validation."""
+
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
@@ -118,13 +120,7 @@ async def create_sticker(
 
 @router.get("/pack/{pack_id}", response_model=schemas.StickerPackWithStickers)
 def get_sticker_pack(pack_id: int, db: Session = Depends(get_db)):
-    """
-    Retrieve a sticker pack along with its stickers.
-
-    - **pack_id**: ID of the sticker pack
-
-    Returns the sticker pack if found.
-    """
+    """Endpoint: get_sticker_pack."""
     pack = db.query(models.StickerPack).filter(models.StickerPack.id == pack_id).first()
     if not pack:
         raise HTTPException(status_code=404, detail="Sticker pack not found")
@@ -133,24 +129,14 @@ def get_sticker_pack(pack_id: int, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[schemas.Sticker])
 def get_stickers(db: Session = Depends(get_db)):
-    """
-    Retrieve a list of all stickers.
-
-    Returns all stickers from the database.
-    """
+    """Endpoint: get_stickers."""
     stickers = db.query(models.Sticker).all()
     return stickers
 
 
 @router.get("/search")
 def search_stickers(query: str, db: Session = Depends(get_db)):
-    """
-    Search for stickers by name.
-
-    - **query**: Search keyword
-
-    Returns a list of stickers matching the query.
-    """
+    """Endpoint: search_stickers."""
     stickers = (
         db.query(models.Sticker).filter(models.Sticker.name.ilike(f"%{query}%")).all()
     )
@@ -159,11 +145,7 @@ def search_stickers(query: str, db: Session = Depends(get_db)):
 
 @router.get("/emojis")
 def get_emojis():
-    """
-    Retrieve a dictionary of emojis.
-
-    Uses the emoji library to return emoji aliases mapped to their unicode characters.
-    """
+    """Endpoint: get_emojis."""
     return {"emojis": emoji.EMOJI_ALIAS_UNICODE_ENGLISH}
 
 
@@ -278,24 +260,14 @@ def get_sticker_reports(
 
 @router.get("/categories", response_model=List[schemas.StickerCategory])
 def get_sticker_categories(db: Session = Depends(get_db)):
-    """
-    Retrieve all sticker categories.
-
-    Returns a list of all available sticker categories.
-    """
+    """Endpoint: get_sticker_categories."""
     categories = db.query(models.StickerCategory).all()
     return categories
 
 
 @router.get("/category/{category_id}", response_model=List[schemas.Sticker])
 def get_stickers_by_category(category_id: int, db: Session = Depends(get_db)):
-    """
-    Retrieve all stickers that belong to a specific category.
-
-    - **category_id**: ID of the sticker category
-
-    Returns a list of stickers within the specified category.
-    """
+    """Endpoint: get_stickers_by_category."""
     stickers = (
         db.query(models.Sticker)
         .filter(models.Sticker.categories.any(id=category_id))

@@ -15,6 +15,8 @@ from .models import (
     Tag,
     Reel,
     Article,
+    CommunityArchive,
+    DigitalMuseumItem,
 )
 
 __all__ = [
@@ -32,5 +34,7 @@ __all__ = [
     "Tag",
     "Reel",
     "Article",
+    "CommunityArchive",
+    "DigitalMuseumItem",
 ]
 

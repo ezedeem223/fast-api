@@ -1,3 +1,5 @@
+"""Follow router for follow/unfollow flows and follower listings."""
+
 from typing import List
 
 from fastapi import (

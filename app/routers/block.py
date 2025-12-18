@@ -1,9 +1,4 @@
-"""
-Block Router Module
-This module provides endpoints for managing user blocks in the system.
-It includes endpoints to block users, manually unblock them, retrieve block information,
-fetch block logs and statistics, as well as handling block appeals.
-"""
+"""Block/ban router handling user blocks, appeals, and admin enforcement."""
 
 # =====================================================
 # ==================== Imports ========================

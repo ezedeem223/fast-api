@@ -1,0 +1,56 @@
+import pytest
+
+from app.routers import search as search_router
+from app import models
+
+
+class FailingCache:
+    def get(self, key):
+        raise RuntimeError("cache down")
+
+
+@pytest.fixture
+def sample_posts(session, test_user):
+    posts = []
+    for idx in range(2):
+        post = models.Post(
+            title=f"Resilience {idx}",
+            content=f"Body {idx}",
+            owner_id=test_user["id"],
+        )
+        session.add(post)
+        session.commit()
+        session.refresh(post)
+        posts.append(post)
+    return posts
+
+
+def test_search_handles_cache_failure(monkeypatch, authorized_client, sample_posts):
+    # Force cache client to raise and ensure the endpoint still responds
+    monkeypatch.setattr(search_router, "_cache_client", lambda: FailingCache())
+
+    response = authorized_client.post(
+        "/search/",
+        json={"query": "Hello", "sort_by": "relevance"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "results" in data
+
+
+@pytest.mark.parametrize(
+    "content,expected_detail",
+    [
+        ("", "Message content cannot be empty"),
+        ("x" * 1001, "Message content exceeds the maximum length of 1000 characters"),
+    ],
+)
+def test_message_validation_limits(
+    authorized_client, test_user2, content, expected_detail
+):
+    response = authorized_client.post(
+        "/message/",
+        json={"recipient_id": test_user2["id"], "content": content},
+    )
+    assert response.status_code == 422
+    assert expected_detail in response.json()["detail"]

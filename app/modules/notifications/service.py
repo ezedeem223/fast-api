@@ -33,6 +33,9 @@ from .realtime import manager
 from .repository import NotificationRepository
 
 
+MAX_METADATA_BYTES = 2048
+
+
 class NotificationDeliveryManager:
     """Manages delivery of notifications with retry support."""
 
@@ -45,11 +48,20 @@ class NotificationDeliveryManager:
         self.batcher = NotificationBatcher()
 
     async def deliver_notification(self, notification: notification_models.Notification) -> bool:
-        """Deliver a notification with retry tracking and caching."""
+        """Deliver a notification with retry tracking and caching (idempotent per notification id)."""
+        previous_metadata = {}
+        if hasattr(notification, "notification_metadata") and isinstance(
+            notification.notification_metadata, dict
+        ):
+            previous_metadata = notification.notification_metadata.copy()
         try:
             delivery_key = f"delivery_{notification.id}"
-            if delivery_key in delivery_status_cache:
-                return delivery_status_cache[delivery_key]
+            if getattr(notification, "retry_count", 0) > 0:
+                delivery_status_cache.pop(delivery_key, None)
+            cached_result = delivery_status_cache.get(delivery_key)
+            if cached_result is not None:
+                # Avoid double-delivery when the same notification is processed concurrently.
+                return cached_result
 
             user_prefs = self._get_user_preferences(notification.user_id)
             content = await self._process_language(
@@ -68,6 +80,11 @@ class NotificationDeliveryManager:
                 delivery_tasks.append(
                     self._send_realtime_notification(notification, content)
                 )
+            if not delivery_tasks:
+                logger.warning(
+                    "No delivery channels enabled for user %s", notification.user_id
+                )
+                return False
             results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
             success = all(not isinstance(r, Exception) for r in results)
             await self._update_delivery_status(notification, success, results)
@@ -82,10 +99,21 @@ class NotificationDeliveryManager:
             }
             logger.error("Delivery error: %s", error_details)
             self.error_tracking[notification.id] = error_details
+            delivery_status_cache[delivery_key] = False
+            self.db.rollback()
+            # Mark the in-memory object as failed by default; retry flow can overwrite.
+            notification.status = notification_models.NotificationStatus.FAILED
+            notification.failure_reason = json.dumps(error_details)
+            # Restore metadata to its previous state so retries don't lose data after rollback.
+            if previous_metadata:
+                notification.notification_metadata = previous_metadata
+
+            if notification.retry_count + 1 >= self.max_retries:
+                await self._handle_final_failure(notification, error_details)
+                return False
+
             if notification.retry_count < self.max_retries:
                 await self._schedule_retry(notification)
-            else:
-                await self._handle_final_failure(notification, error_details)
             return False
 
     async def _process_language(
@@ -121,7 +149,11 @@ class NotificationDeliveryManager:
         )
         notification.status = status_val
         self.db.add(delivery_log)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def _get_user_preferences(self, user_id: int) -> notification_models.NotificationPreferences:
         """Return cached or freshly fetched notification preferences."""
@@ -261,7 +293,16 @@ class NotificationDeliveryManager:
         """Persist failure information when retries are exhausted."""
         notification.status = notification_models.NotificationStatus.FAILED
         notification.failure_reason = json.dumps(error_details)
+        # Align retry counters so downstream logic sees the failure as terminal.
+        notification.retry_count = notification.retry_count or 0
+        notification.last_retry = datetime.now(timezone.utc)
+        self.db.add(notification)
         self.db.commit()
+        try:
+            self.db.refresh(notification)
+        except Exception:
+            # Refresh may fail on SQLite with expired objects; the commit above is sufficient.
+            pass
 
     def _create_email_template(self, notification: notification_models.Notification) -> str:
         """Return formatted HTML email template for a notification."""
@@ -314,6 +355,9 @@ class NotificationService:
     ) -> Optional[notification_models.Notification]:
         """Persist notification entry and deliver immediately or schedule."""
         try:
+            cache_key = f"category_pref_{user_id}_{category.value}"
+            priority_notification_cache.pop(cache_key, None)
+            validated_metadata = self._normalize_metadata(metadata)
             user_prefs = self._get_user_preferences(user_id)
             if not self._should_send_notification(user_prefs, category):
                 logger.info("Notification skipped for user %s per preferences", user_id)
@@ -329,10 +373,9 @@ class NotificationService:
                 category=category,
                 link=link,
                 related_id=related_id,
-                metadata=metadata or {},
+                notification_metadata=validated_metadata,
                 scheduled_for=scheduled_for,
                 group_id=group.id if group else None,
-                language=detected_lang,
             )
             if scheduled_for and scheduled_for > datetime.now(timezone.utc):
                 self._schedule_delivery(new_notification)
@@ -345,6 +388,19 @@ class NotificationService:
             self.db.rollback()
             raise
 
+    def _normalize_metadata(self, metadata: Optional[dict]) -> dict:
+        """Validate metadata size and JSON-serializability, defaulting to empty dict."""
+        if not metadata:
+            return {}
+        try:
+            encoded = json.dumps(metadata).encode("utf-8")
+        except (TypeError, ValueError):
+            logger.warning("Invalid notification metadata provided; defaulting to empty metadata.")
+            return {}
+        if len(encoded) > MAX_METADATA_BYTES:
+            raise ValueError("metadata too large")
+        return metadata.copy()
+
     async def deliver_notification(self, notification: notification_models.Notification) -> bool:
         """Deliver notification respecting user preferences."""
         return await self.delivery_manager.deliver_notification(notification)
@@ -356,14 +412,13 @@ class NotificationService:
         user_prefs: notification_models.NotificationPreferences,
     ) -> str:
         """Translate content if user requested automatic translation."""
-        if (
-            user_prefs.auto_translate
-            and user_prefs.preferred_language != current_language
-        ):
+        auto_translate = getattr(user_prefs, "auto_translate", False)
+        preferred_language = getattr(user_prefs, "preferred_language", current_language)
+        if auto_translate and preferred_language != current_language:
             translated = translate_text(
                 content,
                 source_lang=current_language,
-                target_lang=user_prefs.preferred_language,
+                target_lang=preferred_language,
             )
             if translated:
                 return translated
@@ -371,7 +426,12 @@ class NotificationService:
 
     def _get_user_preferences(self, user_id: int) -> notification_models.NotificationPreferences:
         """Retrieve or create notification preferences."""
-        return self.repository.ensure_preferences(user_id)
+        cache_key = f"user_prefs_{user_id}"
+        if cache_key in notification_cache:
+            return notification_cache[cache_key]
+        prefs = self.repository.ensure_preferences(user_id)
+        notification_cache[cache_key] = prefs
+        return prefs
 
     def _should_send_notification(
         self,
@@ -610,31 +670,70 @@ class NotificationService:
     ) -> List[Optional[notification_models.Notification]]:
         """Create a batch of notifications from schema objects."""
         created: List[Optional[notification_models.Notification]] = []
-        for payload in notifications:
-            priority = (
-                payload.priority
-                if isinstance(payload.priority, notification_models.NotificationPriority)
-                else notification_models.NotificationPriority(payload.priority)
-            )
-            category = (
-                payload.category
-                if isinstance(payload.category, notification_models.NotificationCategory)
-                else notification_models.NotificationCategory(payload.category)
-            )
-            created.append(
-                await self.create_notification(
+        seen_keys = set()
+        try:
+            for payload in notifications:
+                priority = (
+                    payload.priority
+                    if isinstance(payload.priority, notification_models.NotificationPriority)
+                    else notification_models.NotificationPriority(payload.priority)
+                )
+                category = (
+                    payload.category
+                    if isinstance(payload.category, notification_models.NotificationCategory)
+                    else notification_models.NotificationCategory(payload.category)
+                )
+                metadata = self._normalize_metadata(payload.metadata)
+                cache_fragment = None
+                if payload.metadata:
+                    try:
+                        cache_fragment = json.dumps(metadata, sort_keys=True)
+                    except Exception:
+                        cache_fragment = None
+                key = (
+                    payload.user_id,
+                    payload.content,
+                    payload.notification_type,
+                    priority,
+                    category,
+                    payload.link,
+                    payload.scheduled_for,
+                    cache_fragment,
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                prefs = self._get_user_preferences(payload.user_id)
+                cache_key = f"category_pref_{payload.user_id}_{category.value}"
+                priority_notification_cache.pop(cache_key, None)
+                if not self._should_send_notification(prefs, category):
+                    created.append(None)
+                    continue
+                detected_lang = detect_language(payload.content)
+                translated_content = await self._process_language(
+                    payload.content, detected_lang, prefs
+                )
+                notification = notification_models.Notification(
                     user_id=payload.user_id,
-                    content=payload.content,
+                    content=translated_content,
                     notification_type=payload.notification_type,
                     priority=priority,
                     category=category,
                     link=payload.link,
                     related_id=None,
-                    metadata=payload.metadata,
+                    notification_metadata=metadata,
                     scheduled_for=payload.scheduled_for,
                 )
-            )
-        return created
+                self.db.add(notification)
+                created.append(notification)
+            self.db.commit()
+            for item in created:
+                if item:
+                    self.db.refresh(item)
+            return created
+        except Exception:
+            self.db.rollback()
+            raise
 
     async def cleanup_old_notifications(self, days: int) -> int:
         """Remove archived notifications older than the given number of days."""

@@ -176,8 +176,8 @@ class PostBase(BaseModel):
 class PostCreate(PostBase):
     community_id: Optional[int] = None
     hashtags: List[str] = Field(default_factory=list)
-    related_to_post_id: Optional[int] = None  # لربط المنشور بمنشور قديم
-    relation_type: Optional[str] = "continuation"  # نوع العلاقة (استكمال، رد...)
+    related_to_post_id: Optional[int] = None
+    relation_type: Optional[str] = "continuation"
     is_help_request: bool = False
     category_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
@@ -203,8 +203,6 @@ class PostRelationOut(BaseModel):
     similarity_score: float
     relation_type: str
     created_at: datetime
-    # نقوم بتضمين تفاصيل المنشور القديم (الذكرى)
-    # نستخدم 'Post' هنا لأنها معرفة بالأعلى، مما يتجنب المشاكل الدائرية
     target_post: Optional[Post] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -242,7 +240,6 @@ class PostOut(Post):
     related_memories: List[PostRelationOut] = Field(default_factory=list)
     quality_score: Optional[float] = 0.0
     originality_score: Optional[float] = 0.0
-    # score موجود بالفعل في المخطط، فلا داعي لإضافته
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -42,7 +42,6 @@ from cachetools import TTLCache
 # Import local modules
 from .. import models, schemas, oauth2, notifications
 
-# --- [تعديل هام] استيراد مخططات المنشورات المحددة للوصول إلى TimelinePoint و MemoryItem ---
 from app.modules.posts import schemas as post_module_schemas
 
 from app.core.config import settings
@@ -70,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_post_service(db: Session = Depends(get_db)) -> PostService:
-    """Provide a PostService instance for route handlers."""
+    """Endpoint: get_post_service."""
     return PostService(db)
 
 
@@ -98,9 +97,7 @@ def _social_sharing_configured(token: str) -> bool:
 
 
 def share_on_twitter(content: str):
-    """
-    Shares a given content on Twitter using the Twitter API.
-    """
+    """Endpoint: share_on_twitter."""
     if not _social_sharing_configured(TWITTER_BEARER_TOKEN):
         logger.info("Twitter credentials not configured; skipping share.")
         return
@@ -130,9 +127,7 @@ def share_on_twitter(content: str):
 
 
 def share_on_facebook(content: str):
-    """
-    Shares a given content on Facebook using the Facebook API.
-    """
+    """Endpoint: share_on_facebook."""
     if not _social_sharing_configured(FACEBOOK_ACCESS_TOKEN):
         logger.info("Facebook credentials not configured; skipping share.")
         return
@@ -159,11 +154,7 @@ def share_on_facebook(content: str):
 
 
 async def save_audio_file(file: UploadFile) -> str:
-    """
-    Saves the uploaded audio file asynchronously.
-    Checks if the file extension is allowed and verifies the audio duration.
-    Returns the file path if successful.
-    """
+    """Endpoint: save_audio_file."""
     from pydub import (
         AudioSegment,
     )  # Local import avoids import-time warnings during tests
@@ -193,10 +184,7 @@ async def save_audio_file(file: UploadFile) -> str:
 
 
 def create_pdf(post: models.Post):
-    """
-    Generates a PDF file from a post's content.
-    Returns a BytesIO object containing the PDF data if successful.
-    """
+    """Endpoint: create_pdf."""
     from xhtml2pdf import (
         pisa,
     )  # Local import defers reportlab side effects during tests
@@ -535,21 +523,16 @@ def get_posts_with_mentions(
     )
 
 
-# === [إضافة جديدة] الميزة 1.3: إعادة الاكتشاف (حدث في مثل هذا اليوم) ===
 @router.get("/memories/daily", response_model=List[post_module_schemas.MemoryItem])
 @cache(prefix="memories:daily", ttl=3600, include_user=True)
 def discover_daily_memories(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
-    """
-    1.3 Rediscovery: Get 'On This Day' memories.
-    استرجاع ذكريات 'في مثل هذا اليوم' من سنوات سابقة باستخدام المخطط الجديد.
-    """
+    """1.3 Rediscovery: Get 'On This Day' memories."""
     return service.get_on_this_day_memories(current_user.id)
 
 
-# === [إضافة جديدة] الميزة 1.2: الخط الزمني الديناميكي ===
 @router.get(
     "/users/{user_id}/timeline", response_model=List[post_module_schemas.TimelinePoint]
 )
@@ -558,10 +541,7 @@ def get_user_evolution_timeline(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
-    """
-    1.2 Dynamic Timeline: Get user evolution timeline.
-    الحصول على خط التطور الزمني للمستخدم (إحصائيات شهرية).
-    """
+    """1.2 Dynamic Timeline: Get user evolution timeline."""
     return service.get_user_timeline(user_id)
 
 

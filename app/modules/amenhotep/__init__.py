@@ -1,4 +1,4 @@
-"""Amenhotep domain exports."""
+"""Amenhotep domain exports for chatbot conversations and edit history tracking."""
 
 from .models import AmenhotepMessage, AmenhotepChatAnalytics, CommentEditHistory
 

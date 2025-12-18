@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import inspect
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +15,8 @@ from app import models
 from app.ai_chat.amenhotep import AmenhotepAI
 from app.analytics import clean_old_statistics, model
 from app.celery_worker import celery_app
+import os
+
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.firebase_config import initialize_firebase
@@ -26,6 +29,40 @@ from app.services.reels import ReelService
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_test_env() -> bool:
+    return (
+        settings.environment.lower() == "test"
+        or os.getenv("APP_ENV", "").lower() == "test"
+        or os.getenv("PYTEST_CURRENT_TEST") is not None
+    )
+
+
+def _maybe_repeat_every(**kwargs):
+    """
+    Apply repeat_every only outside test environment to avoid lingering
+    background tasks in unit tests.
+    """
+    def decorator(fn):
+        is_async = inspect.iscoroutinefunction(fn)
+        scheduled = repeat_every(**kwargs)(fn)
+
+        if is_async:
+            async def wrapper(*args, **kws):
+                if _is_test_env():
+                    return None
+                return await scheduled(*args, **kws)
+        else:
+            def wrapper(*args, **kws):
+                if _is_test_env():
+                    return None
+                return scheduled(*args, **kws)
+
+        wrapper.__wrapped__ = fn  # type: ignore[attr-defined]
+        return wrapper
+
+    return decorator
 
 
 def register_startup_tasks(app: FastAPI) -> None:
@@ -49,6 +86,7 @@ def register_startup_tasks(app: FastAPI) -> None:
 
 def _configure_scheduler() -> Optional[BackgroundScheduler]:
     if settings.environment.lower() == "test":
+        # Avoid spinning background threads when tests run synchronously.
         return None
 
     scheduler = BackgroundScheduler()
@@ -109,21 +147,20 @@ def update_all_communities_statistics() -> None:
         db.close()
 
 
-@repeat_every(seconds=60 * 60 * 24)
-def update_search_suggestions_task() -> None:
-    if settings.environment.lower() == "test":
-        return
+@_maybe_repeat_every(seconds=60 * 60 * 24)
+async def update_search_suggestions_task() -> None:
     db = next(get_db())
     try:
         update_search_suggestions(db)
+    except Exception as exc:  # pragma: no cover - logged for diagnostics
+        logger.error("Failed to update search suggestions: %s", exc)
+        raise
     finally:
         db.close()
 
 
-@repeat_every(seconds=60 * 60)
-def update_all_post_scores() -> None:
-    if settings.environment.lower() == "test":
-        return
+@_maybe_repeat_every(seconds=60 * 60)
+async def update_all_post_scores() -> None:
     db = SessionLocal()
     try:
         posts = db.query(models.Post).all()
@@ -133,7 +170,7 @@ def update_all_post_scores() -> None:
         db.close()
 
 
-@repeat_every(seconds=86400)
+@_maybe_repeat_every(seconds=86400)
 def cleanup_old_notifications() -> None:
     db = SessionLocal()
     try:
@@ -143,7 +180,7 @@ def cleanup_old_notifications() -> None:
         db.close()
 
 
-@repeat_every(seconds=3600)
+@_maybe_repeat_every(seconds=3600)
 def retry_failed_notifications() -> None:
     db = SessionLocal()
     try:
@@ -162,12 +199,13 @@ def retry_failed_notifications() -> None:
         db.close()
 
 
-@repeat_every(seconds=1800)
+@_maybe_repeat_every(seconds=1800)
 def cleanup_expired_reels_task() -> None:
-    if settings.environment.lower() == "test":
-        return
     db = SessionLocal()
     try:
         ReelService(db).cleanup_expired_reels()
+    except Exception as exc:  # pragma: no cover - defensive log
+        logger.error("Failed to cleanup expired reels: %s", exc)
+        raise
     finally:
         db.close()

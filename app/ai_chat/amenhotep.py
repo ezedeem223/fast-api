@@ -66,22 +66,22 @@ class AmenhotepAI:
 
         # Return a default knowledge base if file does not exist or fails to load
         return {
-            "عام": {
-                "أمنحتب الثالث": {
-                    "معلومات": "أنا أمنحتب الثالث، تاسع فراعنة الأسرة الثامنة عشرة في مصر القديمة. حكمت خلال العصر المصري الحديث، في الفترة من حوالي 1388 إلى 1351 قبل الميلاد.",
-                    "إنجازات": "شهد عصري ازدهاراً غير مسبوق في الفنون والعمارة. أمرت ببناء العديد من المعابد والتماثيل، بما في ذلك تماثيل ممنون الشهيرة.",
-                    "سياسة": "اتبعت سياسة دبلوماسية ناجحة وحافظت على السلام من خلال التحالفات والزيجات السياسية.",
+            "general": {
+                "Amenhotep III": {
+                    "info": "I am Amenhotep III, ninth pharaoh of the 18th dynasty of ancient Egypt (c. 1388-1351 BCE).",
+                    "achievements": "My era saw unprecedented prosperity in arts and architecture, including the famed Colossi of Memnon.",
+                    "politics": "I pursued successful diplomacy and maintained peace through alliances and political marriages.",
                 },
-                "الحياة اليومية": {
-                    "الزراعة": "كان نهر النيل محور الحياة المصرية القديمة، حيث اعتمد المصريون على فيضانه السنوي للزراعة.",
-                    "الطعام": "كان النظام الغذائي يتكون من الخبز والجعة والخضروات والأسماك واللحوم في المناسبات الخاصة.",
-                    "المهن": "كان المجتمع يضم كتبة ومزارعين وحرفيين وكهنة وجنود وتجار.",
+                "daily_life": {
+                    "agriculture": "The Nile was the backbone of ancient Egyptian life, with annual floods enabling agriculture.",
+                    "food": "Diets included bread, beer, vegetables, fish, and meat on special occasions.",
+                    "professions": "Society included scribes, farmers, artisans, priests, soldiers, and merchants.",
                 },
             },
-            "الدين": {
-                "آلهة": ["رع", "أوزيريس", "إيزيس", "حورس", "أنوبيس", "تحوت"],
-                "طقوس": "كانت الطقوس الدينية جزءاً أساسياً من الحياة اليومية",
-                "معابد": "كانت المعابد مراكز دينية وإدارية واقتصادية مهمة",
+            "religion": {
+                "gods": ["Ra", "Osiris", "Isis", "Horus", "Anubis", "Thoth"],
+                "rituals": "Religious rituals were a core part of daily life.",
+                "temples": "Temples served as key religious, administrative, and economic centers.",
             },
         }
 
@@ -100,16 +100,16 @@ class AmenhotepAI:
         Return a detailed welcome message in Arabic.
         """
         return """
-        مرحباً بك في حضرة الملك أمنحتب الثالث، فرعون مصر العظيم في عصرها الذهبي.
+        Welcome to the court of Amenhotep III, the great pharaoh of Egypt's golden age.
 
-        أنا هنا لأشارك معك حكمة وتاريخ مصر القديمة، ولأجيب على استفساراتك عن:
-        • الحضارة المصرية وإنجازاتها العظيمة
-        • الحياة اليومية في مصر القديمة
-        • المعتقدات الدينية والطقوس
-        • الفنون والعمارة في عصري
-        • السياسة والدبلوماسية في عهدي
-        
-        تفضل بطرح أسئلتك، وسأشارك معك من كنوز المعرفة المصرية القديمة.
+        I am here to share the wisdom and history of ancient Egypt and to answer your questions about:
+        - Egyptian civilization and its achievements
+        - Daily life along the Nile
+        - Religious beliefs and rituals
+        - Arts and architecture of my era
+        - Politics and diplomacy in my reign
+
+        Ask your questions, and I will share from the treasury of Egyptian knowledge.
         """
 
     async def get_response(self, user_id: int, message: str) -> str:
@@ -131,7 +131,7 @@ class AmenhotepAI:
                         if isinstance(content, dict):
                             response = " ".join(content.values())
                         elif isinstance(content, list):
-                            response = "، ".join(content)
+                            response = ", ".join(content)
                         else:
                             response = str(content)
                         break
@@ -180,7 +180,7 @@ class AmenhotepAI:
 
         except Exception as e:
             print(f"Error generating response: {e}")
-            return "عذراً، حدث خطأ في معالجة سؤالك. هل يمكنك إعادة صياغته بشكل مختلف؟"
+            return "Sorry, there was an error processing your question. Could you please rephrase it?"
 
     def _format_royal_response(self, response: str) -> str:
         """
@@ -188,24 +188,24 @@ class AmenhotepAI:
         to give it a majestic tone.
         """
         royal_prefixes = [
-            "يا بني",
-            "اسمع يا هذا",
-            "دعني أخبرك",
-            "اعلم",
-            "كما يقول الحكماء",
+            "My child",
+            "Listen closely",
+            "Allow me to tell you",
+            "Know this",
+            "As the sages say",
         ]
 
         royal_suffixes = [
-            "هذا ما علمتنا إياه الآلهة",
-            "هكذا كان في عهدي",
-            "هذه حكمة الفراعنة",
-            "كما دونه كتبتنا على جدران المعابد",
+            "This is what the gods have taught us",
+            "So it was in my reign",
+            "This is the wisdom of the pharaohs",
+            "As our scribes carved on temple walls",
         ]
 
         from random import choice
 
         # Add a random prefix to the response
-        response = f"{choice(royal_prefixes)}، {response}"
+        response = f\"{choice(royal_prefixes)}, {response}\"
         # Append a random suffix if not already present
         if not any(suffix in response for suffix in royal_suffixes):
             response = f"{response}. {choice(royal_suffixes)}."

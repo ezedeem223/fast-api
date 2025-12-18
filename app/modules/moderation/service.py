@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import logging
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models
+from app.modules.utils.analytics import update_ban_statistics
+from app.modules.moderation.models import AppealStatus, BlockAppeal
 
 REPORT_THRESHOLD = 5  # Number of valid reports required for automatic ban
 REPORT_WINDOW = timedelta(days=30)
-WARNING_THRESHOLD = 3
+WARNING_THRESHOLD = 3  # Escalate to ban after this many warnings
 
 
 def _get_model_by_id(db: Session, model, id_value):
@@ -22,6 +25,7 @@ def _get_model_by_id(db: Session, model, id_value):
 
 
 def _handle_errors(func):
+    """Log and re-raise errors to preserve call-stack signal while adding diagnostics."""
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -63,6 +67,44 @@ def ban_user(db: Session, user_id: int, reason: str):
     db.add(ban)
 
     db.commit()
+    update_ban_statistics(db, "user", reason, float(user.ban_count))
+
+
+@_handle_errors
+def unblock_user(db: Session, blocker_id: int, blocked_id: int) -> int:
+    """Mark active blocks between two users as ended now."""
+    now = datetime.now(timezone.utc)
+    updated = (
+        db.query(models.Block)
+        .filter(
+            models.Block.blocker_id == blocker_id,
+            models.Block.blocked_id == blocked_id,
+            (
+                models.Block.ends_at.is_(None)
+                | (models.Block.ends_at > now)
+            ),
+        )
+        .update({"ends_at": now}, synchronize_session=False)
+    )
+    db.commit()
+    if updated:
+        update_ban_statistics(db, "user", "unblock", float(updated))
+    return updated or 0
+
+
+@_handle_errors
+def clean_expired_blocks(db: Session) -> int:
+    """Cleanup blocks whose ends_at has passed."""
+    now = datetime.now(timezone.utc)
+    expired = (
+        db.query(models.Block)
+        .filter(models.Block.ends_at.isnot(None), models.Block.ends_at <= now)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    if expired:
+        update_ban_statistics(db, "user", "clean_expired_blocks", float(expired))
+    return expired or 0
 
 
 def calculate_ban_duration(ban_count: int) -> timedelta:
@@ -110,10 +152,40 @@ def check_auto_ban(db: Session, user_id: int):
         ban_user(db, user_id, "Automatic ban due to multiple valid reports")
 
 
+@_handle_errors
+def submit_block_appeal(db: Session, block_id: int, user_id: int, reason: str) -> BlockAppeal:
+    """Submit an appeal for a given block."""
+    if not reason or not reason.strip():
+        raise ValueError("Reason required")
+    block = _get_model_by_id(db, models.Block, block_id)
+    if block.blocked_id != user_id:
+        raise ValueError("User is not the blocked party")
+    appeal = BlockAppeal(block_id=block_id, user_id=user_id, reason=reason.strip())
+    db.add(appeal)
+    db.commit()
+    db.refresh(appeal)
+    return appeal
+
+
+@_handle_errors
+def review_block_appeal(db: Session, appeal_id: int, approve: bool, reviewer_id: int) -> BlockAppeal:
+    appeal = _get_model_by_id(db, BlockAppeal, appeal_id)
+    appeal.status = AppealStatus.APPROVED if approve else AppealStatus.REJECTED
+    appeal.reviewed_at = datetime.now(timezone.utc)
+    appeal.reviewer_id = reviewer_id
+    db.commit()
+    db.refresh(appeal)
+    return appeal
+
+
 __all__ = [
     "ban_user",
+    "unblock_user",
+    "clean_expired_blocks",
     "calculate_ban_duration",
     "check_auto_ban",
     "process_report",
     "warn_user",
+    "submit_block_appeal",
+    "review_block_appeal",
 ]

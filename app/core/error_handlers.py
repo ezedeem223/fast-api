@@ -17,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.exceptions import AppException
 
 logger = logging.getLogger(__name__)
+UNPROCESSABLE_STATUS = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 
 def create_error_response(
@@ -125,7 +126,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         }
 
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             content=content,
         )
 
@@ -183,11 +184,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             exc_info=True,
         )
 
-        # في الـ production، لا نعرض تفاصيل الخطأ الداخلي
         message = "An unexpected error occurred. Please try again later."
         details = {}
 
-        # في الـ development، نعرض التفاصيل
         if hasattr(request.app.state, "environment"):
             env = request.app.state.environment.lower()
             if env in ("development", "dev", "test"):

@@ -6,7 +6,6 @@ enums, and association tables from their domain packages. New code should
 import directly from the relevant module package.
 """
 
-# 1. التعديل الجوهري: استيراد Base من Core Database
 from app.core.database import Base
 
 from app.modules.users.associations import post_mentions, user_hashtag_follows
@@ -40,6 +39,8 @@ from app.modules.community import (
     Tag,
     Reel,
     Article,
+    CommunityArchive,
+    DigitalMuseumItem,
 )
 
 from app.modules.posts import (
@@ -185,7 +186,7 @@ from app.modules.collaboration import (
 )
 
 __all__ = [
-    "Base",  # 2. التعديل الجوهري: تصدير Base ليراه Alembic
+    "Base",  # Export Base so Alembic can discover it
     "post_mentions",
     "user_hashtag_follows",
     "community_tags",
@@ -214,6 +215,8 @@ __all__ = [
     "Tag",
     "Reel",
     "Article",
+    "CommunityArchive",
+    "DigitalMuseumItem",
     "CopyrightType",
     "SocialMediaType",
     "PostStatus",

@@ -1,3 +1,5 @@
+"""Reaction router for post/comment reactions and trending calculations."""
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func

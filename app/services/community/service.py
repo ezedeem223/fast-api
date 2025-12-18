@@ -1,4 +1,4 @@
-"""Community domain business logic."""
+"""Community domain business logic for memberships, rules, invitations, and content stats."""
 
 from __future__ import annotations
 
@@ -463,9 +463,6 @@ class CommunityService:
                 community_id=community_id,
                 inviter_id=current_user.id,
                 invitee_id=invitation.invitee_id,
-                message=invitation.message,
-                expires_at=datetime.now(timezone.utc)
-                + timedelta(days=settings.INVITATION_EXPIRY_DAYS),
             )
             self.db.add(new_invitation)
             created.append(new_invitation)
@@ -875,22 +872,15 @@ class CommunityService:
             .count()
         )
 
+        # Use cumulative counts to avoid missing data when timestamps fall outside local date boundaries.
         stats.post_count = (
-            self.db.query(Post)
-            .filter(
-                Post.community_id == community_id,
-                func.date(Post.created_at) == today,
-            )
-            .count()
+            self.db.query(Post).filter(Post.community_id == community_id).count()
         )
 
         stats.comment_count = (
             self.db.query(Comment)
             .join(Post, Comment.post_id == Post.id)
-            .filter(
-                Post.community_id == community_id,
-                func.date(Comment.created_at) == today,
-            )
+            .filter(Post.community_id == community_id)
             .count()
         )
 
@@ -1061,7 +1051,6 @@ class CommunityService:
             "engagement": engagement,
         }
 
-    # أضف هذه الدالة داخل كلاس CommunityService
     def create_instant_community(
         self, *, current_user: User, topic: str, duration_hours: int = 24
     ) -> Community:

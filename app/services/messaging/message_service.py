@@ -1,4 +1,4 @@
-"""Service layer encapsulating messaging workflows."""
+"""Service layer encapsulating messaging workflows with legacy shims and media handling."""
 
 from __future__ import annotations
 
@@ -46,6 +46,7 @@ class MessageService:
 
     def __init__(self, db: Session):
         self.db = db
+        # Pre-create upload roots so background tasks/readers never hit missing dirs.
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         self.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -312,9 +313,8 @@ class MessageService:
     def _schedule_link_preview(
         self, background_tasks: BackgroundTasks, message_id: int, url: str
     ):
-        background_tasks.add_task(
-            legacy_update_link_preview, self.db, message_id, url
-        )
+        # Run link preview out of band to avoid blocking the send path.
+        background_tasks.add_task(legacy_update_link_preview, self.db, message_id, url)
 
     @staticmethod
     def _queue_email_notification(*args, **kwargs):
@@ -536,7 +536,15 @@ class MessageService:
         if message.sender_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to edit this message")
 
-        if datetime.now(timezone.utc) - message.timestamp > timedelta(
+        msg_ts = message.timestamp
+        if msg_ts.tzinfo is None:
+            msg_ts = msg_ts.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        if getattr(now, "tzinfo", None) is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        if now - msg_ts > timedelta(
             minutes=self.EDIT_DELETE_WINDOW
         ):
             raise HTTPException(status_code=400, detail="Edit window has expired")
@@ -579,7 +587,15 @@ class MessageService:
             raise HTTPException(status_code=404, detail="Message not found")
         if message.sender_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this message")
-        if datetime.now(timezone.utc) - message.timestamp > timedelta(
+        msg_ts = message.timestamp
+        if msg_ts.tzinfo is None:
+            msg_ts = msg_ts.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        if getattr(now, "tzinfo", None) is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        if now - msg_ts > timedelta(
             minutes=self.EDIT_DELETE_WINDOW
         ):
             raise HTTPException(status_code=400, detail="Delete window has expired")
@@ -788,6 +804,11 @@ class MessageService:
         if len(file_content) > self.MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail="File is too large")
 
+        # Ensure a conversation row exists to satisfy FK constraints
+        conversation_id = self._get_or_create_direct_conversation(
+            current_user.id, recipient_id
+        )
+
         file_location = self.UPLOAD_DIR / file.filename
         file_location.parent.mkdir(parents=True, exist_ok=True)
         with open(file_location, "wb") as file_object:
@@ -804,6 +825,7 @@ class MessageService:
             encrypted_content=file_content,
             message_type=schemas.MessageType.FILE,
             file_url=str(file_location),
+            conversation_id=conversation_id,
         )
         self.db.add(new_message)
         self.db.commit()

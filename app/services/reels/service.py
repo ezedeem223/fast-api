@@ -1,3 +1,5 @@
+"""Reel service for lifecycle management, cleanup, and engagement metrics."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -76,6 +78,7 @@ class ReelService:
         self.db.commit()
 
     def cleanup_expired_reels(self) -> int:
+        """Bulk deactivate expired reels without loading all rows into memory."""
         now = datetime.now(timezone.utc)
         updated = (
             self.db.query(models.Reel)

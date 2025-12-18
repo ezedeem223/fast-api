@@ -1,4 +1,4 @@
-"""Service layer handling comment operations."""
+"""Service layer handling comment operations with scoring, moderation, translation, and notification side effects."""
 
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ class CommentService:
         current_user: User,
         edit_window: Optional[timedelta],
     ) -> Comment:
-        """Update a comment's content within the allowed edit window."""
+        """Update a comment's content within the allowed edit window, keeping edit history."""
         comment = self.db.query(Comment).filter(Comment.id == comment_id).first()
         if not comment:
             raise HTTPException(
@@ -288,8 +288,7 @@ class CommentService:
             comment_id=payload.comment_id,
             reported_user_id=reported_owner_id,
             report_reason=payload.report_reason,
-            contains_profanity=contains_profanity,
-            has_invalid_urls=has_invalid_urls,
+            ai_detected=contains_profanity or has_invalid_urls,
         )
         self.db.add(new_report)
 

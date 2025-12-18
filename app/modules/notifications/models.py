@@ -1,4 +1,10 @@
-"""SQLAlchemy models and enums for the notifications domain."""
+"""SQLAlchemy models and enums for the notifications domain.
+
+Notes:
+- JSONB columns use a SQLite-safe variant so local tests do not break.
+- Status/retry fields capture delivery lifecycle without assuming a specific worker backend.
+- Grouping is kept optional to allow batching/aggregation without forcing all notifications into a group.
+"""
 
 from __future__ import annotations
 
@@ -66,7 +72,7 @@ class NotificationType(str, enum.Enum):
 
 
 class NotificationPreferences(Base):
-    """User notification preferences."""
+    """Per-user channel toggles, quiet hours, and per-category overrides (JSON for forward compatibility)."""
 
     __tablename__ = "notification_preferences"
 
@@ -86,7 +92,7 @@ class NotificationPreferences(Base):
 
 
 class NotificationGroup(Base):
-    """Group similar notifications together for batching."""
+    """Group similar notifications together for batching; `sample_notification_id` aids previews/analytics."""
 
     __tablename__ = "notification_groups"
 
@@ -111,7 +117,12 @@ class NotificationGroup(Base):
 
 
 class Notification(Base):
-    """Notification entity."""
+    """Notification entity.
+
+    Stores channel, priority, and per-delivery tracking. Retry fields (`retry_strategy`, `max_retries`,
+    `current_retry_count`, `last_retry_timestamp`) allow idempotent workers to decide backoff independently.
+    `notification_metadata`/`custom_data` are flexible payloads for clients without strict schema coupling.
+    """
 
     __tablename__ = "notifications"
 
@@ -174,7 +185,7 @@ class Notification(Base):
     )
 
     def should_retry(self) -> bool:
-        """Return True if notification should be retried."""
+        """Return True if notification should be retried based on status, retries, and expiry."""
         if self.status != NotificationStatus.FAILED:
             return False
         if self.current_retry_count >= self.max_retries:

@@ -1,4 +1,4 @@
-"""Centralized API router registration."""
+"""Centralized API router registration to keep feature routers discoverable in one place."""
 
 from fastapi import APIRouter
 

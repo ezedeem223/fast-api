@@ -9,26 +9,33 @@ import hashlib
 import functools
 from typing import Any, Optional, Union, Callable
 from datetime import timedelta
+import time
 
 import redis.asyncio as redis
 from fastapi import Request, Response
 
 from app.core.config import settings
-import asyncio  # أضف هذا في قسم الـ imports في أعلى الملف
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class RedisCache:
+    """Async Redis cache facade with graceful fallback when Redis is unavailable or stubbed."""
     def __init__(self):
         self.redis: Optional[redis.Redis] = None
         self.enabled = False
         self.default_ttl = 300  # 5 minutes default
+        self.failed_init = False  # track init failures for test env readiness
+        # Lightweight in-memory fallback store used when a provided redis-like object
+        # does not implement get/set (e.g., certain test doubles).
+        self._fallback_store: dict[str, tuple[Any, Optional[float]]] = {}
 
     async def init_cache(self):
         """Initialize Redis connection pool."""
         try:
             if not settings.redis_url:
+                # Fail open: leave caching disabled instead of blocking app startup when Redis is not configured.
                 logger.warning("REDIS_URL not set. Caching disabled.")
                 return
 
@@ -41,15 +48,27 @@ class RedisCache:
             # Test connection
             await self.redis.ping()
             self.enabled = True
+            self.failed_init = False
             logger.info("Redis cache initialized successfully.")
         except Exception as e:
             logger.error(f"Failed to initialize Redis cache: {e}")
             self.enabled = False
+            self.failed_init = True
 
     async def close(self):
         """Close Redis connection."""
-        if self.redis:
-            await self.redis.close()
+        if not self.redis:
+            self.failed_init = False
+            return
+        close_method = getattr(self.redis, "aclose", None) or getattr(
+            self.redis, "close", None
+        )
+        if close_method:
+            result = close_method()
+            if asyncio.iscoroutine(result):
+                await result
+        self.redis = None
+        self.failed_init = False
 
     def _generate_key(self, prefix: str, *args, **kwargs) -> str:
         """Generate a unique cache key based on arguments."""
@@ -70,6 +89,16 @@ class RedisCache:
         """Get value from cache."""
         if not self.enabled or not self.redis:
             return None
+        # Fallback to in-memory store when the backend stub lacks required APIs.
+        if not hasattr(self.redis, "get"):
+            expiry = self._fallback_store.get(key)
+            if not expiry:
+                return None
+            value, exp_ts = expiry
+            if exp_ts is not None and exp_ts < time.time():
+                self._fallback_store.pop(key, None)
+                return None
+            return value
         try:
             data = await self.redis.get(key)
             return json.loads(data) if data else None
@@ -80,6 +109,11 @@ class RedisCache:
     async def set(self, key: str, value: Any, ttl: int = None) -> None:
         """Set value in cache."""
         if not self.enabled or not self.redis:
+            return
+        # Fallback path for simple stubs without set()
+        if not hasattr(self.redis, "set"):
+            exp_ts = (time.time() + (ttl or self.default_ttl)) if (ttl or self.default_ttl) else None
+            self._fallback_store[key] = (value, exp_ts)
             return
         try:
             serialized = json.dumps(value, default=str)

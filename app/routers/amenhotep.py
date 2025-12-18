@@ -1,14 +1,10 @@
-"""
-Amenhotep Chat Router Module
-This module provides endpoints for chatting with Amenhotep AI.
-It includes WebSocket endpoints for real-time chat, endpoints for retrieving
-chat history, and for clearing the conversation history.
-"""
+"""Amenhotep AI router for chatbot interactions and analytics hooks."""
 
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List
 import logging
@@ -17,12 +13,19 @@ import logging
 from .. import models, schemas, oauth2
 from app.core.database import get_db
 from ..ai_chat.amenhotep import AmenhotepAI
+from app import i18n
 
 # =====================================================
 # =============== Global Variables ====================
 # =====================================================
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/amenhotep", tags=["Amenhotep Chat"])
+DEFAULT_FALLBACK_LANG = "en"
+
+
+class AmenhotepAskRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    language: str | None = None
 
 # =====================================================
 # ================ WebSocket Endpoints =================
@@ -72,7 +75,8 @@ async def websocket_endpoint(
 
                 if not message:
                     logger.warning(f"Empty message received from user {user_id}")
-                    continue
+                    await websocket.close(code=1003, reason="Empty message")
+                    break
 
                 # Create and store the message in the database
                 db_message = models.AmenhotepMessage(user_id=user_id, message=message)
@@ -99,7 +103,7 @@ async def websocket_endpoint(
             except Exception as e:
                 logger.error(f"Error processing message for user {user_id}: {str(e)}")
                 error_message = (
-                    "عذراً، حدث خطأ في معالجة رسالتك. هل يمكنك المحاولة مرة أخرى؟"
+                    "Sorry, there was an error processing your message. Please try again."
                 )
                 await websocket.send_text(error_message)
 
@@ -133,7 +137,8 @@ async def get_chat_history(
     try:
         if current_user.id != user_id and not current_user.is_admin:
             raise HTTPException(
-                status_code=403, detail="غير مصرح لك بالوصول إلى سجل المحادثة هذا"
+                status_code=403,
+                detail="You are not authorized to access this chat history.",
             )
 
         messages = (
@@ -147,7 +152,8 @@ async def get_chat_history(
     except Exception as e:
         logger.error(f"Error retrieving chat history for user {user_id}: {str(e)}")
         raise HTTPException(
-            status_code=500, detail="حدث خطأ أثناء استرجاع سجل المحادثة"
+            status_code=500,
+            detail="An error occurred while retrieving the chat history.",
         )
 
 
@@ -165,7 +171,8 @@ async def clear_chat_history(
     try:
         if current_user.id != user_id and not current_user.is_admin:
             raise HTTPException(
-                status_code=403, detail="غير مصرح لك بمسح سجل المحادثة هذا"
+                status_code=403,
+                detail="You are not authorized to clear this chat history.",
             )
 
         db.query(models.AmenhotepMessage).filter(
@@ -173,10 +180,13 @@ async def clear_chat_history(
         ).delete()
         db.commit()
         logger.info(f"Cleared chat history for user {user_id}")
-        return {"message": "تم مسح سجل المحادثة بنجاح"}
+        return {"message": "Chat history cleared successfully."}
     except Exception as e:
         logger.error(f"Error clearing chat history for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="حدث خطأ أثناء مسح سجل المحادثة")
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while clearing the chat history.",
+        )
 
 
 # =====================================================
@@ -193,14 +203,7 @@ class MessageRouter:
 
     @router.websocket("/ws/amenhotep/{user_id}")
     async def amenhotep_chat(self, websocket: WebSocket, user_id: int):
-        """
-        Alternative WebSocket endpoint for Amenhotep chat.
-        This version does not interact with the database.
-
-        Parameters:
-            - websocket: The WebSocket connection.
-            - user_id: The user's ID.
-        """
+        """Endpoint: amenhotep_chat."""
         try:
             await websocket.accept()
             # Send welcome message
@@ -218,3 +221,32 @@ class MessageRouter:
             )
             if websocket.client_state.connected:
                 await websocket.close(code=1011, reason="Internal server error")
+
+
+@router.post("/ask")
+async def ask_amenhotep(
+    payload: AmenhotepAskRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """HTTP endpoint to ask Amenhotep; validates empty input and applies language fallback."""
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Message cannot be empty")
+
+    default_lang = getattr(request.app.state, "default_language", DEFAULT_FALLBACK_LANG)
+    preferred = payload.language or getattr(current_user, "preferred_language", None)
+    language = preferred if preferred in i18n.ALL_LANGUAGES else default_lang
+
+    bot = AmenhotepAI()
+    response = await bot.get_response(current_user.id, message)
+
+    record = models.AmenhotepMessage(
+        user_id=current_user.id, message=message, response=response
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return {"response": response, "language": language, "id": record.id}

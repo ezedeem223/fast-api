@@ -47,6 +47,7 @@ class NotificationRepository:
         status: Optional[notification_models.NotificationStatus] = None,
         since: Optional[datetime] = None,
     ) -> Query:
+        """Return a filtered base query sorted by recency, excluding soft-deleted records."""
         query = (
             self.db.query(notification_models.Notification)
             .filter(notification_models.Notification.user_id == user_id)
@@ -188,16 +189,20 @@ class NotificationRepository:
         }
 
     def cleanup_archived(self, cutoff) -> int:
-        deleted = (
-            self.db.query(notification_models.Notification)
-            .filter(
-                notification_models.Notification.created_at < cutoff,
-                notification_models.Notification.is_archived.is_(True),
+        try:
+            deleted = (
+                self.db.query(notification_models.Notification)
+                .filter(
+                    notification_models.Notification.created_at < cutoff,
+                    notification_models.Notification.is_archived.is_(True),
+                )
+                .delete(synchronize_session=False)
             )
-            .delete(synchronize_session=False)
-        )
-        self.db.commit()
-        return deleted or 0
+            self.db.commit()
+            return deleted or 0
+        except Exception:
+            self.db.rollback()
+            raise
 
     def delivery_log_counts(self, status: str) -> int:
         return (

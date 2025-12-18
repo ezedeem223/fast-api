@@ -23,6 +23,7 @@ from app.modules.search.cache import (
     user_cache_key,
 )
 from sqlalchemy.orm import Session
+import logging
 
 _PIPELINE_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
 _sentiment_pipeline = None
@@ -35,6 +36,41 @@ _STAT_TS_ATTR = (
     if hasattr(SearchStatistics, "last_searched")
     else "updated_at"
 )
+
+logger = logging.getLogger(__name__)
+
+
+def log_analysis_event(success: bool, context: dict | None = None, error: Exception | str | None = None) -> None:
+    """
+    Lightweight logging helper for analytics operations.
+    Never raises even if context is missing or malformed.
+    """
+    payload = context.copy() if isinstance(context, dict) else {}
+    try:
+        if success:
+            logger.info("analytics.success", extra=payload or None)
+        else:
+            if error is not None:
+                payload["error"] = str(error)
+            logger.error("analytics.failure", extra=payload or None)
+    except Exception:  # pragma: no cover - defensive guard
+        logger.exception("analytics.log_failure_guard")
+
+
+def merge_stats(base: dict | None, incoming: dict | None) -> dict:
+    """
+    Merge two stats dictionaries, summing numeric values when keys collide.
+    Handles None inputs gracefully.
+    """
+    base = base or {}
+    incoming = incoming or {}
+    merged = dict(base)
+    for key, value in incoming.items():
+        if isinstance(value, (int, float)) and isinstance(merged.get(key), (int, float)):
+            merged[key] = merged[key] + value  # type: ignore[index]
+        else:
+            merged[key] = value
+    return merged
 
 
 def _get_sentiment_pipeline():

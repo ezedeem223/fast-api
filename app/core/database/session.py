@@ -10,7 +10,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 Base = declarative_base()
@@ -50,7 +50,7 @@ if engine.dialect.name == "sqlite":
         """Provide SQLite equivalents for PostgreSQL functions used in defaults."""
 
         def _now():
-            return datetime.utcnow().isoformat(" ")
+            return datetime.now(timezone.utc).isoformat(" ")
 
         dbapi_connection.create_function("now", 0, _now)
 

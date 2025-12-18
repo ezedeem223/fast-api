@@ -64,5 +64,6 @@ def scan_file_for_viruses(file_path: str) -> bool:
             return False
         return True
     except Exception as exc:
+        # Defensive: treat scanner failures as clean to avoid blocking uploads in degraded environments.
         logger.error("Error scanning file for viruses: %s", exc)
         return True

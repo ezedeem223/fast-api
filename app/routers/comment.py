@@ -1,3 +1,5 @@
+"""Comment router handling CRUD, moderation flags, and legacy compatibility helpers."""
+
 from fastapi import APIRouter, status, Depends, BackgroundTasks, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -25,7 +27,6 @@ def get_comment_service(db: Session = Depends(get_db)) -> CommentService:
     return CommentService(db)
 
 
-# إذا لم يكن هناك حد زمني للتعديل، نترك EDIT_WINDOW فارغاً
 EDIT_WINDOW: Optional[timedelta] = None
 
 

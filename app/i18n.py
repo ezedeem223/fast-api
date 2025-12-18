@@ -4,37 +4,28 @@ from deep_translator import GoogleTranslator
 from fastapi_cache.decorator import cache
 from types import SimpleNamespace
 
-# تهيئة Babel مع تمرير جميع الإعدادات المطلوبة
 babel = Babel(
     configs=SimpleNamespace(
         BABEL_DEFAULT_LOCALE="ar", BABEL_DEFAULT_TIMEZONE="UTC", BABEL_DOMAIN="messages"
     )
 )
 
-# إنشاء كائن من GoogleTranslator لاستدعاء الدالة get_supported_languages
 ALL_LANGUAGES = GoogleTranslator(source="auto", target="en").get_supported_languages(
     as_dict=True
 )
 
 
 def get_locale(request: Request):
-    """
-    تحديد اللغة المطلوبة من خلال رأس 'Accept-Language'.
-    إذا كانت اللغة مدعومة تُعاد؛ وإلا يتم استخدام اللغة الافتراضية المخزنة في حالة التطبيق.
-    """
+    """Resolve the requested language from the "Accept-Language" header. If unsupported, fall back to the application's default language."""
     lang = request.headers.get("Accept-Language", "").split(",")[0].strip()
     return lang if lang in ALL_LANGUAGES else request.app.state.default_language
 
 
-# تعيين دالة تحديد اللغة يدويًا في كائن Babel
 babel.locale_selector = get_locale
 
 
 def translate_text(text: str, source_lang: str, target_lang: str) -> str:
-    """
-    ترجمة النص من اللغة المصدر إلى اللغة الهدف.
-    تُعاد النص الأصلي إذا كانت اللغتين متطابقتين أو في حال فشل الترجمة.
-    """
+    """Translate text from source to target language. Returns original text if languages match or translation fails."""
     if source_lang == target_lang:
         return text
     try:
@@ -45,10 +36,7 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
 
 
 def detect_language(text: str) -> str:
-    """
-    الكشف عن لغة النص باستخدام deep-translator.
-    تُعاد 'ar' كلغة افتراضية في حال فشل الكشف.
-    """
+    """Detect the language of text via deep-translator. Returns "ar" as a safe default on failure."""
     try:
         return GoogleTranslator(source="auto", target="en").detect(text)
     except Exception:
@@ -57,7 +45,5 @@ def detect_language(text: str) -> str:
 
 @cache(expire=3600)
 async def get_translated_content(text: str, source_lang: str, target_lang: str) -> str:
-    """
-    ترجمة النص بشكل غير متزامن مع تخزين مؤقت لمدة ساعة.
-    """
+    """Async wrapper to translate text with caching for one hour."""
     return translate_text(text, source_lang, target_lang)

@@ -309,7 +309,6 @@ class Article(Base):
 
 
 # ==========================================
-# 4. المجتمعات السائلة (Liquid Democracy)
 # ==========================================
 class CommunityVoteDelegation(Base):
     """
@@ -350,7 +349,6 @@ class CommunityVoteDelegation(Base):
 
 
 # ==========================================
-# 15. الذاكرة الجماعية (Collective Memory)
 # ==========================================
 class CommunityArchive(Base):
     """Represents a digital archive or museum for the community."""

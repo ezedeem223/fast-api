@@ -1,3 +1,5 @@
+"""Session router for managing user sessions, key exchanges, and logout flows."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from .. import models, schemas, oauth2, crypto
@@ -14,10 +16,7 @@ def create_encrypted_session(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """
-    إنشاء جلسة مشفرة جديدة بين المستخدم الحالي ومستخدم آخر.
-    Create a new encrypted session between the current user and another user.
-    """
+    """Create a new encrypted session between the current user and another user."""
     # Retrieve the other user based on the provided ID.
     other_user = (
         db.query(models.User).filter(models.User.id == session.other_user_id).first()
@@ -72,10 +71,7 @@ def update_encrypted_session(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
-    """
-    تحديث بيانات الجلسة المشفرة للمستخدم الحالي.
-    Update the encrypted session data for the current user.
-    """
+    """Update the encrypted session data for the current user."""
     # Retrieve the session by ID and verify it belongs to the current user.
     session = (
         db.query(models.EncryptedSession)

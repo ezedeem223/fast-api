@@ -21,6 +21,7 @@ def setup_monitoring(app: FastAPI) -> None:
     """
     global _metrics_configured
     if _metrics_configured or getattr(app.state, "metrics_enabled", False):
+        # Avoid double registration when test suites instantiate multiple app instances.
         return
 
     instrumentator = Instrumentator(

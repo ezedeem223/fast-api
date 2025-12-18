@@ -1,3 +1,5 @@
+"""Support router for ticket creation, responses, and status updates."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List

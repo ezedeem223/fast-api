@@ -1,4 +1,10 @@
-"""Analytics and scoring utilities."""
+"""Analytics and scoring utilities.
+
+Heuristics:
+- Post scoring favors recency via power decay; retains higher prior scores to avoid regressions across recalculations.
+!- Call quality buffer keeps a small rolling window and cleans idle entries; thresholds are coarse by design.
+!- Sentiment/relevance is lightweight and only directionally useful; not intended for hard moderation gates.
+"""
 
 from __future__ import annotations
 
@@ -21,18 +27,28 @@ from .content import sentiment_pipeline
 
 
 def update_ban_statistics(db: Session, target: str, reason: str, score: float) -> None:
-    """Increment moderation/ban statistics for auditing purposes."""
+    """Increment moderation/ban statistics; tolerate missing rows by creating for today."""
+    today = datetime.now(timezone.utc).date()
     stats = (
         db.query(models.BanStatistics)
-        .filter(models.BanStatistics.target == target, models.BanStatistics.reason == reason)
+        .filter(models.BanStatistics.date == today)
         .first()
     )
     if not stats:
-        stats = models.BanStatistics(target=target, reason=reason, score=score)
+        stats = models.BanStatistics(date=today, total_bans=0, ip_bans=0, word_bans=0, user_bans=0)
         db.add(stats)
+        db.flush()
+
+    stats.total_bans = (stats.total_bans or 0) + 1
+    if target == "ip":
+        stats.ip_bans = (stats.ip_bans or 0) + 1
+    elif target == "word":
+        stats.word_bans = (stats.word_bans or 0) + 1
     else:
-        stats.count += 1
-        stats.score = score
+        stats.user_bans = (stats.user_bans or 0) + 1
+
+    stats.effectiveness_score = score
+    stats.most_common_reason = reason
     db.commit()
 
 QUALITY_WINDOW_SIZE = 10
@@ -128,7 +144,7 @@ def analyze_user_behavior(user_history, content: str) -> float:
 def calculate_post_score(
     upvotes: int, downvotes: int, comment_count: int, created_at: datetime
 ) -> float:
-    """Calculate score considering vote delta, comments, and age."""
+    """Calculate score considering vote delta, comments, and age with decay to favor recency."""
     vote_difference = upvotes - downvotes
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
     score = (vote_difference + comment_count) / (age_hours + 2) ** 1.8

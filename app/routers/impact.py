@@ -1,3 +1,5 @@
+"""Impact router for issuing impact certificates and managing cultural dictionary entries."""
+
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query

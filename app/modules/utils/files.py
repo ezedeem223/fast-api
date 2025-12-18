@@ -1,4 +1,9 @@
-"""File and media utility helpers."""
+"""File and media utility helpers.
+
+Notes:
+- Uses the plain filename provided by `UploadFile`; callers should sanitize/namespace before passing untrusted names.
+- Writes under `UPLOAD_ROOT` by default; override `folder` for feature-specific storage roots.
+"""
 
 from __future__ import annotations
 

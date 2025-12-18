@@ -1,3 +1,5 @@
+"""Vote router for post voting and side-effect hooks."""
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Response, status, Request
 
 

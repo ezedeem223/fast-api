@@ -6,6 +6,8 @@ Provides a unified error handling system with proper HTTP status codes and messa
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, status
 
+UNPROCESSABLE_STATUS = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 
 class AppException(HTTPException):
     """
@@ -208,7 +210,7 @@ class ValidationException(AppException):
             details["field"] = field
 
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             error_code="validation_error",
             message=message,
             details=details,

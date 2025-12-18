@@ -156,45 +156,36 @@ class Follow(Base):
     )
 
 
-# app/modules/social/models.py - إضافة
 
 
 class ExpertiseBadge(Base):
-    """نموذج شارات الخبرة"""
 
     __tablename__ = "expertise_badges"
 
     id = Column(Integer, primary_key=True)
 
-    # المستخدم
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    # الخبرة
     category = Column(
         String, nullable=False
     )  # "programming", "design", "writing", etc.
-    level = Column(Integer, default=1)  # 1-4 (مبتدئ إلى خبير)
+    level = Column(Integer, default=1)
 
-    # الإحصائيات
     posts_count = Column(Integer, default=0)
     engagement_score = Column(Float, default=0.0)
     community_votes = Column(Integer, default=0)
 
-    # التحقق
     is_verified = Column(Boolean, default=False)
     verified_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime(timezone=True), nullable=True)
 
-    # الأوقات
     earned_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
 
-    # العلاقات
     user = relationship("User", foreign_keys=[user_id])
     verifier = relationship("User", foreign_keys=[verified_by])
 
 
 # ==========================================
-# التأثير الاجتماعي (Social Impact)
 # ==========================================
 class ImpactCertificate(Base):
     """
@@ -220,7 +211,6 @@ class ImpactCertificate(Base):
 
 
 # ==========================================
-# الاتصال عبر الحدود اللغوية (Cultural Context)
 # ==========================================
 class CulturalDictionaryEntry(Base):
     """

@@ -53,22 +53,23 @@ def schedule_email_notification(
 
 
 @handle_async_errors
-async def send_email_notification(
-    message: Optional[MessageSchema] = None,
-    *,
-    to: Union[str, List[str], None] = None,
-    subject: Optional[str] = None,
-    body: Optional[str] = None,
-    subtype: str = "plain",
-) -> None:
-    """
-    Send an email using FastAPI-Mail. Acts as a no-op in test/dev without credentials.
-    """
-    if settings.environment.lower() == "test" or os.getenv(
-        "DISABLE_EXTERNAL_NOTIFICATIONS"
-    ) == "1":
-        logger.info("Email sending skipped in test environment.")
-        return
+    async def send_email_notification(
+        message: Optional[MessageSchema] = None,
+        *,
+        to: Union[str, List[str], None] = None,
+        subject: Optional[str] = None,
+        body: Optional[str] = None,
+        subtype: str = "plain",
+    ) -> None:
+        """
+        Send an email using FastAPI-Mail. Acts as a no-op in test/dev without credentials.
+        """
+        if settings.environment.lower() == "test" or os.getenv(
+            "DISABLE_EXTERNAL_NOTIFICATIONS"
+        ) == "1":
+            # Skip actual delivery in test/dev to keep suites deterministic and avoid external calls.
+            logger.info("Email sending skipped in test environment.")
+            return
 
     if message is None:
         if to is None:

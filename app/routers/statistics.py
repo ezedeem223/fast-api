@@ -1,3 +1,5 @@
+"""Statistics router for system/community analytics and user activity aggregates."""
+
 from datetime import date, timedelta
 from typing import List
 

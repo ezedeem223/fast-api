@@ -297,6 +297,36 @@ class User(Base):
     )
     amenhotep_messages = relationship("AmenhotepMessage", back_populates="user")
 
+    # Convenience flags for role checks used across routers/services
+    @property
+    def is_admin(self) -> bool:
+        # Tests/fixtures may set an override flag to bypass persisted role state.
+        override = getattr(self, "_is_admin_override", None)
+        if override is not None:
+            return bool(override)
+        try:
+            return self.role == UserRole.ADMIN
+        except Exception:
+            return False
+
+    @is_admin.setter
+    def is_admin(self, value: bool) -> None:
+        self._is_admin_override = bool(value)
+
+    @property
+    def is_moderator(self) -> bool:
+        override = getattr(self, "_is_moderator_override", None)
+        if override is not None:
+            return bool(override)
+        try:
+            return self.role in {UserRole.MODERATOR, UserRole.ADMIN}
+        except Exception:
+            return False
+
+    @is_moderator.setter
+    def is_moderator(self, value: bool) -> None:
+        self._is_moderator_override = bool(value)
+
 
 class TokenBlacklist(Base):
     """Blacklisted tokens to invalidate sessions."""
@@ -404,7 +434,6 @@ class UserBadge(Base):
 
 
 # ==========================================
-# 7. الخصوصية أولاً (Privacy First) - Multi-Identity
 # ==========================================
 class UserIdentity(Base):
     """

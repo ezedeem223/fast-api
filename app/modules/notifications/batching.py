@@ -23,22 +23,28 @@ class NotificationBatcher:
 
     async def add(self, notification: dict) -> None:
         """Add a notification to the batch and flush if thresholds are reached."""
+        notifications_to_send = None
+        now = datetime.now(timezone.utc)
         async with self._lock:
             self.batch.append(notification)
-            elapsed = (datetime.now(timezone.utc) - self._last_flush).total_seconds()
+            elapsed = (now - self._last_flush).total_seconds()
             if len(self.batch) >= self.max_batch_size or elapsed >= self.max_wait_time:
-                await self.flush()
+                notifications_to_send = self.batch
+                self.batch = []
+                self._last_flush = now
+        if notifications_to_send:
+            await self._process_batch(notifications_to_send)
 
     async def flush(self) -> None:
         """Flush the current batch."""
+        notifications_to_send = None
         async with self._lock:
             if not self.batch:
                 return
-            try:
-                await self._process_batch(self.batch)
-            finally:
-                self.batch = []
-                self._last_flush = datetime.now(timezone.utc)
+            notifications_to_send = self.batch
+            self.batch = []
+            self._last_flush = datetime.now(timezone.utc)
+        await self._process_batch(notifications_to_send)
 
     async def _process_batch(self, notifications: List[dict]) -> None:
         """Process notifications grouped by channel."""

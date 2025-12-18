@@ -1,10 +1,4 @@
-"""
-Business Router Module
-This module provides endpoints for business-related operations such as:
-  - Business registration.
-  - Business verification via document upload.
-  - Creating and retrieving business transactions.
-  """
+"""Business router for business account verification and transactions."""
 
 # =====================================================
 # ==================== Imports ========================
@@ -26,7 +20,7 @@ router = APIRouter(prefix="/business", tags=["Business"])
 
 
 def get_business_service(db: Session = Depends(get_db)) -> BusinessService:
-    """Provide a business service instance via dependency injection."""
+    """Endpoint: get_business_service."""
     return BusinessService(db)
 
 # =====================================================

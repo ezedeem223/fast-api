@@ -218,7 +218,7 @@ async def screen_share_websocket(
     """
     WebSocket endpoint for real-time screen sharing data transmission.
 
-    Accepts a WebSocket connection, verifies the user’s participation in the call,
+    Accepts a WebSocket connection, verifies the user's participation in the call,
     and continuously relays screen share data to the other participant.
     In case of disconnection, if an active session exists, it is marked as ended.
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from firebase_admin import messaging
@@ -17,18 +17,26 @@ def cleanup_old_notifications_task(
     db: Session, *, archive_days: int = 30, delete_days: int = 90
 ) -> None:
     """Archive read notifications and delete long-lived archived entries."""
-    thirty_days_ago = datetime.utcnow() - timedelta(days=archive_days)
-    db.query(notification_models.Notification).filter(
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=archive_days)
+    archive_query = db.query(notification_models.Notification).filter(
         notification_models.Notification.is_read.is_(True),
         notification_models.Notification.created_at < thirty_days_ago,
         notification_models.Notification.is_archived.is_(False),
-    ).update({"is_archived": True})
+    )
+    try:
+        archive_query.update({"is_archived": True}, synchronize_session=False)
+    except TypeError:
+        archive_query.update({"is_archived": True})
 
-    ninety_days_ago = datetime.utcnow() - timedelta(days=delete_days)
-    db.query(notification_models.Notification).filter(
+    ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=delete_days)
+    delete_query = db.query(notification_models.Notification).filter(
         notification_models.Notification.created_at < ninety_days_ago,
         notification_models.Notification.is_archived.is_(True),
-    ).update({"is_deleted": True})
+    )
+    try:
+        delete_query.update({"is_deleted": True}, synchronize_session=False)
+    except TypeError:
+        delete_query.update({"is_deleted": True})
 
     db.commit()
 
@@ -37,18 +45,24 @@ def process_scheduled_notifications_task(
     db: Session, enqueue_delivery: Callable[[int], None]
 ) -> None:
     """Enqueue notifications that reached their scheduled delivery time."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     scheduled_notifications = (
         db.query(notification_models.Notification)
         .filter(
             notification_models.Notification.scheduled_for <= now,
-            notification_models.Notification.is_delivered.is_(False),
+            notification_models.Notification.status
+            != notification_models.NotificationStatus.DELIVERED,
         )
+        # Skip already deleted/archived items; only deliver live notifications.
+        .filter(notification_models.Notification.is_deleted.is_(False))
         .all()
     )
     for notification in scheduled_notifications:
-        enqueue_delivery(notification.id)
-        notification.is_delivered = True
+        try:
+            enqueue_delivery(notification.id)
+            notification.status = notification_models.NotificationStatus.DELIVERED
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to enqueue scheduled notification %s: %s", notification.id, exc)
     db.commit()
 
 
@@ -59,7 +73,7 @@ def deliver_notification_task(
     push_sender: Callable[[int], None],
 ) -> None:
     """Route notification delivery to the configured channels."""
-    notification = db.query(notification_models.Notification).get(notification_id)
+    notification = db.get(notification_models.Notification, notification_id)
     if not notification:
         return
 
@@ -77,12 +91,15 @@ def deliver_notification_task(
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Failed to queue email notification %s: %s", notification.id, exc)
     if user_prefs.push_notifications:
-        push_sender(notification.id)
+        try:
+            push_sender(notification.id)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to queue push notification %s: %s", notification.id, exc)
 
 
 def send_push_notification_task(db: Session, notification_id: int) -> None:
     """Send a push notification via Firebase for active devices."""
-    notification = db.query(notification_models.Notification).get(notification_id)
+    notification = db.get(notification_models.Notification, notification_id)
     if not notification:
         return
 
@@ -119,4 +136,3 @@ __all__ = [
     "deliver_notification_task",
     "send_push_notification_task",
 ]
-

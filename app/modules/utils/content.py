@@ -1,4 +1,10 @@
-"""Content moderation, sentiment, and repost helpers."""
+"""Content moderation, sentiment, and repost helpers.
+
+Design notes:
+- Falls back to lightweight stubs when `APP_ENV=test` or `LIGHTWEIGHT_NLP=1` to avoid heavy model downloads.
+- Profanity check trains a tiny Naive Bayes model on demand if artifacts are absent; acceptable for local/dev only.
+- Most helpers degrade to safe defaults (neutral sentiment, non-offensive) on errors to keep user flows running.
+"""
 
 from __future__ import annotations
 
@@ -14,10 +20,12 @@ from langdetect import detect, LangDetectException
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sqlalchemy.orm import Session
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from transformers import pipeline
 
 import nltk
 from nltk.corpus import stopwords
+import logging
+import re
 
 from app import models
 from app.core.config import settings
@@ -26,22 +34,61 @@ from .common import get_user_display_name
 nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()
 
-model_name = "cardiffnlp/twitter-roberta-base-offensive"
-offensive_classifier = pipeline(
-    "text-classification",
-    model=model_name,
-    device=0 if getattr(settings, "USE_GPU", False) else -1,
-)
+USE_LIGHTWEIGHT_NLP = getattr(settings, "environment", "").lower() == "test" or os.getenv(
+    "LIGHTWEIGHT_NLP", "0"
+) == "1"
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_model = AutoModelForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased-finetuned-sst-2-english"
-)
-sentiment_pipeline = pipeline(
-    "sentiment-analysis", model=sentiment_model, tokenizer=tokenizer
-)
+_offensive_classifier = None
+_sentiment_pipeline = None
+logger = logging.getLogger(__name__)
+
+
+def _get_offensive_classifier():
+    global _offensive_classifier
+    if _offensive_classifier is not None:
+        return _offensive_classifier
+
+    if USE_LIGHTWEIGHT_NLP:
+        # Fast stub keeps tests lightweight when full transformer weights are unavailable.
+        def _stub(text: str):
+            return [{"label": "LABEL_0", "score": 0.0}]
+        _offensive_classifier = _stub
+        return _offensive_classifier
+
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    model_name = "cardiffnlp/twitter-roberta-base-offensive"
+    _offensive_classifier = pipeline(
+        "text-classification",
+        model=model_name,
+        device=0 if getattr(settings, "USE_GPU", False) else -1,
+    )
+    return _offensive_classifier
+
+
+def _get_sentiment_pipeline():
+    global _sentiment_pipeline
+    if _sentiment_pipeline is not None:
+        return _sentiment_pipeline
+
+    if USE_LIGHTWEIGHT_NLP:
+        def _stub(text: str):
+            return [{"label": "POSITIVE", "score": 0.99}]
+        _sentiment_pipeline = _stub
+        return _sentiment_pipeline
+
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    sentiment_model = AutoModelForSequenceClassification.from_pretrained(
+        "distilbert-base-uncased-finetuned-sst-2-english"
+    )
+    _sentiment_pipeline = pipeline(
+        "sentiment-analysis", model=sentiment_model, tokenizer=tokenizer
+    )
+    return _sentiment_pipeline
 
 
 def check_content_against_rules(content: str, rules: List[str]) -> bool:
@@ -61,7 +108,6 @@ def detect_language(text: str) -> str:
 
 
 def train_content_classifier():
-    """Train a naïve Bayes classifier with placeholder data."""
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
     y = [0, 1, 0]
     vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
@@ -133,9 +179,57 @@ def process_mentions(content: str, db: Session):
 
 def is_content_offensive(text: str) -> Tuple[bool, float]:
     """Detect offensive content using Hugging Face pipeline."""
-    result = offensive_classifier(text)[0]
+    classifier = _get_offensive_classifier()
+    result = classifier(text)[0]
     is_offensive = result["label"] == "LABEL_1" and result["score"] > 0.8
     return is_offensive, result["score"]
+
+
+# Provide a callable sentiment_pipeline for backward compatibility.
+def sentiment_pipeline(text: str):
+    pipeline_fn = _get_sentiment_pipeline()
+    return pipeline_fn(text)
+
+
+def sanitize_text(text: str) -> str:
+    """Remove basic HTML/script tags and collapse whitespace."""
+    if not text:
+        return ""
+    cleaned = re.sub(r"<script.*?>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<.*?>", "", cleaned)
+    return " ".join(cleaned.split())
+
+
+def safe_analyze(text: str, *, max_length: int = 512) -> dict:
+    """
+    Sentiment analysis wrapper that tolerates missing models/empty or very long text.
+    """
+    truncated = (text or "")[:max_length]
+    if not truncated.strip():
+        return {"sentiment": "neutral", "score": 0.0, "text": ""}
+    try:
+        pipeline_fn = _get_sentiment_pipeline()
+        result = pipeline_fn(truncated)[0]
+        return {
+            "sentiment": result.get("label", "unknown"),
+            "score": result.get("score", 0.0),
+            "text": truncated,
+        }
+    except Exception as exc:  # pragma: no cover - defensive log
+        logger.error("safe_analyze_failed: %s", exc)
+        return {"sentiment": "unknown", "score": 0.0, "text": truncated}
+
+
+def antivirus_scan(data: bytes, scanner: callable | None = None) -> bool:
+    """
+    Placeholder antivirus scanner. Returns False on scanner failure and logs the error.
+    """
+    scan_fn = scanner or (lambda _: True)
+    try:
+        return bool(scan_fn(data))
+    except Exception as exc:
+        logger.error("antivirus_scan_failed: %s", exc)
+        return False
 
 
 def get_or_create_hashtag(db: Session, hashtag_name: str):
@@ -201,4 +295,7 @@ __all__ = [
     "get_or_create_hashtag",
     "update_repost_statistics",
     "send_repost_notification",
+    "sanitize_text",
+    "safe_analyze",
+    "antivirus_scan",
 ]

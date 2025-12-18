@@ -269,8 +269,8 @@ class Post(Base):
         Boolean, default=False, doc="Is this post a documented living testimony?"
     )
     score = Column(Float, default=0.0, index=True)
-    quality_score = Column(Float, default=0.0)  # درجة الجودة (0-100)
-    originality_score = Column(Float, default=0.0)  # درجة الأصالة (0-100)
+    quality_score = Column(Float, default=0.0)
+    originality_score = Column(Float, default=0.0)
     sharing_settings = Column(_jsonb_type(), default={})
 
     __table_args__ = (
@@ -458,7 +458,6 @@ class SocialMediaPost(Base):
 class PostRelation(Base):
     """
     Living Memory System: Stores semantic or temporal connections between posts.
-    نظام الذاكرة الحية: يخزن الروابط الدلالية أو الزمنية بين المنشورات.
     """
 
     __tablename__ = "post_relations"
@@ -471,28 +470,21 @@ class PostRelation(Base):
         Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
     )
 
-    # درجة التشابه (0.0 إلى 1.0) لتحديد مدى قوة العلاقة
     similarity_score = Column(Float, default=0.0)
 
-    # نوع العلاقة: 'semantic' (محتوى مشابه)، 'temporal' (نفس الوقت من العام)، 'series' (سلسلة)
     relation_type = Column(String, default="semantic", nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
 
-    # العلاقات:
-    # source_post: المنشور الجديد الذي "تذكر" شيئاً.
-    # related_memories: القائمة التي ستظهر في PostOut لهذا المنشور.
     source_post = relationship(
         "Post", foreign_keys=[source_post_id], backref="related_memories"
     )
 
-    # target_post: المنشور القديم (الذكرى).
     target_post = relationship(
         "Post", foreign_keys=[target_post_id], backref="cited_in_memories"
     )
 
     __table_args__ = (
-        # منع تكرار نفس الرابط بين نفس المنشورين
         Index(
             "ix_post_relations_source_target",
             "source_post_id",
@@ -503,7 +495,6 @@ class PostRelation(Base):
 
 
 # ==========================================
-# 15. الشهادات الحية (Living Testimony)
 # ==========================================
 class LivingTestimony(Base):
     """

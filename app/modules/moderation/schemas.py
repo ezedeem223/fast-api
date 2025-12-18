@@ -131,6 +131,7 @@ class BlockCreate(BaseModel):
     duration: Optional[int] = Field(None, ge=1)
     duration_unit: Optional[BlockDuration] = None
     block_type: BlockTypeEnum = BlockTypeEnum.FULL
+    reason: Optional[str] = None
 
 
 class BlockSettings(BaseModel):

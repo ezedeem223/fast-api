@@ -46,6 +46,7 @@ ENVIRONMENTS: Dict[str, Type[Settings]] = {
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return a cached Settings instance keyed by APP_ENV to avoid repeated disk/env reads."""
     env = os.getenv("APP_ENV", "production").lower()
     settings_cls = ENVIRONMENTS.get(env, ProductionSettings)
     return settings_cls()

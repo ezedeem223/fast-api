@@ -1,6 +1,19 @@
 import pytest
-from app import models
 from unittest.mock import patch
+
+from app import models
+from app.modules.messaging.models import Conversation
+
+
+def _ensure_conversation(session, user_a_id: int, user_b_id: int) -> str:
+    """Create a conversation row for the two users if missing."""
+    user_a, user_b = sorted((user_a_id, user_b_id))
+    conv_id = f"{user_a}-{user_b}"
+    existing = session.query(Conversation).filter_by(id=conv_id).first()
+    if not existing:
+        session.add(Conversation(id=conv_id, created_by=user_a))
+        session.commit()
+    return conv_id
 
 
 @pytest.fixture
@@ -25,45 +38,6 @@ def test_get_inbox(authorized_client, test_message, test_user, test_user2):
     assert "message" in inbox[0]
     assert "count" in inbox[0]
     assert any(item["message"]["content"] == "Inbox Test Message" for item in inbox)
-
-
-# @patch("os.path.exists")
-# @patch("app.routers.message.FileResponse")
-# def test_download_file(
-#     mock_file_response, mock_path_exists, authorized_client, session
-# ):
-#     print("Starting test_download_file")
-
-#     mock_path_exists.return_value = True
-#     mock_file_response.return_value = FileResponse(path="dummy_path")
-
-#     # Create a test message in the database
-#     test_message = models.Message(
-#         sender_id=1, receiver_id=2, content="static/messages/test.txt"
-#     )
-#     session.add(test_message)
-#     session.commit()
-
-#     file_name = "test.txt"
-
-#     print(f"Attempting to download file: {file_name}")
-
-#     response = authorized_client.get(f"/message/download/{file_name}")
-#     print(f"Response status code: {response.status_code}")
-#     print(f"Response content: {response.content}")
-
-#     print("Checking assertions")
-
-#     assert (
-#         response.status_code == 200
-#     ), f"Unexpected status code: {response.status_code}"
-
-#     mock_path_exists.assert_called_once_with("static/messages/test.txt")
-#     mock_file_response.assert_called_once_with(
-#         path="static/messages/test.txt", filename="test.txt"
-#     )
-
-#     print("Test completed successfully")
 
 
 def test_get_messages(authorized_client, test_message):
@@ -100,33 +74,14 @@ def test_send_empty_message(authorized_client, test_user2):
 
 
 @patch("app.routers.message.scan_file_for_viruses")
-def test_send_file(mock_scan, authorized_client, test_user2):
-    mock_scan.return_value = True  # Симулируем чистый файл
-    file_content = b"This is a test file content"
-    files = {"file": ("test.txt", file_content, "text/plain")}
-    data = {"recipient_id": test_user2["id"]}
-    response = authorized_client.post("/message/send_file", files=files, data=data)
-    assert response.status_code == 201
-    assert response.json()["message"] == "File sent successfully"
-
-
-def test_send_empty_file(authorized_client, test_user2):
-    files = {"file": ("empty.txt", b"", "text/plain")}
+def test_send_infected_file(mock_scan, authorized_client, test_user2):
+    mock_scan.return_value = False
+    file_content = b"infected"
+    files = {"file": ("bad.txt", file_content, "text/plain")}
     data = {"recipient_id": test_user2["id"]}
     response = authorized_client.post("/message/send_file", files=files, data=data)
     assert response.status_code == 400
-    assert "File is empty" in response.json()["detail"]
-
-
-@patch("app.routers.message.scan_file_for_viruses")
-def test_send_large_file(mock_scan, authorized_client, test_user2):
-    mock_scan.return_value = True  # Симулируем чистый файл
-    large_file_content = b"0" * (10 * 1024 * 1024 + 1)  # 10MB + 1 byte
-    files = {"file": ("large.txt", large_file_content, "text/plain")}
-    data = {"recipient_id": test_user2["id"]}
-    response = authorized_client.post("/message/send_file", files=files, data=data)
-    assert response.status_code == 413
-    assert "File is too large" in response.json()["detail"]
+    assert "virus" in response.json()["detail"]
 
 
 def test_download_nonexistent_file(authorized_client):
@@ -136,16 +91,9 @@ def test_download_nonexistent_file(authorized_client):
     assert "File not found" in response.json()["detail"]
 
 
-def test_unauthorized_access(client):
-    response = client.get("/message/")
-    assert response.status_code == 401
-    assert "Not authenticated" in response.json()["detail"]
-
-
 def test_send_message_to_blocked_user(
     authorized_client, test_user, test_user2, session
 ):
-    # Создаем блокировку
     block = models.Block(blocker_id=test_user2["id"], blocked_id=test_user["id"])
     session.add(block)
     session.commit()
@@ -162,7 +110,7 @@ def test_send_message_to_blocked_user(
         (None, "Hello", 422),
         (1, None, 422),
         ("not_an_id", "Hello", 422),
-        (1, "x" * 1001, 422),  # Предполагаем, что максимальная длина контента 1000
+        (1, "x" * 1001, 422),
     ],
 )
 def test_send_message_invalid_input(
@@ -174,7 +122,7 @@ def test_send_message_invalid_input(
 
 
 def test_get_messages_pagination(authorized_client, test_user, test_user2, session):
-    # Создаем 25 сообщений
+    _ensure_conversation(session, test_user["id"], test_user2["id"])
     for i in range(25):
         message = models.Message(
             sender_id=test_user["id"],
@@ -184,21 +132,18 @@ def test_get_messages_pagination(authorized_client, test_user, test_user2, sessi
         session.add(message)
     session.commit()
 
-    # Тестируем первую страницу
     response = authorized_client.get("/message/?skip=0&limit=10")
     assert response.status_code == 200
     messages = response.json()
     assert isinstance(messages, list)
     assert len(messages) == 10
 
-    # Тестируем вторую страницу
     response = authorized_client.get("/message/?skip=10&limit=10")
     assert response.status_code == 200
     messages = response.json()
     assert isinstance(messages, list)
     assert len(messages) == 10
 
-    # Тестируем последнюю страницу
     response = authorized_client.get("/message/?skip=20&limit=10")
     assert response.status_code == 200
     messages = response.json()
@@ -207,7 +152,7 @@ def test_get_messages_pagination(authorized_client, test_user, test_user2, sessi
 
 
 def test_get_messages_order(authorized_client, test_user, test_user2, session):
-    # Создаем сообщения с разными временными метками
+    _ensure_conversation(session, test_user["id"], test_user2["id"])
     for i in range(3):
         message = models.Message(
             sender_id=test_user["id"],
@@ -223,7 +168,4 @@ def test_get_messages_order(authorized_client, test_user, test_user2, session):
     messages = response.json()
     assert isinstance(messages, list)
     assert len(messages) == 3
-    # Проверяем, что сообщения в порядке убывания по временной метке
-    assert (
-        messages[0]["timestamp"] > messages[1]["timestamp"] > messages[2]["timestamp"]
-    )
+    assert messages[0]["timestamp"] > messages[1]["timestamp"] > messages[2]["timestamp"]

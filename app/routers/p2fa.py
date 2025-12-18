@@ -1,3 +1,5 @@
+"""Two-factor auth router (OTP setup/verification) for account security."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import pyotp
@@ -24,12 +26,12 @@ class TwoFactorAuth:
 
     @staticmethod
     def generate_secret() -> str:
-        """Generate a new TOTP secret."""
+        """Endpoint: generate_secret."""
         return pyotp.random_base32()
 
     @staticmethod
     def verify_totp(secret: str, otp: str) -> bool:
-        """Verify the provided TOTP code using the secret."""
+        """Endpoint: verify_totp."""
         try:
             totp = pyotp.TOTP(secret)
             return totp.verify(otp)
@@ -39,7 +41,7 @@ class TwoFactorAuth:
 
     @staticmethod
     def generate_provisioning_uri(secret: str, email: str) -> str:
-        """Generate the provisioning URI for the TOTP."""
+        """Endpoint: generate_provisioning_uri."""
         totp = pyotp.TOTP(secret)
         return totp.provisioning_uri(email, issuer_name="YourAppName")
 

@@ -26,7 +26,7 @@
 ## Testing & Quality Gates
 - Run unit tests: `python -m pytest -q`.
 - Startup benchmark: `python scripts/perf_startup.py --iterations 3 --threshold 2.5`.
-  - This script fails if the average startup time regresses—use it locally or wire into CI.
+  - This script fails if the average startup time regresses; use it locally or wire into CI.
 - New utility tests live under `tests/` (e.g., `tests/test_utils_search.py`, `tests/test_analytics_lazy.py`).
 - CI: `.github/workflows/ci.yml` executes both `pytest` and the startup benchmark on pushes/PRs (with `APP_ENV=test` to bypass heavy integrations).
 - Pre-commit: install hooks with `pip install pre-commit && pre-commit install`. Ruff and Black run automatically before each commit; you can trigger them manually via `pre-commit run --all-files`.

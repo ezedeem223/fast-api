@@ -1,7 +1,4 @@
-"""
-Authentication Router Module
-This module provides endpoints for authentication and session management.
-"""
+"""Authentication router with login/registration flows, 2FA, and rate-limit guards."""
 
 # =====================================================
 # ==================== Imports ========================
@@ -51,9 +48,9 @@ def _schedule_verification_email(background_tasks: BackgroundTasks, email: str) 
     token = create_verification_token(email)
     verification_link = _build_frontend_link("verify-email", token)
     message = MessageSchema(
-        subject="تأكيد البريد الإلكتروني",
+        subject="Email Verification",
         recipients=[email],
-        body=f"انقر على الرابط التالي لتأكيد بريدك الإلكتروني: {verification_link}",
+        body=f"Click the following link to verify your email: {verification_link}",
         subtype="html",
     )
     fm = FastMail(settings.mail_config)
@@ -124,7 +121,7 @@ def login(
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="الحساب مقفل. حاول مرة أخرى لاحقاً",
+            detail="Account is locked. Please try again later.",
         )
 
     # Verify password
@@ -174,11 +171,11 @@ def login_2fa(
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user or not user.is_2fa_enabled:
-        raise HTTPException(status_code=400, detail="طلب غير صالح")
+        raise HTTPException(status_code=400, detail="Invalid request")
 
     totp = pyotp.TOTP(user.otp_secret)
     if not totp.verify(otp.otp):
-        raise HTTPException(status_code=400, detail="رمز OTP غير صالح")
+        raise HTTPException(status_code=400, detail="Invalid OTP code")
 
     return complete_login(user, db, request, background_tasks)
 
@@ -250,7 +247,7 @@ def logout(
         token_data = oauth2.verify_access_token(token, None)
         if not token_data:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="رمز غير صالح"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
 
         session = (
@@ -275,13 +272,13 @@ def logout(
         db.add(blacklist_token)
         db.commit()
 
-        return {"message": "تم تسجيل الخروج بنجاح"}
+        return {"message": "Logged out successfully"}
 
     except Exception as e:
         log_user_event(db, current_user.id, "logout_error", {"error": str(e)})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="حدث خطأ أثناء تسجيل الخروج",
+            detail="An error occurred while logging out",
         )
 
 
@@ -300,7 +297,7 @@ def logout_all_devices(
     ).delete()
     db.commit()
     log_user_event(db, current_user.id, "logout_all_devices")
-    return {"message": "تم تسجيل الخروج من جميع الأجهزة الأخرى"}
+    return {"message": "Logged out from all other devices"}
 
 
 @router.post("/invalidate-all-sessions")
@@ -315,14 +312,12 @@ async def invalidate_all_sessions(
         models.UserSession.user_id == current_user.id
     ).delete()
     db.commit()
-    return {"message": "تم إبطال جميع الجلسات"}
+    return {"message": "All sessions have been revoked"}
 
 
 def create_password_reset_token(email: str) -> str:
-    """
-    Create a password reset token valid for 15 minutes.
-    """
-    expire = datetime.utcnow() + timedelta(minutes=15)
+    """Endpoint: create_password_reset_token."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode = {"exp": expire, "sub": email}
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
@@ -343,14 +338,14 @@ async def reset_password_request(
     if user:
         token = create_password_reset_token(email.email)
         user.reset_token = token
-        user.reset_token_expires = datetime.now() + TOKEN_EXPIRY
+        user.reset_token_expires = datetime.now(timezone.utc) + TOKEN_EXPIRY
         db.commit()
         reset_link = f"https://yourapp.com/reset-password?token={token}"
 
         message = MessageSchema(
-            subject="طلب إعادة تعيين كلمة المرور",
+            subject="Password reset request",
             recipients=[email.email],
-            body=f"انقر على الرابط التالي لإعادة تعيين كلمة المرور الخاصة بك: {reset_link}",
+            body=f"Click the following link to reset your password: {reset_link}",
             subtype="html",
         )
 
@@ -359,7 +354,7 @@ async def reset_password_request(
         log_user_event(db, user.id, "password_reset_requested")
 
     return {
-        "message": "إذا كان هناك حساب بهذا البريد الإلكتروني، سيتم إرسال رابط إعادة تعيين كلمة المرور"
+        "message": "If an account exists for this email, a password reset link will be sent."
     }
 
 
@@ -377,20 +372,20 @@ async def reset_password(
         )
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=400, detail="رمز غير صالح")
+            raise HTTPException(status_code=400, detail="Invalid code")
     except JWTError:
-        raise HTTPException(status_code=400, detail="رمز غير صالح أو منتهي الصلاحية")
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        raise HTTPException(status_code=404, detail="User not found")
 
     if (
         not user.reset_token
         or user.reset_token != reset_data.token
-        or user.reset_token_expires < datetime.now()
+        or user.reset_token_expires < datetime.now(timezone.utc)
     ):
-        raise HTTPException(status_code=400, detail="رمز غير صالح أو منتهي الصلاحية")
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     hashed_password = hash_password(reset_data.new_password)
     user.hashed_password = hashed_password
@@ -399,27 +394,25 @@ async def reset_password(
     db.commit()
     log_user_event(db, user.id, "password_reset_completed")
 
-    return {"message": "تم إعادة تعيين كلمة المرور بنجاح"}
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/refresh-token", response_model=schemas.Token)
 async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
-    """
-    Refresh the access token using the provided refresh token.
-    """
+    """Endpoint: refresh_token."""
     try:
         payload = jwt.decode(
             refresh_token, settings.refresh_secret_key, algorithms=[settings.algorithm]
         )
         user_id: int = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="رمز التحديث غير صالح")
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
     except JWTError:
-        raise HTTPException(status_code=401, detail="رمز التحديث غير صالح")
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        raise HTTPException(status_code=404, detail="User not found")
 
     access_token = oauth2.create_access_token(data={"user_id": user.id})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -427,27 +420,25 @@ async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
 
 @router.post("/verify-email")
 async def verify_email(token: str, db: Session = Depends(get_db)):
-    """
-    Verify the user's email address using a token.
-    """
+    """Endpoint: verify_email."""
     try:
         payload = jwt.decode(
             token, settings.secret_key, algorithms=[settings.algorithm]
         )
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=400, detail="رمز غير صالح")
+            raise HTTPException(status_code=400, detail="Invalid code")
     except JWTError:
-        raise HTTPException(status_code=400, detail="رمز غير صالح أو منتهي الصلاحية")
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+        raise HTTPException(status_code=404, detail="User not found")
 
     user.is_verified = True
     db.commit()
     log_user_event(db, user.id, "email_verified")
-    return {"message": "تم التحقق من البريد الإلكتروني بنجاح"}
+    return {"message": "Email verified successfully"}
 
 
 @router.post("/resend-verification")
@@ -466,7 +457,9 @@ async def resend_verification_email(
         _schedule_verification_email(background_tasks, email.email)
         log_user_event(db, user.id, "verification_email_resent")
 
-    return {"message": "إذا كان الحساب موجوداً وغير مؤكد، سيتم إرسال رابط التحقق"}
+    return {
+        "message": "If the account exists and is unverified, a verification link will be sent."
+    }
 
 
 @router.post("/change-email")
@@ -480,14 +473,14 @@ async def change_email(
     Verifies the current password and checks for uniqueness of the new email.
     """
     if not verify(email_change.password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="كلمة المرور غير صحيحة")
+        raise HTTPException(status_code=400, detail="Incorrect password")
     existing_user = (
         db.query(models.User)
         .filter(models.User.email == email_change.new_email)
         .first()
     )
     if existing_user:
-        raise HTTPException(status_code=400, detail="البريد الإلكتروني مستخدم بالفعل")
+        raise HTTPException(status_code=400, detail="Email is already in use")
 
     current_user.email = email_change.new_email
     current_user.is_verified = False
@@ -498,7 +491,7 @@ async def change_email(
         "email_changed",
         {"old_email": email_change.old_email, "new_email": email_change.new_email},
     )
-    return {"message": "تم تغيير البريد الإلكتروني بنجاح"}
+    return {"message": "Email changed successfully"}
 
 
 @router.post("/sessions/active", response_model=List[schemas.UserSessionOut])
@@ -536,47 +529,45 @@ async def end_session(
         .first()
     )
     if not session:
-        raise HTTPException(status_code=404, detail="الجلسة غير موجودة")
+        raise HTTPException(status_code=404, detail="Session not found")
     db.delete(session)
     db.commit()
     log_user_event(db, current_user.id, "session_ended", {"session_id": session_id})
-    return {"message": "تم إنهاء الجلسة بنجاح"}
+    return {"message": "Session ended successfully"}
 
 
 @router.post("/password-strength")
 async def check_password_strength(password: str):
-    """
-    Check the strength of a given password and provide suggestions.
-    """
+    """Endpoint: check_password_strength."""
     strength = 0
     suggestions = []
     if len(password) >= 8:
         strength += 1
     else:
-        suggestions.append("يجب أن تكون كلمة المرور 8 أحرف على الأقل")
+        suggestions.append("Password must be at least 8 characters")
     if any(c.isupper() for c in password):
         strength += 1
     else:
-        suggestions.append("يجب أن تحتوي على حرف كبير واحد على الأقل")
+        suggestions.append("Must contain at least one uppercase letter")
     if any(c.islower() for c in password):
         strength += 1
     else:
-        suggestions.append("يجب أن تحتوي على حرف صغير واحد على الأقل")
+        suggestions.append("Must contain at least one lowercase letter")
     if any(c.isdigit() for c in password):
         strength += 1
     else:
-        suggestions.append("يجب أن تحتوي على رقم واحد على الأقل")
+        suggestions.append("Must contain at least one digit")
     if any(not c.isalnum() for c in password):
         strength += 1
     else:
-        suggestions.append("يجب أن تحتوي على رمز خاص واحد على الأقل")
+        suggestions.append("Must contain at least one special character")
     strength_text = {
-        0: "ضعيفة جداً",
-        1: "ضعيفة",
-        2: "متوسطة",
-        3: "جيدة",
-        4: "قوية",
-        5: "قوية جداً",
+        0: "Very weak",
+        1: "Weak",
+        2: "Medium",
+        3: "Good",
+        4: "Strong",
+        5: "Very strong",
     }
     return {
         "strength": strength,
@@ -601,7 +592,10 @@ def change_password_auth(
         background_tasks,
         to=current_user.email,
         subject="Password changed",
-        body="تم تغيير كلمة مرور حسابك. إذا لم تقم بهذا الإجراء، يرجى التواصل مع الدعم فوراً.",
+        body=(
+            "Your account password was changed. If you did not perform this action, "
+            "please contact support immediately."
+        ),
     )
     log_user_event(db, current_user.id, "password_changed")
     return response
@@ -622,7 +616,7 @@ async def set_security_questions(
     current_user.security_questions = encrypted_answers
     db.commit()
     log_user_event(db, current_user.id, "security_questions_set")
-    return {"message": "تم تعيين أسئلة الأمان بنجاح"}
+    return {"message": "Security questions set successfully"}
 
 
 @router.post("/verify-security-questions")
@@ -638,7 +632,8 @@ async def verify_security_questions(
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user or not user.security_questions:
         raise HTTPException(
-            status_code=404, detail="المستخدم غير موجود أو لم يتم تعيين أسئلة الأمان"
+            status_code=404,
+            detail="User not found or security questions not set",
         )
     correct_answers = 0
     for answer in answers:
@@ -646,18 +641,16 @@ async def verify_security_questions(
         if stored_answer and verify(answer.answer, stored_answer):
             correct_answers += 1
     if correct_answers < len(answers):
-        raise HTTPException(status_code=400, detail="بعض الإجابات غير صحيحة")
+        raise HTTPException(status_code=400, detail="Some answers are incorrect")
     token = create_password_reset_token(email)
     user.reset_token = token
-    user.reset_token_expires = datetime.now() + TOKEN_EXPIRY
+    user.reset_token_expires = datetime.now(timezone.utc) + TOKEN_EXPIRY
     db.commit()
     return {"reset_token": token}
 
 
 def create_verification_token(email: str) -> str:
-    """
-    Create an email verification token valid for 1 day.
-    """
-    expire = datetime.utcnow() + timedelta(days=1)
+    """Endpoint: create_verification_token."""
+    expire = datetime.now(timezone.utc) + timedelta(days=1)
     to_encode = {"exp": expire, "sub": email}
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)

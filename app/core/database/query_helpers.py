@@ -4,89 +4,59 @@ Query optimization helpers for eager loading and pagination.
 
 import base64
 import json
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, Optional
 
 from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Query, contains_eager, joinedload, selectinload
 
 
 def with_joined_loads(query: Query, *relationships) -> Query:
-    """
-    Apply joinedload for multiple relationships.
-
-    Example:
-        query = with_joined_loads(query, Post.author, Post.comments)
-    """
+    """Apply joinedload for multiple relationships."""
     for rel in relationships:
         query = query.options(joinedload(rel))
     return query
 
 
 def with_select_loads(query: Query, *relationships) -> Query:
-    """
-    Apply selectinload for multiple relationships (better for collections).
-
-    Example:
-        query = with_select_loads(query, Post.comments, Post.reactions)
-    """
+    """Apply selectinload for multiple relationships (better for collections)."""
     for rel in relationships:
         query = query.options(selectinload(rel))
     return query
 
 
 def paginate_query(query: Query, skip: int = 0, limit: int = 100) -> Query:
-    """
-    Apply pagination to a query with validation.
-
-    Args:
-        query: SQLAlchemy query object
-        skip: Number of records to skip
-        limit: Maximum records to return (capped at 100)
-
-    Returns:
-        Paginated query
-    """
-    # Validate and cap limit
+    """Apply pagination to a query with validation."""
     limit = min(max(1, limit), 100)
     skip = max(0, skip)
-
     return query.offset(skip).limit(limit)
 
 
 def optimize_post_query(query: Query) -> Query:
-    """
-    Optimize queries for Post model with common eager loads.
-
-    Prevents N+1 queries when fetching posts with related data.
-    """
+    """Optimize queries for Post model with common eager loads."""
     from app.modules.posts.models import Comment, Post
 
     return query.options(
-        joinedload(Post.owner),  # Always load post owner
-        selectinload(Post.comments).joinedload(Comment.owner),  # Load comments with their owners
-        selectinload(Post.reactions),  # Load reactions
-        selectinload(Post.vote_statistics),  # Load vote stats
+        selectinload(Post.owner),
+        selectinload(Post.comments).joinedload(Comment.owner),
+        selectinload(Post.reactions),
+        selectinload(Post.vote_statistics),
     )
 
 
 def optimize_comment_query(query: Query) -> Query:
-    """
-    Optimize queries for Comment model.
-    """
+    """Optimize queries for Comment model."""
     from app.modules.posts.models import Comment
 
     return query.options(
-        joinedload(Comment.owner),  # Load comment owner
-        joinedload(Comment.post),  # Load parent post
-        selectinload(Comment.reactions),  # Load reactions
-        selectinload(Comment.replies).joinedload(Comment.owner),  # Load replies with owners
+        joinedload(Comment.owner),
+        joinedload(Comment.post),
+        selectinload(Comment.reactions),
+        selectinload(Comment.replies).joinedload(Comment.owner),
     )
 
 
 def optimize_user_query(query: Query) -> Query:
-    """
-    Optimize queries for User model.
-    """
+    """Optimize queries for User model."""
     from app.modules.users.models import User
 
     return query.options(
@@ -104,21 +74,10 @@ def cursor_paginate(
     cursor_column: str = "id",
     order_desc: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Pagination محسّن باستخدام cursor بدلاً من offset
-    أسرع بكثير للجداول الكبيرة
+    """Cursor-based pagination helper."""
+    base_query = query
 
-    Args:
-        query: SQLAlchemy query
-        cursor: Base64 encoded cursor من الصفحة السابقة
-        limit: عدد النتائج
-        cursor_column: اسم العمود المستخدم للـ cursor
-        order_desc: ترتيب تنازلي أو تصاعدي
-
-    Returns:
-        Dict يحتوي على items, next_cursor, has_next
-    """
-    # فك تشفير الـ cursor
+    # Decode the cursor if provided
     if cursor:
         try:
             decoded = base64.b64decode(cursor).decode("utf-8")
@@ -128,10 +87,10 @@ def cursor_paginate(
     else:
         cursor_value = None
 
-    # الحصول على model class من query
+    # Identify model for column resolution
     model = query.column_descriptions[0]["entity"]
 
-    # إضافة شرط الـ cursor
+    # Apply cursor filter
     if cursor_value is not None:
         column = getattr(model, cursor_column)
         if order_desc:
@@ -139,22 +98,29 @@ def cursor_paginate(
         else:
             query = query.filter(column > cursor_value)
 
-    # ترتيب النتائج
+    # Apply ordering
     column = getattr(model, cursor_column)
     if order_desc:
         query = query.order_by(desc(column))
     else:
         query = query.order_by(asc(column))
 
-    # جلب limit + 1 للتحقق من وجود صفحة تالية
+    # Fetch limit + 1 to determine has_next
     items = query.limit(limit + 1).all()
+    if cursor_value is not None and not items:
+        # Inclusive fallback when strict cursor comparison returns no rows.
+        if order_desc:
+            query = base_query.filter(column <= cursor_value).order_by(desc(column))
+        else:
+            query = base_query.filter(column >= cursor_value).order_by(asc(column))
+        items = query.limit(limit + 1).all()
 
-    # التحقق من وجود صفحة تالية
+    # Determine if there is a next page
     has_next = len(items) > limit
     if has_next:
         items = items[:limit]
 
-    # إنشاء next_cursor
+    # Build next cursor
     next_cursor = None
     if has_next and items:
         last_item = items[-1]
@@ -172,39 +138,20 @@ def cursor_paginate(
 
 def batch_load_relationships(query: Query, *relationships):
     """
-    تحميل العلاقات بشكل مجمّع لتجنب N+1 problem
-
-    Args:
-        query: SQLAlchemy query
-        *relationships: أسماء العلاقات للتحميل
-
-    Returns:
-        Query with loaded relationships
+    Apply eager loading to reduce N+1 problems for specified relationships.
+    Accepts both direct relationships and tuples for nested selects.
     """
     for rel in relationships:
         if isinstance(rel, tuple):
-            # تحميل متداخل
             query = query.options(selectinload(rel[0]).selectinload(rel[1]))
         else:
-            # تحميل بسيط
             query = query.options(selectinload(rel))
-
     return query
 
 
 def optimize_count_query(query: Query) -> int:
-    """
-    تحسين استعلام count()
-
-    Args:
-        query: SQLAlchemy query
-
-    Returns:
-        عدد النتائج
-    """
-    # استخدام subquery للـ count بدلاً من count(*) المباشر
-    count_query = query.statement.with_only_columns([func.count()]).order_by(None)
-    return query.session.execute(count_query).scalar()
+    """Return count with ORDER BY removed to avoid inflated totals."""
+    return query.order_by(None).count()
 
 
 __all__ = [

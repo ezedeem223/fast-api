@@ -1,18 +1,21 @@
+"""Link preview extractor with HTML parsing; degrades gracefully on errors.
+
+Integration details:
+- Validates URLs before making outbound requests; uses a short timeout (5s) to avoid blocking workers.
+- Parses OpenGraph/description tags only; does not follow redirects or load scripts for safety.
+- Returns None on any network/parse error so callers can silently skip previews.
+"""
+
 import requests
 from bs4 import BeautifulSoup
 import validators
 
 
 def extract_link_preview(url: str) -> dict | None:
-    """
-    Extract preview information from the given URL.
+    """Extract preview information from the given URL.
 
-    Parameters:
-        url (str): The URL to extract preview data from.
-
-    Returns:
-        dict: A dictionary containing the title, description, image, and URL if successful.
-        None: If the URL is invalid or an error occurs during extraction.
+    Fetches minimal metadata (title/description/og:image) without executing page JS.
+    Returns a compact dict on success, or None if validation fails or errors occur.
     """
     if not validators.url(url):
         return None
@@ -44,39 +47,15 @@ def extract_link_preview(url: str) -> dict | None:
         return None
 
 
-# لدي هذه المشروع اريد منك ان تقوم بمراجعته بشكل دقيق جدا جدا وتكون المراجعة شامله تشمل الملفات الرئيسية والفرعية وجميع الميزات ولاخاصيات وكل حرف وكلمه والمهمه الثانيه اعطني تقرير كامل بجميع الميزات والخاصيات والاشياء الموجوده به
 
 
-# 1. عند تقديم ميزة جديدة لإضافتها للمشروع، قدّم لي إرشادات دقيقة حول كيفية دمجها بشكل صحيح مع جميع الملفات الرئيسية والفرعية.
-# 2. تأكد من أن إضافة الميزة الجديدة لا تسبب أي تعارض أو أخطاء في بقية المزايا الموجودة في المشروع.
-# 3. تحقق مما إذا كانت الميزة الجديدة موجودة بالفعل؛ إذا كانت كذلك، زودني باقتراحات لتحسينها أو دمجها بشكل أكثر كفاءة.
-# 4. في كل مرة أطلب إضافة ميزة جديدة، تأكد من أن المشروع لا يزال يعمل بكفاءة وتوافق تام.
-# 5. إذا كان هناك تحسين للميزة المقترحة، قدم لي هذا التحسين لتطبيقه.
-# 6. بعد التأكد من نجاح إضافة الميزة، انتقل مباشرةً إلى الميزة التالية بناءً على التعليمات التي سأقدمها.
-# مع الرجوع للملفات التي قدمتها:
-# 7. عند تقديم الإرشادات والإضافات، اعتمد على الملفات التي قمت بتقديمها سابقًا لضمان التكامل بين الميزة الجديدة والمشروع الحالي.
-# 8. إذا كانت الملفات السابقة تحتاج إلى تعديلات لتتناسب مع الميزة الجديدة، قدّم إرشادات محددة حول كيفية تعديلها أو تحديثها لتحقيق التكامل المطلوب.
-# 9. التحقق ما اذا كانت الميزه موجوده بالفعل
 
 
-# ترتيب الملفات: قم بترتيب الملفات بشكل صحيح، وأزل أي عناصر غير ضرورية. في حال كانت هناك مكونات ناقصة، أكملها بناءً على الهيكل الأساسي للمشروع.
-# التحقق من التوافق: تحقق من أن جميع الملفات الرئيسية والفرعية متوافقة بشكل مثالي، مما يضمن أن الموقع يعمل بكفاءة ودون أخطاء.
-# إضافة ميزات جديدة: عند تقديم ميزة جديدة، قدم لي إرشادات دقيقة ومفصلة حول كيفية دمجها بشكل صحيح مع جميع الملفات الأساسية والفرعية.
-# ضمان عدم حدوث تعارض: تأكد من أن الميزة الجديدة لا تسبب أي تعارض أو أخطاء في المشروع بأكمله. إذا حدث ذلك، قدّم الحلول اللازمة لتجنب المشكلة.
-# التحقق من الميزات الموجودة: قبل إضافة ميزة جديدة، تحقق مما إذا كانت موجودة بالفعل في المشروع. إذا كانت كذلك، زودني باقتراحات لتحسينها أو دمجها بشكل أكثر كفاءة.
-# ضمان الأداء والكفاءة: في كل مرة أطلب فيها إضافة ميزة جديدة، تأكد من أن المشروع لا يزال يعمل بكفاءة وتوافق تام.
-# تقديم تحسينات الميزات: إذا كان هناك تحسين للميزة المقترحة، قدّم لي هذا التحسين لتطبيقه وجعل المشروع أفضل.
-# الاستمرارية في العمل: بعد التأكد من نجاح إضافة الميزة، انتقل مباشرةً إلى الميزة التالية بناءً على التعليمات التي سأقدمها.
-# الاعتماد على الملفات السابقة: عند تقديم الإرشادات أو إضافة ميزات جديدة، اعتمد على الملفات التي قدمتها سابقًا لضمان التكامل بين الميزة الجديدة والمشروع الحالي.
-# تعديل الملفات لتحقيق التكامل: إذا كانت الملفات السابقة تحتاج إلى تعديلات لتتناسب مع الميزة الجديدة، قدم إرشادات محددة حول كيفية تعديلها أو تحديثها لتحقيق التكامل المطلوب.
-# التحقق المستمر لتفادي الأخطاء: تأكد من التحقق المستمر من الملفات المقدمة لتفادي أي أخطاء أو تعارضات، وضمان انسجام المشروع بشكل كامل
 
 
-# خاصية اللغات تشمل جميع اللغات والمستخدم يختار ويتم تعين اللغة الافتراضيا ب اللغة العربية في الموقع والترجمه الفوري للبوستات والمقالات والكومنت والرسائل
 
 
 # C:\Users\kglou\Desktop\fastapi\app\notifications.py:
-# في app/notifications.py
 
 # from fastapi import BackgroundTasks, WebSocket, HTTPException
 # from fastapi_mail import MessageSchema
@@ -109,14 +88,11 @@ def extract_link_preview(url: str) -> dict | None:
 
 # logger = logging.getLogger(__name__)
 
-# # كاش للإشعارات
 # notification_cache = TTLCache(maxsize=1000, ttl=300)
 # delivery_status_cache = TTLCache(maxsize=5000, ttl=3600)
-# priority_notification_cache = TTLCache(maxsize=500, ttl=60)  # للإشعارات العاجلة
 
 
 # class NotificationBatcher:
-#     """معالج للإشعارات الجماعية"""
 
 #     def __init__(self, max_batch_size: int = 100, max_wait_time: float = 1.0):
 #         self.batch = []
@@ -140,14 +116,12 @@ def extract_link_preview(url: str) -> dict | None:
 #             if not self.batch:
 #                 return
 #             try:
-#                 # معالجة الدفعة الحالية
 #                 await self._process_batch(self.batch)
 #             finally:
 #                 self.batch = []
 #                 self._last_flush = datetime.now(timezone.utc)
 
 #     async def _process_batch(self, notifications: List[dict]) -> None:
-#         # تجميع الإشعارات حسب نوع التسليم
 #         email_notifications = []
 #         push_notifications = []
 #         in_app_notifications = []
@@ -160,7 +134,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             else:
 #                 in_app_notifications.append(notif)
 
-#         # معالجة كل نوع على حدة
 #         tasks = []
 #         if email_notifications:
 #             tasks.append(self._send_batch_emails(email_notifications))
@@ -172,7 +145,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         await asyncio.gather(*tasks)
 
 #     async def _send_batch_emails(self, notifications: List[dict]) -> None:
-#         # تجميع الرسائل حسب المستلم
 #         email_groups = {}
 #         for notif in notifications:
 #             email = notif["recipient"]
@@ -200,25 +172,20 @@ def extract_link_preview(url: str) -> dict | None:
 
 
 # class NotificationDeliveryManager:
-#     """مدير تسليم الإشعارات مع دعم متقدم للمحاولات المتكررة"""
 
 #     def __init__(self, db, background_tasks: Optional[BackgroundTasks] = None):
 #         self.db = db
 #         self.background_tasks = background_tasks
-#         self.max_retries = 5  # زيادة عدد المحاولات
-#         self.retry_delays = [300, 600, 1200, 2400, 4800]  # تأخير متزايد
 #         self.error_tracking = {}
 #         self.batcher = NotificationBatcher()
 
 #     async def deliver_notification(self, notification: models.Notification) -> bool:
-#         """تسليم الإشعار مع دعم للمحاولات المتكررة والتتبع"""
 #         try:
 #             delivery_key = f"delivery_{notification.id}"
 #             if delivery_key in delivery_status_cache:
 #                 return delivery_status_cache[delivery_key]
 
 #             user_prefs = self._get_user_preferences(notification.user_id)
-#             # تحضير الإشعار حسب تفضيلات المستخدم
 #             content = await self._prepare_notification_content(notification, user_prefs)
 
 #             delivery_tasks = []
@@ -259,7 +226,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         notification: models.Notification,
 #         user_prefs: models.NotificationPreferences,
 #     ) -> str:
-#         """تحضير محتوى الإشعار مع دعم الترجمة"""
 #         content = notification.content
 #         if (
 #             user_prefs.auto_translate
@@ -273,7 +239,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     async def _update_delivery_status(
 #         self, notification: models.Notification, success: bool, results: List[Any]
 #     ) -> None:
-#         """تحديث حالة تسليم الإشعار"""
 #         status = (
 #             models.NotificationStatus.DELIVERED
 #             if success
@@ -298,7 +263,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         self.db.commit()
 
 #     def _format_delivery_results(self, results: List[Any]) -> Dict[str, Any]:
-#         """تنسيق نتائج التسليم"""
 #         return {
 #             "email": (
 #                 not isinstance(results[0], Exception) if len(results) > 0 else None
@@ -312,7 +276,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     async def _handle_delivery_failure(
 #         self, notification: models.Notification, error: Exception
 #     ) -> None:
-#         """معالجة فشل تسليم الإشعار"""
 #         if notification.retry_count >= self.max_retries:
 #             notification.status = models.NotificationStatus.FAILED
 #             notification.failure_reason = str(error)
@@ -334,7 +297,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             )
 
 #     async def retry_delivery(self, notification_id: int, delay: int) -> None:
-#         """إعادة محاولة تسليم الإشعار"""
 #         await asyncio.sleep(delay)
 
 #         notification = (
@@ -352,7 +314,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         await self.deliver_notification(notification)
 
 #     def _get_user_preferences(self, user_id: int) -> models.NotificationPreferences:
-#         """الحصول على تفضيلات المستخدم مع التخزين المؤقت"""
 #         cache_key = f"user_prefs_{user_id}"
 #         if cache_key in notification_cache:
 #             return notification_cache[cache_key]
@@ -412,7 +373,6 @@ def extract_link_preview(url: str) -> dict | None:
 #                             self.active_connections[user_id].remove(connection)
 
 #     async def broadcast(self, message: dict):
-#         """إرسال رسالة لجميع المستخدمين المتصلين"""
 #         for user_id in list(self.active_connections.keys()):
 #             await self.send_personal_message(message, user_id)
 
@@ -443,7 +403,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         metadata: Optional[dict] = None,
 #         scheduled_for: Optional[datetime] = None,
 #     ) -> Optional[models.Notification]:
-#         """إنشاء إشعار جديد مع المعالجة الذكية"""
 #         try:
 #             user_prefs = self._get_user_preferences(user_id)
 #             if not self._should_send_notification(user_prefs, category):
@@ -524,7 +483,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         return created_notifications
 
 #     async def deliver_notification(self, notification: models.Notification):
-#         """تحسين تسليم الإشعار مع تتبع محاولات التسليم"""
 #         try:
 #             user_prefs = self._get_user_preferences(notification.user_id)
 #             delivery_tasks = []
@@ -568,7 +526,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             raise
 
 #     async def _send_realtime_notification(self, notification: models.Notification):
-#         """إرسال إشعار في الوقت الفعلي عبر WebSocket"""
 #         try:
 #             message = {
 #                 "type": "notification",
@@ -588,7 +545,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             logger.error(f"Error sending realtime notification: {str(e)}")
 
 #     async def retry_failed_notification(self, notification_id: int):
-#         """إعادة محاولة إرسال الإشعارات الفاشلة"""
 #         notification = (
 #             self.db.query(models.Notification)
 #             .filter(models.Notification.id == notification_id)
@@ -619,7 +575,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             return False
 
 #     async def cleanup_old_notifications(self, days: int):
-#         """تنظيف الإشعارات القديمة"""
 #         threshold = datetime.now(timezone.utc) - timedelta(days=days)
 #         old_notifications = (
 #             self.db.query(models.Notification)
@@ -635,7 +590,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         self.db.commit()
 
 #     async def _send_email_notification(self, notification: models.Notification):
-#         """إرسال إشعار بالبريد الإلكتروني"""
 #         try:
 #             user = (
 #                 self.db.query(models.User)
@@ -664,7 +618,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             logger.error(f"Error sending email notification: {str(e)}")
 
 #     async def _send_push_notification(self, notification: models.Notification):
-#         """إرسال إشعار Push"""
 #         try:
 #             user_devices = (
 #                 self.db.query(models.UserDevice)
@@ -703,7 +656,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             logger.error(f"Error sending push notification: {str(e)}")
 
 #     def _get_user_preferences(self, user_id: int) -> models.NotificationPreferences:
-#         """الحصول على تفضيلات الإشعارات للمستخدم"""
 #         prefs = (
 #             self.db.query(models.NotificationPreferences)
 #             .filter(models.NotificationPreferences.user_id == user_id)
@@ -723,11 +675,9 @@ def extract_link_preview(url: str) -> dict | None:
 #         prefs: models.NotificationPreferences,
 #         category: models.NotificationCategory,
 #     ) -> bool:
-#         """التحقق من إمكانية إرسال الإشعار حسب التفضيلات"""
 #         if not prefs:
 #             return True
 
-#         # التحقق من ساعات الهدوء
 #         current_time = datetime.now().time()
 #         if (
 #             prefs.quiet_hours_start
@@ -737,7 +687,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         ):
 #             return False
 
-#         # التحقق من تفضيلات الفئة
 #         category_enabled = prefs.categories_preferences.get(category.value, True)
 
 #         return category_enabled
@@ -745,7 +694,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     def _find_or_create_group(
 #         self, notification_type: str, user_id: int, related_id: Optional[int] = None
 #     ) -> Optional[models.NotificationGroup]:
-#         """البحث عن مجموعة مشابهة أو إنشاء واحدة جديدة"""
 #         if not self._is_groupable_type(notification_type):
 #             return None
 
@@ -782,7 +730,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             return None
 
 #     def _create_email_template(self, notification: models.Notification) -> str:
-#         """إنشاء قالب البريد الإلكتروني"""
 #         return f"""
 #         <html>
 #             <head>
@@ -837,7 +784,6 @@ def extract_link_preview(url: str) -> dict | None:
 
 #     @staticmethod
 #     def _is_groupable_type(notification_type: str) -> bool:
-#         """تحديد أنواع الإشعارات القابلة للتجميع"""
 #         groupable_types = {
 #             "post_like",
 #             "post_comment",
@@ -850,7 +796,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         return notification_type in groupable_types
 
 #     def _schedule_delivery(self, notification: models.Notification):
-#         """جدولة تسليم الإشعار"""
 #         if self.background_tasks:
 #             self.background_tasks.add_task(
 #                 deliver_scheduled_notification,
@@ -862,12 +807,9 @@ def extract_link_preview(url: str) -> dict | None:
 #             )
 
 
-# # مواصلة الملف...
 
 
-# # دوال مساعدة للاستخدام المباشر
 # async def send_real_time_notification(user_id: int, message: Union[str, dict]):
-#     """إرسال إشعار في الوقت الفعلي"""
 #     try:
 #         if isinstance(message, str):
 #             message = {"message": message, "type": "simple_notification"}
@@ -879,7 +821,6 @@ def extract_link_preview(url: str) -> dict | None:
 
 
 # async def send_mention_notification(to: str, mentioner: str, post_id: int):
-#     """إرسال إشعار الإشارة"""
 #     try:
 #         subject = f"You've been mentioned by {mentioner}"
 #         body = f"""
@@ -902,7 +843,6 @@ def extract_link_preview(url: str) -> dict | None:
 
 
 # async def send_login_notification(email: str, ip_address: str, user_agent: str):
-#     """إرسال إشعار تسجيل الدخول"""
 #     try:
 #         subject = "New Login to Your Account"
 #         body = f"""
@@ -938,7 +878,6 @@ def extract_link_preview(url: str) -> dict | None:
 # async def deliver_scheduled_notification(
 #     notification_id: int, scheduled_time: datetime
 # ):
-#     """تسليم الإشعار المجدول"""
 #     try:
 #         db = next(get_db())
 #         notification_service = NotificationService(db)
@@ -966,7 +905,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     db: Session,
 #     background_tasks: BackgroundTasks,
 # ):
-#     """إرسال إشعارات جماعية لمجموعة من المستخدمين"""
 #     try:
 #         notification_service = NotificationService(db, background_tasks)
 #         tasks = []
@@ -1005,7 +943,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     notification_type: str,
 #     related_id: Optional[int] = None,
 # ):
-#     """إنشاء إشعار بشكل مباشر (غير متزامن)"""
 #     try:
 #         new_notification = models.Notification(
 #             user_id=user_id,
@@ -1025,7 +962,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         raise
 
 
-# # تصدير الدوال والكائنات المطلوبة
 # __all__ = [
 #     "manager",
 #     "NotificationService",
@@ -1039,7 +975,6 @@ def extract_link_preview(url: str) -> dict | None:
 
 
 # class NotificationManager:
-#     """مدير مركزي للإشعارات يتكامل مع جميع وحدات النظام"""
 
 #     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
 #         self.db = db
@@ -1047,25 +982,21 @@ def extract_link_preview(url: str) -> dict | None:
 #         self.notification_service = NotificationService(db, background_tasks)
 
 #     async def handle_post_action(self, post_id: int, action_type: str, actor_id: int):
-#         """معالجة الإشعارات المتعلقة بالمنشورات"""
 #         post = self.db.query(models.Post).filter(models.Post.id == post_id).first()
 #         if not post:
 #             return
 
 #         notifications = []
 
-#         # إشعار صاحب المنشور
 #         if action_type == "comment":
 #             notifications.append(
 #                 {
 #                     "user_id": post.owner_id,
-#                     "content": f"علق شخص ما على منشورك",
 #                     "type": "post_comment",
 #                     "link": f"/post/{post_id}",
 #                 }
 #             )
 
-#         # إشعار المتابعين
 #         elif action_type == "new_post":
 #             followers = (
 #                 self.db.query(models.Follow)
@@ -1077,13 +1008,11 @@ def extract_link_preview(url: str) -> dict | None:
 #                 notifications.append(
 #                     {
 #                         "user_id": follower.follower_id,
-#                         "content": f"قام {post.owner.username} بنشر منشور جديد",
 #                         "type": "new_post",
 #                         "link": f"/post/{post_id}",
 #                     }
 #                 )
 
-#         # إرسال الإشعارات
 #         for notification in notifications:
 #             await self.notification_service.create_notification(
 #                 user_id=notification["user_id"],
@@ -1093,7 +1022,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             )
 
 #     async def handle_message_action(self, message_id: int, action_type: str):
-#         """معالجة الإشعارات المتعلقة بالرسائل"""
 #         message = (
 #             self.db.query(models.Message)
 #             .filter(models.Message.id == message_id)
@@ -1105,7 +1033,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         if action_type == "new_message":
 #             await self.notification_service.create_notification(
 #                 user_id=message.receiver_id,
-#                 content=f"لديك رسالة جديدة من {message.sender.username}",
 #                 notification_type="new_message",
 #                 link=f"/messages/{message.sender_id}",
 #             )
@@ -1113,7 +1040,6 @@ def extract_link_preview(url: str) -> dict | None:
 #     async def handle_community_action(
 #         self, community_id: int, action_type: str, actor_id: int
 #     ):
-#         """معالجة الإشعارات المتعلقة بالمجتمعات"""
 #         community = (
 #             self.db.query(models.Community)
 #             .filter(models.Community.id == community_id)
@@ -1133,21 +1059,17 @@ def extract_link_preview(url: str) -> dict | None:
 #                 if member.user_id != actor_id:
 #                     await self.notification_service.create_notification(
 #                         user_id=member.user_id,
-#                         content=f"منشور جديد في مجتمع {community.name}",
 #                         notification_type="community_post",
 #                         link=f"/community/{community_id}",
 #                     )
 
 
-# # 2. تحسين آلية التتبع والتحليل
 # class NotificationAnalytics:
-#     """تحليلات وإحصائيات الإشعارات"""
 
 #     def __init__(self, db: Session):
 #         self.db = db
 
 #     def get_delivery_stats(self, user_id: Optional[int] = None):
-#         """الحصول على إحصائيات تسليم الإشعارات"""
 #         query = self.db.query(models.NotificationDeliveryLog)
 
 #         if user_id:
@@ -1169,7 +1091,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         }
 
 #     def get_user_engagement(self, user_id: int, days: int = 30):
-#         """تحليل تفاعل المستخدم مع الإشعارات"""
 #         cutoff_date = datetime.now() - timedelta(days=days)
 
 #         notifications = (
@@ -1195,9 +1116,7 @@ def extract_link_preview(url: str) -> dict | None:
 #         }
 
 
-# # 3. تحسين معالجة الأخطاء وإعادة المحاولة
 # class NotificationRetryHandler:
-#     """معالج إعادة محاولة إرسال الإشعارات الفاشلة"""
 
 #     def __init__(self, db: Session):
 #         self.db = db
@@ -1205,7 +1124,6 @@ def extract_link_preview(url: str) -> dict | None:
 #         self.retry_delays = [300, 600, 1800]  # 5 mins, 10 mins, 30 mins
 
 #     async def handle_failed_notification(self, notification_id: int):
-#         """معالجة الإشعارات الفاشلة"""
 #         notification = (
 #             self.db.query(models.Notification)
 #             .filter(models.Notification.id == notification_id)
@@ -1226,11 +1144,9 @@ def extract_link_preview(url: str) -> dict | None:
 
 #         self.db.commit()
 
-#         # جدولة إعادة المحاولة
 #         background_tasks.add_task(self.retry_notification, notification_id, delay)
 
 #     async def retry_notification(self, notification_id: int, delay: int):
-#         """إعادة محاولة إرسال الإشعار"""
 #         await asyncio.sleep(delay)
 
 #         notification = (

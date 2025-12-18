@@ -1,7 +1,4 @@
-"""
-Banned Words Management Router
-Provides CRUD endpoints for managing banned words in the platform.
-"""
+"""Banned words router for managing moderation wordlists with severity levels."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -21,7 +18,7 @@ def get_banned_word_service(db: Session = Depends(get_db)) -> BannedWordService:
 
 
 def check_admin(current_user: User = Depends(oauth2.get_current_user)):
-    """Ensure the requesting user has admin privileges."""
+    """Endpoint: check_admin."""
     if not getattr(current_user, "is_admin", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

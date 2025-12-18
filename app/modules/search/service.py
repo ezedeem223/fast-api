@@ -22,16 +22,16 @@ def update_search_statistics(db: Session, user_id: int, query: str) -> None:
         db.query(models.SearchStatistics)
         .filter(
             models.SearchStatistics.user_id == user_id,
-            models.SearchStatistics.query == query,
+            models.SearchStatistics.term == query,
         )
         .first()
     )
 
     if stat:
-        stat.count += 1
-        stat.last_searched = func.now()
+        stat.searches += 1
+        stat.updated_at = func.now()
     else:
-        new_stat = models.SearchStatistics(user_id=user_id, query=query)
+        new_stat = models.SearchStatistics(user_id=user_id, term=query, searches=1)
         db.add(new_stat)
 
     db.commit()
@@ -46,7 +46,7 @@ def update_search_suggestions(db: Session) -> List[SearchSuggestionOut]:
     """
     suggestions = (
         db.query(models.SearchSuggestion)
-        .order_by(models.SearchSuggestion.frequency.desc())
+        .order_by(models.SearchSuggestion.usage_count.desc())
         .limit(10)
         .all()
     )

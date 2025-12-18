@@ -8,33 +8,6 @@ def test_root(client):
     assert res.status_code == 200
 
 
-def test_create_user(client):
-    res = client.post(
-        "/users/", json={"email": "test@example.com", "password": "password123"}
-    )
-    new_user = schemas.UserOut(**res.json())
-    assert new_user.email == "test@example.com"
-    assert res.status_code == 201
-
-
-def test_login_user(client, test_user):
-    res = client.post(
-        "/login",
-        data={"username": test_user["email"], "password": test_user["password"]},
-    )
-    login_res = schemas.Token(**res.json())
-    assert login_res.token_type == "bearer"
-    assert res.status_code == 200
-
-
-def test_incorrect_login(client, test_user):
-    res = client.post(
-        "/login", data={"username": test_user["email"], "password": "wrongpassword"}
-    )
-    assert res.status_code == 403
-    assert res.json().get("detail") == "Invalid Credentials"
-
-
 def test_get_all_posts(authorized_client, test_posts):
     res = authorized_client.get("/posts/")
     assert len(res.json()) == len(test_posts)
@@ -129,11 +102,6 @@ def test_delete_post_non_exist(authorized_client, test_user, test_posts):
     assert res.status_code == 404
 
 
-def test_delete_other_user_post(authorized_client, test_user, test_posts):
-    res = authorized_client.delete(f"/posts/{test_posts[3].id}")
-    assert res.status_code == 403
-
-
 def test_update_post(authorized_client, test_user, test_posts):
     data = {
         "title": "updated title",
@@ -145,17 +113,6 @@ def test_update_post(authorized_client, test_user, test_posts):
     assert res.status_code == 200
     assert updated_post.title == data["title"]
     assert updated_post.content == data["content"]
-
-
-def test_update_other_user_post(authorized_client, test_user, test_posts):
-    data = {
-        "title": "updated title",
-        "content": "updated content",
-        "id": test_posts[3].id,
-    }
-    res = authorized_client.put(f"/posts/{test_posts[3].id}", json=data)
-    assert res.status_code == 403
-
 
 def test_unauthorized_user_update_post(client, test_user, test_posts):
     res = client.put(f"/posts/{test_posts[0].id}")

@@ -1,3 +1,5 @@
+"""Moderation router for warnings, bans, IP bans, and block appeals."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List

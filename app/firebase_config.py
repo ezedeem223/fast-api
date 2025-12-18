@@ -1,3 +1,11 @@
+"""Firebase initialization and notification helpers with graceful failure logging.
+
+Integration details:
+- Reads Firebase identifiers and secrets from `settings` (env-backed).
+- Expects `firebase_api_key` to be a raw private key string for service account auth.
+- Falls back to no-op on initialization failures so the app can start without FCM.
+"""
+
 from firebase_admin import credentials, messaging, initialize_app
 from app.core.config import settings
 from typing import List
@@ -5,13 +13,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Compatibility: some firebase_admin versions expose only send_each_for_multicast.
+if not hasattr(messaging, "send_multicast"):
+    messaging.send_multicast = messaging.send_each_for_multicast  # type: ignore[attr-defined]
+
 
 def initialize_firebase():
-    """
-    Initialize Firebase using service account credentials and configuration from settings.
+    """Initialize Firebase using service account credentials and config from env-backed settings.
 
-    Returns:
-        bool: True if initialization is successful, False otherwise.
+    Returns True on successful bootstrap; returns False and logs when credentials are absent/invalid
+    so non-notification code paths remain operational.
     """
     try:
         cred = credentials.Certificate(
@@ -37,6 +48,7 @@ def initialize_firebase():
         logger.info("Firebase initialized successfully")
         return True
     except Exception as e:
+        # Fail open: log and return False so the rest of the app can run without push notifications.
         logger.error(f"Failed to initialize Firebase: {str(e)}")
         return False
 

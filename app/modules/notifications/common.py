@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger("app.notifications")
 
 # Shared caches leveraged across notification services
+# Short TTLs keep state fresh while avoiding duplicate delivery or preference lookups.
 notification_cache: TTLCache = TTLCache(maxsize=1000, ttl=300)
 delivery_status_cache: TTLCache = TTLCache(maxsize=5000, ttl=3600)
 priority_notification_cache: TTLCache = TTLCache(maxsize=500, ttl=60)

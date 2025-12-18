@@ -25,6 +25,7 @@ def _ensure_str(value: Any) -> Optional[str]:
 def get_cached_json(key: str) -> Optional[Any]:
     client = _client()
     if not client:
+        # Fail open: absent Redis means no cache hit rather than raising in hot paths.
         return None
     payload = _ensure_str(client.get(key))
     if not payload:

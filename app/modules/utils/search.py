@@ -1,4 +1,10 @@
-"""Search utilities including spell checking."""
+"""Search utilities including spell checking.
+
+Integration notes:
+- Uses Postgres full-text search when available; falls back to SQLite `LIKE` queries if bind or env indicates sqlite.
+- Spell suggestions ignore non-alpha tokens and operate entirely in-memory (no external calls).
+- `update_search_vector` executes raw SQL; intended for Postgres deployments with a `search_vector` column.
+"""
 
 from __future__ import annotations
 
@@ -51,6 +57,7 @@ def update_search_vector():
     """Update full-text search vector for posts."""
     engine = create_engine(settings.DATABASE_URL)
     with engine.connect() as conn:
+        # Direct SQL keeps this independent of ORM migrations; skip when DB is not Postgres/tsvector-aware.
         conn.execute(
             text(
                 """
@@ -83,16 +90,22 @@ def search_posts(query: str, db: Session) -> Query:
     return base_query.filter(
         or_(
             models.Post.search_vector.op("@@")(search_query),
+            models.Post.title.ilike(like_query),
+            models.Post.content.ilike(like_query),
             models.Post.media_text.ilike(like_query),
         )
     )
 
 
 def get_spell_suggestions(query: str) -> List[str]:
-    """Generate spelling suggestions for the query."""
+    """Generate spelling suggestions for the query, ignoring invalid tokens."""
+    if not query or not query.strip():
+        return []
     words = query.split()
     suggestions = []
     for word in words:
+        if not word.isalpha():
+            continue
         if word not in spell:
             suggestions.append(spell.correction(word))
         else:

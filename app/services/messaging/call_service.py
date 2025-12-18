@@ -1,4 +1,4 @@
-"""Service layer for call management."""
+"""Service layer for call management: setup, status transitions, and quality safeguards."""
 
 from __future__ import annotations
 

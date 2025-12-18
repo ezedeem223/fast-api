@@ -1,3 +1,5 @@
+"""Social auth router for Facebook/Twitter OAuth flows."""
+
 from fastapi import APIRouter, Depends, Request, HTTPException
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config

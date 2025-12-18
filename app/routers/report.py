@@ -1,3 +1,5 @@
+"""Reporting router for abuse reports on posts/comments."""
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 

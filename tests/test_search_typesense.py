@@ -24,7 +24,7 @@ class FakeTypesenseClient:
 
 @pytest.fixture
 def sample_posts(session, test_user):
-    posts = []
+    post_ids = []
     for idx in range(2):
         post = models.Post(
             title=f"Hello {idx}",
@@ -34,8 +34,8 @@ def sample_posts(session, test_user):
         session.add(post)
         session.commit()
         session.refresh(post)
-        posts.append(post)
-    return posts
+        post_ids.append(post.id)
+    return post_ids
 
 
 @pytest.fixture(autouse=True)
@@ -46,8 +46,8 @@ def disable_redis(monkeypatch):
 
 def test_search_uses_typesense_results(monkeypatch, authorized_client, sample_posts):
     hits = [
-        {"document": {"post_id": sample_posts[1].id}},
-        {"document": {"post_id": sample_posts[0].id}},
+        {"document": {"post_id": sample_posts[1]}},
+        {"document": {"post_id": sample_posts[0]}},
     ]
     fake_client = FakeTypesenseClient(hits=hits)
     monkeypatch.setattr(search_router, "get_typesense_client", lambda: fake_client)
@@ -56,7 +56,7 @@ def test_search_uses_typesense_results(monkeypatch, authorized_client, sample_po
     assert response.status_code == 200
     data = response.json()
     ids = [post["id"] for post in data["results"]]
-    assert ids == [sample_posts[1].id, sample_posts[0].id]
+    assert ids == [sample_posts[1], sample_posts[0]]
 
 
 def test_search_falls_back_when_typesense_errors(monkeypatch, authorized_client, sample_posts):
@@ -68,4 +68,4 @@ def test_search_falls_back_when_typesense_errors(monkeypatch, authorized_client,
     data = response.json()
     ids = [post["id"] for post in data["results"]]
     # default search order uses DB order (score desc) but should include both posts
-    assert set(ids) == {sample_posts[0].id, sample_posts[1].id}
+    assert set(ids) == {sample_posts[0], sample_posts[1]}

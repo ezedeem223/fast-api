@@ -266,3 +266,24 @@ class UserContentOut(BaseModel):
     reels: List["ReelOut"]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class IdentityLinkCreate(BaseModel):
+    linked_user_id: int
+    relationship_type: str = "alias"  # alias, business, backup
+
+
+class IdentityOut(BaseModel):
+    id: int
+    linked_user_id: int
+    relationship_type: str
+    linked_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DataExportOut(BaseModel):
+    user: dict
+    posts: List[dict]
+    comments: List[dict]
+    identities: List[IdentityOut] = []

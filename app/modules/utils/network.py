@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime
+from datetime import datetime, timezone
+import time
 
 from fastapi import Request
 from sqlalchemy.exc import ProgrammingError
@@ -28,13 +29,18 @@ def is_ip_banned(db: Session, ip_address: str) -> bool:
             db.query(models.IPBan).filter(models.IPBan.ip_address == ip_address).first()
         )
         if ban:
-            if ban.expires_at and ban.expires_at < datetime.now():
+            expires_at = ban.expires_at
+            if expires_at and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if expires_at and expires_at < now:
                 db.delete(ban)
                 db.commit()
                 return False
             return True
         return False
     except ProgrammingError as pe:  # pragma: no cover - defensive logging
+        # Fail open if schema is missing in early migrations; do not block requests.
         logger.error("ProgrammingError checking IP ban for %s: %s", ip_address, pe)
         return False
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -60,4 +66,43 @@ def detect_ip_evasion(db: Session, user_id: int, current_ip: str) -> bool:
     return False
 
 
-__all__ = ["get_client_ip", "is_ip_banned", "detect_ip_evasion"]
+def parse_json_response(response) -> dict | None:
+    """Safely parse a JSON response object; returns None on failure and logs it."""
+    try:
+        return response.json()
+    except Exception as exc:
+        logger.warning("non_json_response", extra={"error": str(exc)})
+        return None
+
+
+def with_retry(func, retries: int = 3, backoff: float = 0.1):
+    """Invoke func with retry/backoff on TimeoutError; re-raises other exceptions."""
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            return func()
+        except TimeoutError as exc:
+            last_exc = exc
+            logger.warning("network_timeout", extra={"attempt": attempt})
+            if attempt < retries:
+                time.sleep(backoff)
+        except Exception as exc:
+            logger.error("network_error", extra={"error": str(exc)})
+            raise
+    if last_exc:
+        raise last_exc
+
+
+def safe_request(func, retries: int = 3, backoff: float = 0.1):
+    """
+    Wrapper around with_retry that logs failures and returns None instead of raising
+    so callers can degrade gracefully.
+    """
+    try:
+        return with_retry(func, retries=retries, backoff=backoff)
+    except Exception as exc:
+        logger.error("network_request_failed", extra={"error": str(exc)})
+        return None
+
+
+__all__ = ["get_client_ip", "is_ip_banned", "detect_ip_evasion", "parse_json_response", "with_retry", "safe_request"]

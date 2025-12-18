@@ -6,10 +6,10 @@ Provides structured, rotating logs with different levels and formats.
 import logging
 import logging.handlers
 import sys
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-import json
-from datetime import datetime
 
 
 class JSONFormatter(logging.Formatter):
@@ -20,7 +20,9 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -108,12 +110,19 @@ def setup_logging(
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
 
+    def _reset_handlers(logger: logging.Logger) -> None:
+        """Close and remove any existing handlers to avoid descriptor leaks."""
+        for handler in list(logger.handlers):
+            try:
+                handler.flush()
+            finally:
+                handler.close()
+                logger.removeHandler(handler)
+
     # Get root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
-
-    # Remove existing handlers
-    root_logger.handlers = []
+    _reset_handlers(root_logger)
 
     # Console Handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -144,6 +153,7 @@ def setup_logging(
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding="utf-8",
+            delay=True,
         )
         general_handler.setLevel(logging.DEBUG)
 
@@ -166,6 +176,7 @@ def setup_logging(
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding="utf-8",
+            delay=True,
         )
         error_handler.setLevel(logging.ERROR)
 
@@ -189,6 +200,7 @@ def setup_logging(
             maxBytes=max_bytes,
             backupCount=backup_count,
             encoding="utf-8",
+            delay=True,
         )
         access_handler.setLevel(logging.INFO)
 
@@ -204,6 +216,7 @@ def setup_logging(
 
         # Create dedicated logger for access logs
         access_logger = logging.getLogger("access")
+        _reset_handlers(access_logger)
         access_logger.addHandler(access_handler)
         access_logger.setLevel(logging.INFO)
         access_logger.propagate = False

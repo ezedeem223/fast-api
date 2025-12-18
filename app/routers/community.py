@@ -1,3 +1,5 @@
+"""Community router for membership, rules, invitations, and analytics endpoints."""
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -15,20 +17,18 @@ from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.notifications import queue_email_notification, schedule_email_notification
 
-# Service موجودة في مجلد services
 from app.services.community.service import CommunityService
 
-# Models موجودة في مجلد modules
 from app.modules.community.models import Community, CommunityMember
 from app.core.middleware.rate_limit import limiter
-from app.core.cache.redis_cache import cache, cache_manager  # أضف هذا
+from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
 
 
 router = APIRouter(prefix="/communities", tags=["Communities"])
 
 
 def get_community_service(db: Session = Depends(get_db)) -> CommunityService:
-    """Provide a CommunityService instance for route handlers."""
+    """Endpoint: get_community_service."""
     return CommunityService(db)
 
 
@@ -45,10 +45,7 @@ async def create_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    إنشاء مجتمع جديد
-    Create a new community.
-    """
+    """Create a new community."""
     # Validate and create community
     community = schemas.CommunityCreate(**community_data)
 
@@ -68,7 +65,7 @@ async def create_community(
     response_model=List[schemas.CommunityOut],
     summary="Get list of communities",
 )
-@cache(prefix="communities:list", ttl=180, include_user=False)  # ← أضف هذا
+@cache(prefix="communities:list", ttl=180, include_user=False)  # Cache response for performance.
 async def get_communities(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
@@ -80,10 +77,7 @@ async def get_communities(
     sort_by: str = Query("created_at", enum=["created_at", "member_count", "name"]),
     order: str = Query("desc", enum=["asc", "desc"]),
 ):
-    """
-    الحصول على قائمة المجتمعات مع إمكانية البحث والتصفية
-    Get list of communities with search and filter options.
-    """
+    """Get list of communities with search and filter options."""
     communities = service.get_communities(
         skip=skip,
         limit=limit,
@@ -98,16 +92,13 @@ async def get_communities(
 
 
 @router.get("/{community_id}", response_model=schemas.CommunityDetailOut)
-@cache(prefix="community:detail", ttl=120, include_user=False)  # ← أضف هذا
+@cache(prefix="community:detail", ttl=120, include_user=False)  # Cache response for performance.
 async def get_community(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    الحصول على تفاصيل مجتمع محدد
-    Get details of a specific community.
-    """
+    """Get details of a specific community."""
     community = service.get_community_or_404(community_id)
 
     # Check if user has access
@@ -128,10 +119,7 @@ async def update_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    تحديث معلومات المجتمع
-    Update community information.
-    """
+    """Update community information."""
     updated_community = service.update_community(
         community_id=community_id,
         payload=community_update,
@@ -151,10 +139,7 @@ async def delete_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    حذف مجتمع (للمالك فقط)
-    Delete a community (owner only).
-    """
+    """Delete a community (owner only)."""
     service.delete_community(
         community_id=community_id,
         current_user=current_user,
@@ -178,10 +163,7 @@ async def join_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    الانضمام إلى مجتمع
-    Join a community.
-    """
+    """Join a community."""
     member = service.join_community(
         community_id=community_id,
         current_user=current_user,
@@ -201,10 +183,7 @@ async def leave_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    مغادرة المجتمع
-    Leave a community.
-    """
+    """Leave a community."""
     service.leave_community(
         community_id=community_id,
         user=current_user,
@@ -219,7 +198,7 @@ async def leave_community(
 
 
 @router.get("/{community_id}/members", response_model=List[schemas.CommunityMemberOut])
-@cache(prefix="community:members", ttl=120, include_user=False)  # ← أضف هذا
+@cache(prefix="community:members", ttl=120, include_user=False)  # Cache response for performance.
 async def get_community_members(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -228,10 +207,7 @@ async def get_community_members(
     limit: int = Query(50, ge=1, le=100),
     role: Optional[str] = None,
 ):
-    """
-    الحصول على قائمة أعضاء المجتمع
-    Get list of community members.
-    """
+    """Get list of community members."""
     members = service.get_members(
         community_id=community_id,
         skip=skip,
@@ -252,10 +228,7 @@ async def update_member_role(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    تحديث دور عضو في المجتمع
-    Update member role in community.
-    """
+    """Update member role in community."""
     updated_member = service.update_member_role(
         community_id=community_id,
         user_id=user_id,
@@ -279,10 +252,7 @@ async def remove_member(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    إزالة عضو من المجتمع (للمشرفين والمالك فقط)
-    Remove a member from community (moderators and owner only).
-    """
+    """Remove a member from community (moderators and owner only)."""
     service.remove_member(
         community_id=community_id,
         user_id=user_id,
@@ -302,7 +272,7 @@ async def remove_member(
 
 
 @router.get("/{community_id}/posts", response_model=List[schemas.PostOut])
-@cache(prefix="community:posts", ttl=60, include_user=False)  # ← أضف هذا
+@cache(prefix="community:posts", ttl=60, include_user=False)  # Cache response for performance.
 async def get_community_posts(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -312,10 +282,7 @@ async def get_community_posts(
     sort_by: str = Query("created_at", enum=["created_at", "votes", "comments"]),
     order: str = Query("desc", enum=["asc", "desc"]),
 ):
-    """
-    الحصول على منشورات المجتمع
-    Get community posts.
-    """
+    """Get community posts."""
     posts = service.get_community_posts(
         community_id=community_id,
         skip=skip,
@@ -339,10 +306,7 @@ async def create_community_post(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    إنشاء منشور في المجتمع
-    Create a post in the community.
-    """
+    """Create a post in the community."""
     new_post = service.create_community_post(
         community_id=community_id,
         payload=post_data,
@@ -395,10 +359,7 @@ async def invite_to_community(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    دعوة مستخدم للانضمام إلى المجتمع
-    Invite a user to join the community.
-    """
+    """Invite a user to join the community."""
     invitation = service.create_invitation(
         community_id=community_id,
         invited_user_id=invitation_data.user_id,
@@ -416,10 +377,7 @@ async def get_my_invitations(
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
 ):
-    """
-    الحصول على دعوات المجتمعات الخاصة بي
-    Get my community invitations.
-    """
+    """Get my community invitations."""
     invitations = service.get_user_invitations(
         user_id=current_user.id,
         skip=skip,
@@ -438,10 +396,7 @@ async def accept_invitation(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    قبول دعوة للانضمام إلى مجتمع
-    Accept a community invitation.
-    """
+    """Accept a community invitation."""
     member = service.accept_invitation(
         invitation_id=invitation_id,
         user=current_user,
@@ -463,10 +418,7 @@ async def decline_invitation(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    رفض دعوة للانضمام إلى مجتمع
-    Decline a community invitation.
-    """
+    """Decline a community invitation."""
     service.decline_invitation(
         invitation_id=invitation_id,
         user=current_user,
@@ -487,10 +439,7 @@ async def get_community_stats(
     service: CommunityService = Depends(get_community_service),
     days: int = Query(30, ge=1, le=365),
 ):
-    """
-    الحصول على إحصائيات المجتمع
-    Get community statistics.
-    """
+    """Get community statistics."""
     stats = service.get_community_stats(
         community_id=community_id,
         days=days,
@@ -512,10 +461,7 @@ async def get_my_communities(
     limit: int = Query(20, ge=1, le=100),
     role: Optional[str] = None,
 ):
-    """
-    الحصول على المجتمعات التي أنا عضو فيها
-    Get communities I'm a member of.
-    """
+    """Get communities I'm a member of."""
     communities = service.get_user_communities(
         user_id=current_user.id,
         skip=skip,
@@ -533,10 +479,7 @@ async def get_my_owned_communities(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """
-    الحصول على المجتمعات التي أملكها
-    Get communities I own.
-    """
+    """Get communities I own."""
     communities = service.get_owned_communities(
         owner_id=current_user.id,
         skip=skip,
@@ -558,10 +501,7 @@ async def update_community_settings(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):
-    """
-    تحديث إعدادات المجتمع
-    Update community settings.
-    """
+    """Update community settings."""
     updated_community = service.update_settings(
         community_id=community_id,
         settings=settings_update,

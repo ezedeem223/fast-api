@@ -17,9 +17,7 @@ def build_engine(database_url: str):
         connect_args = {
             "options": "-c timezone=utc",
             "application_name": "fastapi_app",
-            "server_settings": {"jit": "off", "timezone": "utc"},
-            "statement_cache_size": 100,
-            "prepared_statement_cache_size": 100,
+            "connect_timeout": 10,
         }
     elif "sqlite" in database_url:
         connect_args = {"check_same_thread": False}
@@ -42,6 +40,7 @@ def build_engine(database_url: str):
 if hasattr(settings, "database_url") and settings.database_url:
     SQLALCHEMY_DATABASE_URL = str(settings.database_url)
 else:
+    # Backfill a DSN from discrete env pieces when DATABASE_URL is not provided.
     SQLALCHEMY_DATABASE_URL = (
         f"postgresql://{settings.database_username}:{settings.database_password}"
         f"@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"

@@ -1,4 +1,4 @@
-"""Service layer for post operations."""
+"""Service layer for post operations with content safety, scheduling, notifications, and legacy shims."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from http import HTTPStatus
 from pathlib import Path
@@ -18,9 +18,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 
-# نستخدم اسم مستعار لتجنب الخلط بين المخططات العامة ومخططات المنشورات
 from app import schemas as global_schemas
-from app.modules.posts import schemas as post_schemas  # المخططات المحدثة للمنشورات
+from app.modules.posts import schemas as post_schemas
 
 from app.celery_worker import schedule_post_publication
 from app.content_filter import check_content, filter_content
@@ -123,6 +122,7 @@ class PostService:
         mention_notifier_fn: Callable,
         analyze_content_fn: Callable[[str], dict] | None = None,
     ) -> models.Post:
+        """Create a post, enforcing content rules, legacy analysis hooks, and downstream notifications."""
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -286,6 +286,7 @@ class PostService:
             logger.error("Error sharing on social media: %s", exc.detail)
 
         if payload.scheduled_time:
+            # Defer publication via Celery so scheduled posts respect ETA without blocking the request.
             schedule_post_publication.apply_async(
                 args=[new_post.id], eta=payload.scheduled_time
             )
@@ -1226,11 +1227,8 @@ class PostService:
     def _process_living_memory(self, db: Session, new_post: Post, user_id: int):
         """
         Living Memory Logic (Optimized):
-        يقوم هذا النظام تلقائياً بالبحث عن منشورات سابقة لنفس المستخدم
-        تحتوي على سياق مشابه للمنشور الجديد ويربطها به، مع تجنب التكرار.
         """
         try:
-            # 0. التحقق من العلاقات الموجودة مسبقاً (مثل الربط اليدوي) لتجنب تعارض القيود
             existing_relations = (
                 db.query(PostRelation.target_post_id)
                 .filter(PostRelation.source_post_id == new_post.id)
@@ -1238,14 +1236,12 @@ class PostService:
             )
             existing_target_ids = {r[0] for r in existing_relations}
 
-            # 1. جلب آخر 50 منشور للمستخدم (لتحسين الأداء)
             past_posts = (
                 db.query(Post)
                 .filter(
                     Post.owner_id == user_id,
                     Post.id != new_post.id,
                     Post.content.isnot(None),
-                    # استثناء المنشورات المرتبطة بالفعل من البحث
                     ~Post.id.in_(existing_target_ids) if existing_target_ids else True,
                 )
                 .order_by(Post.created_at.desc())
@@ -1256,20 +1252,17 @@ class PostService:
             if not past_posts:
                 return
 
-            # 2. تحليل النص البسيط (Tokenization)
             new_content_words = set(new_post.content.lower().split())
 
             if len(new_content_words) < 3:
                 return
 
             for old_post in past_posts:
-                # حماية إضافية
                 if old_post.id in existing_target_ids:
                     continue
 
                 old_content_words = set(old_post.content.lower().split())
 
-                # حساب نسبة التشابه (Jaccard Similarity)
                 intersection = new_content_words.intersection(old_content_words)
                 union = new_content_words.union(old_content_words)
 
@@ -1278,7 +1271,6 @@ class PostService:
 
                 similarity = len(intersection) / len(union)
 
-                # 3. معيار الربط: إذا كان التشابه 20% أو أكثر
                 if similarity >= 0.2:
                     relation = PostRelation(
                         source_post_id=new_post.id,
@@ -1287,20 +1279,16 @@ class PostService:
                         relation_type="semantic",
                     )
                     db.add(relation)
-                    # نضيف المعرف للمجموعة لمنع تكراره في نفس الجلسة
                     existing_target_ids.add(old_post.id)
 
             db.commit()
 
         except Exception as e:
             logger.error(f"Error in Living Memory processing: {e}")
-            # لا نوقف النظام إذا فشلت العملية الخلفية
             pass
 
-    # === الميزة 1.2: الخط الزمني الديناميكي (Dynamic Timeline) ===
     def get_user_timeline(self, user_id: int) -> list[dict]:
         """
-        تجميع إحصائيات المستخدم شهرياً لرسم خط التطور البياني.
         """
         timeline_query = (
             self.db.query(
@@ -1325,12 +1313,10 @@ class PostService:
             for t in timeline_query
         ]
 
-    # === الميزة 1.3: إعادة الاكتشاف (حدث في مثل هذا اليوم) ===
     def get_on_this_day_memories(self, user_id: int) -> list[dict]:
         """
-        البحث عن منشورات كتبها المستخدم في نفس اليوم والشهر لكن في سنوات سابقة.
         """
-        today = datetime.utcnow()
+        today = datetime.now(timezone.utc)
 
         memories = (
             self.db.query(Post)

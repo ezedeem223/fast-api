@@ -66,6 +66,7 @@ def create_access_token(data: dict):
             raise ValueError("Invalid user_id format")
 
     try:
+        # Sign with the RSA private key so downstream services can verify using the public key only.
         encoded_jwt = jwt.encode(
             to_encode, settings.rsa_private_key, algorithm=ALGORITHM
         )

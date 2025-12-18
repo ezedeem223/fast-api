@@ -1,9 +1,4 @@
-"""
-Call Router Module
-This module provides endpoints for handling calls, including starting calls,
-updating call status, retrieving active calls, and managing WebSocket connections
-for real-time call communication.
-"""
+"""Call router for audio/video call setup, updates, and screen-share integration."""
 
 # =====================================================
 # ==================== Imports ========================
@@ -57,7 +52,7 @@ KEY_UPDATE_INTERVAL = timedelta(minutes=30)
 
 
 def get_call_service(db: Session = Depends(get_db)) -> CallService:
-    """Provide a call service instance."""
+    """Endpoint: get_call_service."""
     return CallService(db)
 
 
@@ -172,9 +167,7 @@ async def websocket_endpoint(
 
 
 def update_call_quality(db: Session, call_id: int, quality_score: int):
-    """
-    Update the call quality score in the database.
-    """
+    """Endpoint: update_call_quality."""
     CallService(db).update_call_quality(call_id=call_id, quality_score=quality_score)
 
 
@@ -184,10 +177,7 @@ def update_call_quality(db: Session, call_id: int, quality_score: int):
 
 
 async def _handle_encryption_key_update(call, db, other_user_id):
-    """
-    Check if the encryption key needs to be updated based on KEY_UPDATE_INTERVAL.
-    If so, update the key and notify both participants.
-    """
+    """Endpoint: _handle_encryption_key_update."""
     if datetime.now(timezone.utc) - call.last_key_update > KEY_UPDATE_INTERVAL:
         new_key = update_encryption_key(call.encryption_key)
         call.encryption_key = new_key
@@ -202,11 +192,7 @@ async def _handle_encryption_key_update(call, db, other_user_id):
 async def _handle_call_quality(
     data, call_id, db, current_user_id, other_user_id, background_tasks
 ):
-    """
-    Check the call quality using provided data. If the quality has changed,
-    update it in the database. If video quality adjustment is needed,
-    notify both participants.
-    """
+    """Endpoint: _handle_call_quality."""
     call_quality = check_call_quality(data, call_id)
     call = db.query(Call).filter(Call.id == call_id).first()
     if call_quality != call.quality_score:
@@ -222,9 +208,7 @@ async def _handle_call_quality(
 
 
 async def _handle_call_data(data, other_user_id, notifications):
-    """
-    Forward call signaling data to the other participant if the data type is valid.
-    """
+    """Endpoint: _handle_call_data."""
     valid_types = [
         "offer",
         "answer",
@@ -239,12 +223,7 @@ async def _handle_call_data(data, other_user_id, notifications):
 
 
 async def _handle_call_disconnect(call, db, other_user_id):
-    """
-    Handle call disconnect:
-      - Update call status to ENDED.
-      - Update end times for the call and any active screen share session.
-      - Notify the other participant.
-    """
+    """Endpoint: _handle_call_disconnect."""
     call.status = CallStatus.ENDED
     call.end_time = datetime.now(timezone.utc)
 
@@ -273,9 +252,7 @@ async def _handle_call_disconnect(call, db, other_user_id):
 
 @repeat_every(seconds=3600)  # Execute every hour
 def clean_quality_buffers_periodically():
-    """
-    Periodically clean old call quality buffers.
-    """
+    """Endpoint: clean_quality_buffers_periodically."""
     clean_old_quality_buffers()
 
 

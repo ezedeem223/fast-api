@@ -1,4 +1,5 @@
 # app/routers/wellness.py
+"""Wellness router for metrics, alerts, sessions, modes, and goals."""
 
 from typing import Optional
 
@@ -28,7 +29,7 @@ class DoNotDisturbRequest(BaseModel):
 async def get_wellness_metrics(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """الحصول على مؤشرات الصحة الرقمية"""
+    """    """
     metrics = WellnessService.get_or_create_metrics(db, current_user.id)
     return {
         "wellness_score": metrics.wellness_score,
@@ -47,7 +48,7 @@ async def create_wellness_goal(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """إنشاء هدف صحة"""
+    """  """
     goal = WellnessService.set_wellness_goal(
         db=db,
         user_id=current_user.id,
@@ -63,7 +64,7 @@ async def enable_do_not_disturb(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """تفعيل وضع عدم الإزعاج"""
+    """   """
     mode = WellnessService.enable_do_not_disturb(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes
     )
@@ -76,7 +77,7 @@ async def enable_mental_health_mode(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """تفعيل وضع الصحة النفسية"""
+    """   """
     mode = WellnessService.enable_mental_health_mode(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes
     )

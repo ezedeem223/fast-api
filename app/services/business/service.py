@@ -1,4 +1,4 @@
-"""Business account services."""
+"""Business account services for verification and transaction handling."""
 
 from __future__ import annotations
 

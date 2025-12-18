@@ -1,3 +1,5 @@
+"""Hashtag router for CRUD, analytics, and popularity calculations."""
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List

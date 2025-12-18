@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.i18n import ALL_LANGUAGES
-from app.modules.users.models import User, UserActivity, UserSession, UserStatistics
+from app.modules.users.models import (
+    User,
+    UserActivity,
+    UserSession,
+    UserStatistics,
+    UserIdentity,
+    TokenBlacklist,
+)
 from app.modules.utils.security import hash as hash_password, verify
 
 
@@ -30,10 +37,11 @@ class UserService:
             raise HTTPException(status_code=400, detail="Email already registered")
 
         hashed_password = hash_password(payload.password)
+        coerced_public_key = self._coerce_public_key(payload.public_key)
         new_user = User(
             email=payload.email,
             hashed_password=hashed_password,
-            public_key=payload.public_key,
+            public_key=coerced_public_key,
             **payload.model_dump(exclude={"password", "public_key", "email"}),
         )
         self.db.add(new_user)
@@ -73,10 +81,21 @@ class UserService:
     def update_public_key(
         self, current_user: User, update: schemas.UserPublicKeyUpdate
     ) -> User:
-        current_user.public_key = update.public_key
+        current_user.public_key = self._coerce_public_key(update.public_key)
         self.db.commit()
         self.db.refresh(current_user)
         return current_user
+
+    def _coerce_public_key(self, value):
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value)
+        if isinstance(value, str):
+            return value.encode()
+        raise HTTPException(
+            status_code=400, detail="Invalid public key type; expected bytes or str"
+        )
 
     def update_language_preferences(
         self, current_user: User, language: schemas.UserLanguageUpdate
@@ -584,10 +603,150 @@ class UserService:
         self.db.commit()
         return {"message": "User unsuspended successfully"}
 
+    def activate_user(self, user_id: int) -> Dict[str, str]:
+        """Mark a user as active/verified and clear suspension flags."""
+        user = self.get_user_or_404(user_id)
+        user.is_suspended = False
+        user.suspension_end_date = None
+        user.is_verified = True
+        self.db.commit()
+        return {"message": "User activated successfully"}
+
+    def lock_account(self, user_id: int, *, minutes: int = 30) -> Dict[str, str]:
+        """Lock the account until a future time window."""
+        user = self.get_user_or_404(user_id)
+        user.account_locked_until = datetime.now(timezone.utc) + timedelta(
+            minutes=minutes
+        )
+        self.db.commit()
+        return {"message": "Account locked"}
+
+    def perform_admin_action(self, acting_user: User, action: str = "noop") -> Dict[str, str]:
+        """Ensure only admins can perform privileged actions."""
+        if not getattr(acting_user, "is_admin", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
+            )
+        return {"action": action, "status": "ok"}
+
+    def revoke_tokens(self, user: User, tokens: list[str]) -> int:
+        """Blacklist provided tokens; roll back on commit errors."""
+        try:
+            for token in tokens:
+                self.db.add(TokenBlacklist(token=token, user_id=user.id))
+            self.db.commit()
+            return len(tokens)
+        except Exception:
+            self.db.rollback()
+            raise
+
     # ----- Logging -----
     def log_activity(self, user_id: int, activity_type: str, details: Dict) -> None:
         activity = UserActivity(
             user_id=user_id, activity_type=activity_type, details=details
         )
         self.db.add(activity)
+        self.db.commit()
+
+    # ----- Privacy-first utilities -----
+    def export_user_data(self, current_user: User) -> dict:
+        posts = (
+            self.db.query(models.Post)
+            .filter(models.Post.owner_id == current_user.id)
+            .all()
+        )
+        comments = (
+            self.db.query(models.Comment)
+            .filter(models.Comment.owner_id == current_user.id)
+            .all()
+        )
+        identities = (
+            self.db.query(UserIdentity)
+            .filter(UserIdentity.main_user_id == current_user.id)
+            .all()
+        )
+        return {
+            "user": {
+                "id": current_user.id,
+                "email": current_user.email,
+                "created_at": current_user.created_at,
+                "privacy_level": current_user.privacy_level,
+            },
+            "posts": [
+                {
+                    "id": p.id,
+                    "title": p.title,
+                    "created_at": p.created_at,
+                    "is_encrypted": getattr(p, "is_encrypted", False),
+                    "is_living_testimony": getattr(p, "is_living_testimony", False),
+                }
+                for p in posts
+            ],
+            "comments": [
+                {
+                    "id": c.id,
+                    "post_id": c.post_id,
+                    "content": c.content,
+                    "created_at": c.created_at,
+                }
+                for c in comments
+            ],
+            "identities": identities,
+        }
+
+    def delete_account(self, current_user: User) -> None:
+        self.db.delete(current_user)
+        self.db.commit()
+
+    # ----- Multi-identity management -----
+    def link_identity(
+        self, current_user: User, linked_user_id: int, relationship_type: str = "alias"
+    ) -> UserIdentity:
+        if linked_user_id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot link to the same account")
+
+        linked_user = self.db.query(User).filter(User.id == linked_user_id).first()
+        if not linked_user:
+            raise HTTPException(status_code=404, detail="Linked user not found")
+
+        existing = (
+            self.db.query(UserIdentity)
+            .filter(
+                UserIdentity.main_user_id == current_user.id,
+                UserIdentity.linked_user_id == linked_user_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
+        identity = UserIdentity(
+            main_user_id=current_user.id,
+            linked_user_id=linked_user_id,
+            relationship_type=relationship_type,
+        )
+        self.db.add(identity)
+        self.db.commit()
+        self.db.refresh(identity)
+        return identity
+
+    def list_identities(self, current_user: User) -> List[UserIdentity]:
+        return (
+            self.db.query(UserIdentity)
+            .filter(UserIdentity.main_user_id == current_user.id)
+            .all()
+        )
+
+    def remove_identity(self, current_user: User, linked_user_id: int) -> None:
+        identity = (
+            self.db.query(UserIdentity)
+            .filter(
+                UserIdentity.main_user_id == current_user.id,
+                UserIdentity.linked_user_id == linked_user_id,
+            )
+            .first()
+        )
+        if not identity:
+            raise HTTPException(status_code=404, detail="Identity link not found")
+        self.db.delete(identity)
         self.db.commit()

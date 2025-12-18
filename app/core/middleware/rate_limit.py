@@ -9,7 +9,7 @@ from app.core.config import settings
 
 
 class _NoOpLimiter:
-    """Disable rate limiting when running tests."""
+    """Disable rate limiting when running tests to keep fixtures deterministic."""
 
     def limit(self, *args, **kwargs):
         def decorator(func):

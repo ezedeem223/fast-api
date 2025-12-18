@@ -1,3 +1,5 @@
+"""Search router covering plain and advanced search with spell suggestions and cache integration."""
+
 import os
 import json
 import logging
@@ -39,9 +41,7 @@ router = APIRouter(prefix="/search", tags=["Search"])
 
 
 def _cache_client():
-    """
-    Resolve the Redis client for caching, skipping it entirely in tests.
-    """
+    """Endpoint: _cache_client."""
     app_env = os.getenv("APP_ENV", settings.environment).lower()
     if app_env == "test":
         return None
@@ -202,18 +202,14 @@ async def advanced_search(
 
 @router.get("/categories", response_model=List[schemas.Category])
 async def get_categories(db: Session = Depends(get_db)):
-    """
-    Get a list of all categories.
-    """
+    """Endpoint: get_categories."""
     categories = db.query(models.Category).all()
     return categories
 
 
 @router.get("/authors", response_model=List[schemas.UserOut])
 async def get_authors(db: Session = Depends(get_db)):
-    """
-    Get a list of authors who have posts.
-    """
+    """Endpoint: get_authors."""
     authors = db.query(models.User).filter(models.User.post_count > 0).all()
     return authors
 
@@ -311,9 +307,7 @@ async def recent_searches(
 
 @router.get("/trends")
 async def search_trends(current_user: models.User = Depends(oauth2.get_current_admin)):
-    """
-    Get search trends chart.
-    """
+    """Endpoint: search_trends."""
     chart = generate_search_trends_chart()
     return {"chart": chart}
 
