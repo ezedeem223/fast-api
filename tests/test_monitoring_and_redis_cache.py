@@ -9,7 +9,6 @@ from app.core import monitoring
 from app.core.cache import redis_cache
 from app.core.config import settings
 
-
 # ---------------- Monitoring setup ----------------
 
 
@@ -49,9 +48,11 @@ async def test_redis_cache_disabled_when_url_missing(monkeypatch):
 @pytest.mark.asyncio
 async def test_redis_cache_ping_failure(monkeypatch):
     object.__setattr__(settings, "REDIS_URL", "redis://example")
+
     class BadRedis:
         async def ping(self):
             raise RuntimeError("conn fail")
+
     monkeypatch.setattr(redis_cache.redis, "from_url", lambda *a, **k: BadRedis())
     cache = redis_cache.RedisCache()
     await cache.init_cache()
@@ -63,12 +64,21 @@ async def test_redis_cache_ping_failure(monkeypatch):
 async def test_redis_cache_hit_miss(monkeypatch):
     object.__setattr__(settings, "REDIS_URL", "redis://example")
     store = {}
+
     class FakeRedis:
-        async def ping(self): return True
-        async def get(self, k): return store.get(k)
-        async def set(self, k, v, ex=None): store[k] = v
+        async def ping(self):
+            return True
+
+        async def get(self, k):
+            return store.get(k)
+
+        async def set(self, k, v, ex=None):
+            store[k] = v
+
         async def delete(self, *keys):
-            for k in keys: store.pop(k, None)
+            for k in keys:
+                store.pop(k, None)
+
     monkeypatch.setattr(redis_cache.redis, "from_url", lambda *a, **k: FakeRedis())
     cache = redis_cache.RedisCache()
     await cache.init_cache()
@@ -82,40 +92,71 @@ async def test_redis_cache_hit_miss(monkeypatch):
 async def test_redis_cache_set_many_get_many_and_tags(monkeypatch):
     object.__setattr__(settings, "REDIS_URL", "redis://example")
     store = {}
+
     class FakePipeline:
-        def __init__(self): self.ops = []
-        def set(self, k, v, ex=None): self.ops.append(("set", k, v, ex)); return self
-        def sadd(self, k, v): self.ops.append(("sadd", k, v)); return self
-        def expire(self, k, ttl): self.ops.append(("expire", k, ttl)); return self
-        def get(self, k): self.ops.append(("get", k)); return self
+        def __init__(self):
+            self.ops = []
+
+        def set(self, k, v, ex=None):
+            self.ops.append(("set", k, v, ex))
+            return self
+
+        def sadd(self, k, v):
+            self.ops.append(("sadd", k, v))
+            return self
+
+        def expire(self, k, ttl):
+            self.ops.append(("expire", k, ttl))
+            return self
+
+        def get(self, k):
+            self.ops.append(("get", k))
+            return self
+
         async def execute(self):
             results = []
             for op in self.ops:
                 if op[0] == "set":
-                    _, k, v, ex = op; store[k] = v; results.append(True)
+                    _, k, v, ex = op
+                    store[k] = v
+                    results.append(True)
                 elif op[0] == "sadd":
-                    _, k, v = op; store.setdefault(k, set()).add(v); results.append(True)
+                    _, k, v = op
+                    store.setdefault(k, set()).add(v)
+                    results.append(True)
                 elif op[0] == "expire":
                     results.append(True)
                 elif op[0] == "get":
                     _, k = op
                     results.append(store.get(k))
             return results
+
     class FakeRedis:
-        async def ping(self): return True
-        def pipeline(self): return FakePipeline()
-        async def get(self, k): return store.get(k)
+        async def ping(self):
+            return True
+
+        def pipeline(self):
+            return FakePipeline()
+
+        async def get(self, k):
+            return store.get(k)
+
         async def delete(self, *keys):
-            for k in keys: store.pop(k, None)
+            for k in keys:
+                store.pop(k, None)
+
         async def scan(self, cursor, match=None, count=None):
             return 0, []
-        async def smembers(self, k): return store.get(k, set())
+
+        async def smembers(self, k):
+            return store.get(k, set())
+
     monkeypatch.setattr(redis_cache.redis, "from_url", lambda *a, **k: FakeRedis())
     cache = redis_cache.RedisCache()
     await cache.init_cache()
-    await cache.set_many({"k1": {"v":1}, "k2": {"v":2}})
-    vals = await cache.get_many(["k1","k2"])
-    assert vals["k1"] == {"v":1} and vals["k2"] == {"v":2}
-    await cache.set_with_tags("k1", {"v":1}, tags=["t1"], ttl=5)
+    await cache.set_many({"k1": {"v": 1}, "k2": {"v": 2}})
+    vals = await cache.get_many(["k1", "k2"])
+    assert vals["k1"] == {"v": 1} and vals["k2"] == {"v": 2}
+    await cache.set_with_tags("k1", {"v": 1}, tags=["t1"], ttl=5)
     await cache.invalidate_by_tag("t1")
     assert await cache.get("k1") is None

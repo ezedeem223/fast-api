@@ -150,11 +150,22 @@ def test_health_smoke_and_readyz_fail_then_ok(monkeypatch, client, session):
 
     monkeypatch.setattr(cache_manager, "redis", None)
     app = client.app
+    # Preserve the working override to restore it after simulating failure.
+    original_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = failing_db
     bad = client.get("/readyz")
     assert bad.status_code == 503
     assert bad.json()["detail"]["database"] == "disconnected"
 
-    app.dependency_overrides.pop(get_db, None)
+    # Restore DB override to use the test session again (or the prior override if set)
+    if original_override:
+        app.dependency_overrides[get_db] = original_override
+    else:
+        def _test_db():
+            try:
+                yield session
+            finally:
+                pass
+        app.dependency_overrides[get_db] = _test_db
     good = client.get("/readyz")
     assert good.status_code == 200

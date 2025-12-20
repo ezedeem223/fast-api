@@ -174,7 +174,8 @@ def login_2fa(
         raise HTTPException(status_code=400, detail="Invalid request")
 
     totp = pyotp.TOTP(user.otp_secret)
-    if not totp.verify(otp.otp):
+    # Allow a small window to tolerate clock drift between client and server.
+    if not totp.verify(otp.otp, valid_window=1):
         raise HTTPException(status_code=400, detail="Invalid OTP code")
 
     return complete_login(user, db, request, background_tasks)

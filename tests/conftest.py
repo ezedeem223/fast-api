@@ -45,6 +45,7 @@ os.environ["REDIS_URL"] = ""
 from app import models
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.cache.redis_cache import cache_manager
 from app.main import app
 from app.oauth2 import create_access_token
 
@@ -281,6 +282,16 @@ def client(session):
             yield test_client
         finally:
             app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _reset_redis_health():
+    """Reset Redis configuration/state between tests to avoid cross-test leakage."""
+    object.__setattr__(settings, "REDIS_URL", os.getenv("REDIS_URL", ""))
+    cache_manager.redis = None
+    cache_manager.enabled = False
+    cache_manager.failed_init = False
+    yield
 
 
 @pytest.fixture(scope="function")

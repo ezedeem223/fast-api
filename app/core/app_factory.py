@@ -176,18 +176,21 @@ def _register_routes(app: FastAPI) -> None:
 
         # 2. Check Redis
         try:
-            if cache_manager.redis:
-                await cache_manager.redis.ping()
+            redis_client = getattr(cache_manager, "redis", None)
+            redis_url = getattr(settings, "redis_url", None) or os.getenv("REDIS_URL")
+
+            if redis_client:
+                await redis_client.ping()
                 health_status["redis"] = "connected"
+            elif redis_url:
+                # Redis configured but no client available.
+                health_status["redis"] = "disconnected (client not init)"
+                is_ready = False
+            elif getattr(cache_manager, "failed_init", False):
+                health_status["redis"] = "disconnected"
+                is_ready = False
             else:
-                # If Redis is not enabled/configured, consider it skipped/disconnected based on strictness
-                if getattr(cache_manager, "failed_init", False) and settings.environment.lower() == "test":
-                    health_status["redis"] = "skipped"
-                elif settings.redis_url:
-                    health_status["redis"] = "disconnected (client not init)"
-                    is_ready = False
-                else:
-                    health_status["redis"] = "skipped"
+                health_status["redis"] = "skipped"
         except Exception as e:
             logger.error(f"Readiness check failed (Redis): {e}")
             health_status["redis"] = "disconnected"

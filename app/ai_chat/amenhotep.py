@@ -205,7 +205,7 @@ class AmenhotepAI:
         from random import choice
 
         # Add a random prefix to the response
-        response = f\"{choice(royal_prefixes)}, {response}\"
+        response = f"{choice(royal_prefixes)}, {response}"
         # Append a random suffix if not already present
         if not any(suffix in response for suffix in royal_suffixes):
             response = f"{response}. {choice(royal_suffixes)}."
