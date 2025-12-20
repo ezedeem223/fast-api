@@ -1,13 +1,10 @@
-import os
 import json
 import logging
 import importlib
-import asyncio
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi.testclient import TestClient
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
 
 from app.core import logging_config

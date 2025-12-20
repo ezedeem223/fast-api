@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timezone
 
 from app import models, schemas
 from app.services.community.service import CommunityService

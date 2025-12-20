@@ -133,8 +133,6 @@ def test_health_smoke_and_readyz_fail_then_ok(monkeypatch, client, session):
     assert resp.status_code == 200
     assert "X-Request-ID" in resp.headers
 
-    original_get_db = get_db
-
     def failing_db():
         try:
             class Dummy:

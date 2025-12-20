@@ -1,4 +1,3 @@
-import os
 from types import SimpleNamespace
 
 import pytest
@@ -83,7 +82,6 @@ def test_rate_limit_disabled(monkeypatch):
 def test_rate_limit_enabled_handles_exception(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     app = FastAPI()
-    from fastapi.responses import JSONResponse
     app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse({"error": "rate_limit_exceeded"}, status_code=429))
 
     class DummyLimit:

@@ -1,6 +1,6 @@
+# ruff: noqa: E402
 import sys
 import types
-import pytest
 
 dummy_tf = types.ModuleType("transformers")
 dummy_tf.pipeline = lambda *a, **k: (lambda text: [{"label": "POSITIVE", "score": 1.0}])

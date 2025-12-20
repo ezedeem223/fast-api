@@ -1,9 +1,7 @@
-import pytest
 from sqlalchemy import text
 
 from app.core.database import query_helpers, session as db_session_mod
 from app import models
-import tests.database as test_db
 
 
 def test_paginate_and_cursor_limits(session):

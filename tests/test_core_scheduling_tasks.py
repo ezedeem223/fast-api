@@ -1,13 +1,10 @@
 """Covers scheduler startup/beat wiring and environment guards without touching real schedulers or Firebase."""
 
-import asyncio
-import os
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 
-from app.core import scheduling
 from app.core.scheduling import tasks
 from app.core.config import settings
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from sqlalchemy import func, extract, desc, and_
+from sqlalchemy import func, extract, desc
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
@@ -1297,7 +1297,7 @@ class PostService:
                 func.count(Post.id).label("posts_count"),
                 func.sum(Post.score).label("total_score"),
             )
-            .filter(Post.owner_id == user_id, Post.is_deleted == False)
+            .filter(Post.owner_id == user_id, Post.is_deleted.is_(False))
             .group_by("year", "month")
             .order_by(desc("year"), desc("month"))
             .all()
@@ -1322,7 +1322,7 @@ class PostService:
             self.db.query(Post)
             .filter(
                 Post.owner_id == user_id,
-                Post.is_deleted == False,
+                Post.is_deleted.is_(False),
                 extract("month", Post.created_at) == today.month,
                 extract("day", Post.created_at) == today.day,
                 extract("year", Post.created_at) < today.year,

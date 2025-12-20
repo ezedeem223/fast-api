@@ -1,6 +1,5 @@
 import pytest
 from fastapi import BackgroundTasks, HTTPException
-from datetime import datetime, timezone
 
 from app import models, schemas
 from app.modules.posts.models import PostRelation

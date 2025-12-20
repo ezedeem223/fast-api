@@ -2,8 +2,6 @@ import asyncio
 import os
 import time
 import json
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware

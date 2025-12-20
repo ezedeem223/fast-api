@@ -78,7 +78,6 @@ async def test_message_service_send_file_and_ordering(session, monkeypatch, tmp_
     sender = _user(session, "file@example.com")
     recv = _user(session, "file2@example.com")
     monkeypatch.setattr(service, "_scan_file_for_viruses", lambda path: True)
-    tasks = BackgroundTasks()
 
     file_content = b"file-bytes"
     upload = UploadFile(file=BytesIO(file_content), filename="a.txt")

@@ -1,7 +1,6 @@
 import importlib
 import sys
 import types
-import pytest
 
 
 def _load_analytics_with_stubbed_transformers():

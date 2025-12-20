@@ -6,8 +6,8 @@ import base64
 import json
 from typing import Any, Dict, Optional
 
-from sqlalchemy import asc, desc, func
-from sqlalchemy.orm import Query, contains_eager, joinedload, selectinload
+from sqlalchemy import asc, desc
+from sqlalchemy.orm import Query, joinedload, selectinload
 
 
 def with_joined_loads(query: Query, *relationships) -> Query:

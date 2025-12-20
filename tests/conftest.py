@@ -1,8 +1,8 @@
+# ruff: noqa: E402
 import os
 import asyncio
 import atexit
 from typing import Any
-import warnings
 
 import psycopg2
 import pytest

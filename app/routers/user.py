@@ -22,7 +22,6 @@ from app.modules.users.models import User
 from app.modules.users.schemas import IdentityLinkCreate, IdentityOut, DataExportOut
 from app.core.database import get_db
 from ..notifications import send_email_notification
-from ..cache import cache
 from app.modules.utils.events import log_user_event
 from ..i18n import (
     ALL_LANGUAGES,

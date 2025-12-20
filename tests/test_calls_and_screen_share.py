@@ -1,10 +1,10 @@
-from datetime import timedelta, datetime, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from app.main import app
-from app import oauth2, models, schemas
+from app import oauth2, models
 from app.modules.messaging.models import CallStatus, ScreenShareStatus
 
 

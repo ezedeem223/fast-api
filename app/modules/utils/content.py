@@ -25,7 +25,6 @@ from transformers import pipeline
 import nltk
 from nltk.corpus import stopwords
 import logging
-import re
 
 from app import models
 from app.core.config import settings
@@ -55,7 +54,6 @@ def _get_offensive_classifier():
         _offensive_classifier = _stub
         return _offensive_classifier
 
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     model_name = "cardiffnlp/twitter-roberta-base-offensive"
     _offensive_classifier = pipeline(

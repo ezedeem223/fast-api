@@ -1,8 +1,6 @@
-import asyncio
 from types import SimpleNamespace
 
 import pytest
-from fastapi import Depends
 
 from app.main import app
 from app.core.database import get_db

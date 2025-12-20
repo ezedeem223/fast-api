@@ -1,11 +1,9 @@
-import json
 from unittest.mock import AsyncMock, MagicMock
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app import models
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.service import (
     NotificationService,
@@ -13,7 +11,6 @@ from app.modules.notifications.service import (
     MAX_METADATA_BYTES,
 )
 from app.modules.notifications.common import notification_cache, delivery_status_cache
-from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications import schemas as notification_schemas
 from app.modules.notifications import service as notifications_service
 

@@ -16,7 +16,6 @@ from app.modules.notifications.service import (
     NotificationManager,
 )
 from app.modules.notifications.analytics import NotificationAnalyticsService
-from app.firebase_config import send_push_notification  # Firebase push notifications
 from app.core.middleware.rate_limit import limiter
 from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
 

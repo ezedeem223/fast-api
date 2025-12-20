@@ -1,14 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import pytest
 from app import celery_worker
 from app.celery_worker import (
     process_scheduled_notifications,
     deliver_notification,
 )
 from app.modules.notifications import models as notification_models
-from app.modules.notifications.service import NotificationService
 
 
 # ============== 33) celery process_scheduled_notifications ==============

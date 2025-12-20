@@ -212,7 +212,6 @@ class Settings(BaseSettings):
         then composed Postgres parts, then `TEST_DATABASE_URL`, finally sqlite fallback.
         Enforces dedicated test DB names to avoid destructive writes to prod data.
         """
-        env = getattr(self, "environment", os.getenv("APP_ENV", "production")).lower()
         effective_use_test = bool(use_test)
 
         if effective_use_test:

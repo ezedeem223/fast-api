@@ -1,4 +1,3 @@
-import pytest
 from app.modules.posts.models import Post, PostRelation
 from app.services.posts.post_service import PostService
 

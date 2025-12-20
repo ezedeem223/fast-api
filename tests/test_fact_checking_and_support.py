@@ -1,4 +1,3 @@
-import pytest
 
 from app import models
 from app.modules.fact_checking.models import FactCheckStatus

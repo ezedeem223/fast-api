@@ -1,7 +1,5 @@
 import json
-from datetime import datetime, timezone
 
-import pytest
 
 from app.modules.utils import analytics as utils_analytics
 from app.modules.utils import content as utils_content

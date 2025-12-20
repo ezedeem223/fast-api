@@ -11,16 +11,13 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 
 from .. import models, schemas, oauth2
 from app.core.database import get_db
-from app.notifications import queue_email_notification, schedule_email_notification
+from ..notifications import queue_email_notification, schedule_email_notification  # noqa: F401
 
 from app.services.community.service import CommunityService
 
-from app.modules.community.models import Community, CommunityMember
-from app.core.middleware.rate_limit import limiter
 from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
 
 

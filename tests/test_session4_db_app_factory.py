@@ -1,5 +1,3 @@
-import os
-import json
 import pytest
 from sqlalchemy import text
 from tests.testclient import TestClient

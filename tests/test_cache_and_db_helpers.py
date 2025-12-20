@@ -1,8 +1,7 @@
-import asyncio
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.core.cache import redis_cache
@@ -101,7 +100,11 @@ def test_get_db_yields_and_closes(monkeypatch):
 
 
 def test_paginate_query_bounds():
-    q = SimpleNamespace(offset=lambda s: SimpleNamespace(limit=lambda l: ("skip", s, "limit", l)))
+    q = SimpleNamespace(
+        offset=lambda skip_val: SimpleNamespace(
+            limit=lambda limit_val: ("skip", skip_val, "limit", limit_val)
+        )
+    )
     res = query_helpers.paginate_query(q, skip=-5, limit=1000)
     assert res[1] == 0 and res[3] == 100
 

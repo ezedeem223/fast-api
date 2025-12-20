@@ -1,7 +1,5 @@
 import json
-import os
 
-import pytest
 
 from app import models
 from app.core.config import settings

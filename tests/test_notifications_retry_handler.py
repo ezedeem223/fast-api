@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sqlalchemy import text
 
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.service import NotificationRetryHandler

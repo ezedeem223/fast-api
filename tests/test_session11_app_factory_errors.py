@@ -1,4 +1,3 @@
-import pytest
 from fastapi import FastAPI, Body
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError

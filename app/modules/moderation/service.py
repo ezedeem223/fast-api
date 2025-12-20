@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import logging
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session

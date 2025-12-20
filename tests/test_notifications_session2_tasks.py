@@ -1,7 +1,6 @@
-import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -9,10 +8,7 @@ from app import celery_worker
 from app.modules.notifications import models as notification_models
 from app.modules.notifications import batching
 from app.modules.notifications import realtime
-from app.modules.notifications import common
 from app.modules.notifications.tasks import (
-    cleanup_old_notifications_task,
-    process_scheduled_notifications_task,
     deliver_notification_task,
     send_push_notification_task,
 )

@@ -7,12 +7,10 @@ import json
 import logging
 import hashlib
 import functools
-from typing import Any, Optional, Union, Callable
-from datetime import timedelta
+from typing import Any, Optional
 import time
 
 import redis.asyncio as redis
-from fastapi import Request, Response
 
 from app.core.config import settings
 import asyncio

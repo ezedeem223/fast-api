@@ -1,8 +1,7 @@
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import models, schemas, oauth2
+from app import models, oauth2
 from app.core.database import get_db
 from app.routers import post as post_router
 from app.routers import comment as comment_router
@@ -77,7 +76,7 @@ def test_community_create_requires_verified_and_join_private(session):
     client_owner = make_client(session, current_user=owner)
     resp_ok = client_owner.post("/communities/", json={"name": "C2", "description": "d"})
     assert resp_ok.status_code == 201
-    community_id = resp_ok.json()["id"]
+    _ = resp_ok.json()["id"]
 
     private = client_owner.post("/communities/", json={"name": "P", "description": "d", "is_private": True}).json()
     other = _user(session, email="join@example.com")

@@ -1,8 +1,6 @@
 import asyncio
-import json
 import pytest
 from app.core.cache import redis_cache
-from app.core import scheduling
 from app.core.config import settings
 
 

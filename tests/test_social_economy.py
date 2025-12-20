@@ -1,4 +1,3 @@
-import pytest
 from app.modules.posts.models import Post
 from app.modules.users.models import User
 

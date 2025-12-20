@@ -1,11 +1,10 @@
 import pytest
-from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from app.services.community.service import CommunityService, ACTIVITY_THRESHOLD_VIP
-from app.modules.community.models import CommunityRole, Community, CommunityMember, CommunityInvitation
+from app.modules.community.models import CommunityRole, CommunityMember, CommunityInvitation
 from app.modules.users.models import User
-from app.schemas import CommunityCreate, CommunityUpdate, CommunityInvitationCreate, CommunityMemberUpdate
+from app.schemas import CommunityCreate, CommunityUpdate, CommunityMemberUpdate
 
 
 def _make_user(session, email="owner@example.com", verified=True):

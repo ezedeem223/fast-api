@@ -1,19 +1,16 @@
 import asyncio
 import pytest
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 
 from app import models
 from app.core.config import settings
 from app.core.middleware import ip_ban, language as language_mw
-from app.modules.utils import network
 from app.routers import p2fa
 from app.core import exceptions as app_exceptions
-from app import crypto
 from app.modules.utils.security import hash as hash_password
-from app.oauth2 import create_access_token
 
 
 def _make_user(session, email="p2fa@example.com"):

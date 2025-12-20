@@ -1,12 +1,9 @@
-import asyncio
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock
 
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.tasks import (
     deliver_notification_task,
-    send_push_notification_task,
 )
 from app.modules.notifications import realtime
 

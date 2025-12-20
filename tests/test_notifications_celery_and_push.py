@@ -1,12 +1,9 @@
-import os
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from app.celery_worker import celery_app, cleanup_old_notifications, send_push_notification
+from app.celery_worker import celery_app, cleanup_old_notifications
 from app.modules.notifications.tasks import send_push_notification_task
-from app.modules.notifications import models as notification_models
 
 
 # ============== 30) send_push_notification_task ==============

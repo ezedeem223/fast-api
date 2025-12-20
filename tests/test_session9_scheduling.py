@@ -1,5 +1,4 @@
 import pytest
-from datetime import datetime, timezone
 
 from app.core.scheduling import tasks
 import app.celery_worker as celery_worker

@@ -1,8 +1,5 @@
-import pytest
-from app.modules.posts.models import Post, Reaction
+from app.modules.posts.models import Post
 
-from app.modules.social.models import Vote
-from app.modules.users.models import User
 from app.modules.social.economy_service import SocialEconomyService
 
 

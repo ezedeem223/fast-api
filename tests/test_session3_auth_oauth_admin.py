@@ -11,7 +11,6 @@ from app.core.config import settings
 from app.modules.utils.security import hash as hash_password
 from app.routers import auth as auth_router
 from app.routers import admin_dashboard
-from app.routers import moderator as moderator_router
 from app.modules.community import Community, CommunityMember, CommunityRole
 from app.modules.users.models import UserRole
 from app.oauth2 import create_access_token

@@ -1,4 +1,3 @@
-import pytest
 
 from app.modules.fact_checking.models import FactCheckStatus
 from app.modules.marketplace.models import (

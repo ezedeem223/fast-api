@@ -3,8 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import BackgroundTasks
-from starlette.websockets import WebSocketDisconnect
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.email import (
@@ -22,9 +21,8 @@ from app.modules.notifications.realtime import ConnectionManager
 from app.modules.notifications import common
 from app.modules.notifications.batching import NotificationBatcher
 from app.modules.notifications.repository import NotificationRepository
-from app.core.config import settings, fm
+from app.core.config import settings
 from fastapi_mail import MessageSchema
-import asyncio
 
 
 def test_queue_email_notification_adds_background_task():
@@ -251,7 +249,6 @@ async def test_connection_manager_cleans_up_broken_connections():
 
 
 def test_get_or_create_and_get_model_by_id(session, test_user, monkeypatch, caplog):
-    repo = NotificationRepository(session)
     created = common.get_or_create(
         session,
         notification_models.NotificationPreferences,

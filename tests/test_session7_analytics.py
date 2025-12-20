@@ -1,7 +1,6 @@
-import pytest
 from datetime import datetime, timedelta, timezone
 
-from app import models, schemas
+from app import models
 import app.analytics as analytics
 import app.modules.utils.analytics as utils_analytics
 

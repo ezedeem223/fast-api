@@ -1,9 +1,7 @@
 """Covers search cache (Redis-like) helpers and Typesense client fallback without real network/Redis."""
 
 import fnmatch
-from types import SimpleNamespace
 
-import pytest
 
 from app.core.config import settings
 from app.modules.search import cache as search_cache

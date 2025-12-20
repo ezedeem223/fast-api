@@ -1,6 +1,4 @@
-import pytest
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.modules.notifications import models as notification_models

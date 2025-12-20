@@ -28,7 +28,6 @@ def test_comment_length_and_db_failure(session, monkeypatch):
     # overly long content check via profanity/validate URLs (simulate failure)
     def fake_check(content, rules):
         return False
-    from app.services.comments import service as comment_service_module
     with pytest.raises(HTTPException):
         asyncio.run(
             service._validate_comment_content(

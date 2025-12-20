@@ -7,7 +7,6 @@ from app.modules.posts.models import Post, Comment
 from app.modules.users.models import User
 from app.modules.notifications import manager as notifications_manager
 from app.schemas import CommentCreate, CommentUpdate
-from unittest.mock import AsyncMock
 from datetime import timedelta
 
 

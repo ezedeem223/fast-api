@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -12,9 +13,6 @@ from app.modules.fact_checking.service import FactCheckingService
 from app.modules.users.models import User
 
 router = APIRouter(prefix="/fact-checking", tags=["Fact Checking"])
-
-# Schemas
-from pydantic import BaseModel
 
 
 class FactSubmitRequest(BaseModel):

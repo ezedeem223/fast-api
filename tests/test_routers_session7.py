@@ -6,7 +6,7 @@ import pyotp
 import pytest
 from fastapi import HTTPException
 
-from app import models, oauth2, schemas
+from app import models, schemas
 from app.ai_chat import amenhotep as amenhotep_module
 from app.core.config import settings
 from app.modules.search import typesense_client as ts_client

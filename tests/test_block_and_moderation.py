@@ -1,13 +1,11 @@
-from datetime import datetime, timedelta
 
 import pytest
 
 from types import SimpleNamespace
-import pytest
 
 from app.main import app
 from app import oauth2
-from app import models, schemas
+from app import models
 
 
 @pytest.fixture
