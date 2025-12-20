@@ -292,10 +292,12 @@ def _lifespan_factory():
     async def lifespan(app: FastAPI):
         # Startup
         app.state.connection_manager = manager
+        await cache_manager.init_cache()
 
         yield
 
         # Shutdown
+        await cache_manager.close()
 
     return lifespan
 

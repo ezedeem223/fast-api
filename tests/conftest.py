@@ -2,6 +2,7 @@
 import os
 import asyncio
 import atexit
+import importlib
 from typing import Any
 
 import psycopg2
@@ -45,6 +46,7 @@ os.environ["REDIS_URL"] = ""
 from app import models
 from app.core.config import settings
 from app.core.database import Base, get_db
+from app.core.cache import redis_cache as rc
 from app.core.cache.redis_cache import cache_manager
 from app.main import app
 from app.oauth2 import create_access_token
@@ -286,7 +288,9 @@ def client(session):
 
 @pytest.fixture(autouse=True, scope="function")
 def _reset_redis_health():
-    """Reset Redis configuration/state between tests to avoid cross-test leakage."""
+    """Reset Redis configuration/state between tests to avoid leakage; tests can override as needed."""
+    # Restore real redis factory
+    rc.redis = importlib.import_module("redis.asyncio")
     object.__setattr__(settings, "REDIS_URL", os.getenv("REDIS_URL", ""))
     cache_manager.redis = None
     cache_manager.enabled = False
