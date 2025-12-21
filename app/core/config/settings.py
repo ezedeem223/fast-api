@@ -360,11 +360,12 @@ class Settings(BaseSettings):
     @property
     def mail_config(self) -> ConnectionConfig:
         config_data = {
-            "MAIL_USERNAME": self.mail_username,
-            "MAIL_PASSWORD": self.mail_password,
-            "MAIL_FROM": self.mail_from,
+            # FastMail requires string fields; fallback to empty strings in test/CI.
+            "MAIL_USERNAME": self.mail_username or "",
+            "MAIL_PASSWORD": self.mail_password or "",
+            "MAIL_FROM": self.mail_from or "",
             "MAIL_PORT": self.mail_port,
-            "MAIL_SERVER": self.mail_server,
+            "MAIL_SERVER": self.mail_server or "",
             "MAIL_FROM_NAME": "Your App Name",
             "MAIL_STARTTLS": True,
             "MAIL_SSL_TLS": False,
