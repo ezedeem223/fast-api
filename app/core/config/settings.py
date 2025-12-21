@@ -359,11 +359,12 @@ class Settings(BaseSettings):
 
     @property
     def mail_config(self) -> ConnectionConfig:
+        from_address = self.mail_from or "noreply@example.com"
         config_data = {
             # FastMail requires string fields; fallback to empty strings in test/CI.
             "MAIL_USERNAME": self.mail_username or "",
             "MAIL_PASSWORD": self.mail_password or "",
-            "MAIL_FROM": self.mail_from or "",
+            "MAIL_FROM": from_address,
             "MAIL_PORT": self.mail_port,
             "MAIL_SERVER": self.mail_server or "",
             "MAIL_FROM_NAME": "Your App Name",
