@@ -36833,3 +36833,5 @@ Exception: None
 Exception: None
 2025-12-20 19:51:30 | ERROR    | app.utils:is_ip_banned:47 | Error checking IP ban for 1.1.1.1: db down
 Exception: None
+2025-12-21 13:38:40 | ERROR    | app.core.app_factory:readyz:173 | Readiness check failed (Database): db down
+Exception: None

@@ -96,22 +96,22 @@ class Settings(BaseSettings):
     # REDDIT_CLIENT_ID: str = os.getenv("REDDIT_CLIENT_ID", "default_reddit_client_id")
     # REDDIT_CLIENT_SECRET: str = os.getenv("REDDIT_CLIENT_SECRET", "default_reddit_client_secret")
 
-    mail_username: str = os.getenv("MAIL_USERNAME")
-    mail_password: str = os.getenv("MAIL_PASSWORD")
-    mail_from: EmailStr = os.getenv("MAIL_FROM")
+    mail_username: Optional[str] = os.getenv("MAIL_USERNAME")
+    mail_password: Optional[str] = os.getenv("MAIL_PASSWORD")
+    mail_from: Optional[EmailStr] = os.getenv("MAIL_FROM")
     mail_port: int = int(os.getenv("MAIL_PORT", 587))
-    mail_server: str = os.getenv("MAIL_SERVER")
+    mail_server: Optional[str] = os.getenv("MAIL_SERVER")
 
-    facebook_access_token: str = os.getenv("FACEBOOK_ACCESS_TOKEN")
-    facebook_app_id: str = os.getenv("FACEBOOK_APP_ID")
-    facebook_app_secret: str = os.getenv("FACEBOOK_APP_SECRET")
-    twitter_api_key: str = os.getenv("TWITTER_API_KEY")
-    twitter_api_secret: str = os.getenv("TWITTER_API_SECRET")
-    twitter_access_token: str = os.getenv("TWITTER_ACCESS_TOKEN")
-    twitter_access_token_secret: str = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    facebook_access_token: Optional[str] = os.getenv("FACEBOOK_ACCESS_TOKEN")
+    facebook_app_id: Optional[str] = os.getenv("FACEBOOK_APP_ID")
+    facebook_app_secret: Optional[str] = os.getenv("FACEBOOK_APP_SECRET")
+    twitter_api_key: Optional[str] = os.getenv("TWITTER_API_KEY")
+    twitter_api_secret: Optional[str] = os.getenv("TWITTER_API_SECRET")
+    twitter_access_token: Optional[str] = os.getenv("TWITTER_ACCESS_TOKEN")
+    twitter_access_token_secret: Optional[str] = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
 
-    huggingface_api_token: str = os.getenv("HUGGINGFACE_API_TOKEN")
-    refresh_secret_key: str = os.getenv("REFRESH_SECRET_KEY")
+    huggingface_api_token: Optional[str] = os.getenv("HUGGINGFACE_API_TOKEN")
+    refresh_secret_key: Optional[str] = os.getenv("REFRESH_SECRET_KEY")
     default_language: str = os.getenv("DEFAULT_LANGUAGE", "ar")
     followers_visibility: str = os.getenv("FOLLOWERS_VISIBILITY", "public")
     followers_custom_visibility: dict[str, Any] = {}
@@ -121,13 +121,13 @@ class Settings(BaseSettings):
     ui_settings: Optional[dict[str, Any]] = None
     notifications_settings: Optional[dict[str, Any]] = None
 
-    firebase_api_key: str = os.getenv("FIREBASE_API_KEY")
-    firebase_auth_domain: str = os.getenv("FIREBASE_AUTH_DOMAIN")
-    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID")
-    firebase_storage_bucket: str = os.getenv("FIREBASE_STORAGE_BUCKET")
-    firebase_messaging_sender_id: str = os.getenv("FIREBASE_MESSAGING_SENDER_ID")
-    firebase_app_id: str = os.getenv("FIREBASE_APP_ID")
-    firebase_measurement_id: str = os.getenv("FIREBASE_MEASUREMENT_ID")
+    firebase_api_key: Optional[str] = os.getenv("FIREBASE_API_KEY")
+    firebase_auth_domain: Optional[str] = os.getenv("FIREBASE_AUTH_DOMAIN")
+    firebase_project_id: Optional[str] = os.getenv("FIREBASE_PROJECT_ID")
+    firebase_storage_bucket: Optional[str] = os.getenv("FIREBASE_STORAGE_BUCKET")
+    firebase_messaging_sender_id: Optional[str] = os.getenv("FIREBASE_MESSAGING_SENDER_ID")
+    firebase_app_id: Optional[str] = os.getenv("FIREBASE_APP_ID")
+    firebase_measurement_id: Optional[str] = os.getenv("FIREBASE_MEASUREMENT_ID")
 
     NOTIFICATION_RETENTION_DAYS: int = 90
     MAX_BULK_NOTIFICATIONS: int = 1000
