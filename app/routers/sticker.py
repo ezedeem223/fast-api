@@ -14,7 +14,6 @@ import emoji
 # Import project modules
 from .. import models, schemas, oauth2
 from app.core.database import get_db
-from app.modules.users.models import UserRole
 from app.modules.stickers import models as sticker_models
 
 router = APIRouter(prefix="/stickers", tags=["Stickers"])

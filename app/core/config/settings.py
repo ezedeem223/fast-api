@@ -20,7 +20,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Any, ClassVar, Optional, List
+from typing import Any, ClassVar, Optional
 
 import redis
 from dotenv import load_dotenv

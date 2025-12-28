@@ -3,7 +3,7 @@ from app.modules.posts.models import Post, Reaction
 from app.modules.users.models import Badge, User, UserBadge
 import math
 from collections import defaultdict
-from typing import Iterable, Dict, Tuple
+from typing import Iterable, Dict
 from sqlalchemy import func
 try:
     from app.modules.social import economy_accel

@@ -44,6 +44,7 @@ from app.modules.community.schemas import (
     CommunityOutRef,
     CommunityRuleCreate,
     CommunityRuleOut,
+    Category,
 )
 from app.modules.community.schemas import *  # noqa: F401,F403
 from app.modules.users.schemas import (

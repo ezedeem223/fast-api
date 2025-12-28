@@ -15,7 +15,6 @@ import os
 import time
 from typing import Dict, Optional
 
-import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 

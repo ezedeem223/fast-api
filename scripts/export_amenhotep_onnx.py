@@ -8,7 +8,6 @@ Requires: torch, transformers, onnx, onnxruntime.
 """
 
 import argparse
-import os
 from pathlib import Path
 
 import torch

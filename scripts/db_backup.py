@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus

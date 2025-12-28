@@ -52,7 +52,7 @@ async def test_room_expiry_blocks_join(monkeypatch):
         "app.notifications.manager.send_personal_message", AsyncMock()
     )
 
-    state = await registry.create_room("expire", owner_id=1, allowed_participants=set(), ttl=-1)
+    await registry.create_room("expire", owner_id=1, allowed_participants=set(), ttl=-1)
     ws = FakeWebSocket([])
     owner = SimpleNamespace(id=1)
 
