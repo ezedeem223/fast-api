@@ -332,6 +332,25 @@ def logout_all_devices(
     return service.logout_other_sessions(current_user, current_session)
 
 
+@router.get("/sessions", response_model=List[schemas.UserSessionOut])
+async def list_sessions(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """List active sessions for the current user."""
+    return service.list_sessions(current_user)
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: str,
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(oauth2.get_current_user),
+):
+    """Terminate a specific session and blacklist its token."""
+    return service.revoke_session(current_user, session_id)
+
+
 @router.get("/suggested-follows", response_model=List[schemas.UserOut])
 def get_suggested_follows(
     service: UserService = Depends(get_user_service),

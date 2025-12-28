@@ -1,10 +1,16 @@
-# alembic/env.py
+"""Alembic configuration.
 
+Loads metadata from the shared Base, wires the database URL from env (prefers ALEMBIC_DATABASE_URL,
+then DATABASE_URL, then test URL), and runs migrations in offline/online modes.
+"""
+
+import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-from app.models import Base  # Import database models
+from app.models.base import Base  # Import shared declarative base
+import app.models  # noqa: F401 - ensure models are imported for metadata population
 from app.core.config import settings
 
 # Set the target metadata for Alembic migrations
@@ -12,10 +18,12 @@ target_metadata = [Base.metadata]
 
 config = context.config
 # Configure the SQLAlchemy URL using settings
-config.set_main_option(
-    "sqlalchemy.url",
-    f"postgresql+psycopg2://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}",
+db_url = (
+    os.getenv("ALEMBIC_DATABASE_URL")
+    or os.getenv("DATABASE_URL")
+    or settings.get_database_url(use_test=True)
 )
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Configure logging if a config file is provided
 if config.config_file_name is not None:

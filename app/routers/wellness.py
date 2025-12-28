@@ -1,4 +1,3 @@
-# app/routers/wellness.py
 """Wellness router for metrics, alerts, sessions, modes, and goals."""
 
 from typing import Optional
@@ -29,7 +28,7 @@ class DoNotDisturbRequest(BaseModel):
 async def get_wellness_metrics(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """    """
+    """Return current wellness metrics for the authenticated user."""
     metrics = WellnessService.get_or_create_metrics(db, current_user.id)
     return {
         "wellness_score": metrics.wellness_score,

@@ -78,15 +78,35 @@ class ReelService:
         self.db.commit()
 
     def cleanup_expired_reels(self) -> int:
-        """Bulk deactivate expired reels without loading all rows into memory."""
+        """Archive expired reels and mark them inactive."""
         now = datetime.now(timezone.utc)
-        updated = (
+        expired = (
             self.db.query(models.Reel)
             .filter(models.Reel.is_active.is_(True), models.Reel.expires_at <= now)
-            .update({"is_active": False}, synchronize_session=False)
+            .all()
         )
+        if not expired:
+            return 0
+
+        archives = [
+            models.ArchivedReel(
+                reel_id=reel.id,
+                title=reel.title,
+                video_url=reel.video_url,
+                description=reel.description,
+                owner_id=reel.owner_id,
+                community_id=reel.community_id,
+                expires_at=reel.expires_at,
+                view_count=reel.view_count,
+            )
+            for reel in expired
+        ]
+        self.db.add_all(archives)
+
+        for reel in expired:
+            reel.is_active = False
         self.db.commit()
-        return updated or 0
+        return len(expired)
 
     # ------------------------------------------------------------------
     def _ensure_membership(self, user_id: int, community_id: int) -> None:

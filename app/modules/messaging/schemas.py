@@ -1,4 +1,7 @@
-"""Messaging domain Pydantic schemas."""
+"""Messaging domain Pydantic schemas.
+
+Covers messages, attachments, conversations/members, calls/screen shares, and encrypted sessions.
+"""
 
 from __future__ import annotations
 

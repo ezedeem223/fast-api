@@ -1,8 +1,14 @@
-"""Centralised scheduling and startup task registration."""
+"""Centralised scheduling and startup task registration.
+
+- Registers startup handlers (search suggestions, post scores, notifications cleanup/retry).
+- Configures APScheduler in non-test environments with cron jobs for statistics/communities.
+- Guards repeat_every tasks in tests to avoid lingering background tasks.
+"""
 
 from __future__ import annotations
 
 import logging
+import asyncio
 import inspect
 from pathlib import Path
 from typing import Optional
@@ -29,6 +35,21 @@ from app.services.reels import ReelService
 
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async_blocking(awaitable):
+    """
+    Execute an awaitable from sync contexts, creating an event loop when none exists.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(awaitable)
 
 
 def _is_test_env() -> bool:
@@ -69,6 +90,9 @@ def register_startup_tasks(app: FastAPI) -> None:
     """
     Attach startup/shutdown handlers and scheduled background tasks to the FastAPI app.
     """
+    if getattr(app.state, "_startup_tasks_registered", False):
+        return
+
     app.add_event_handler("startup", _startup_event_factory(app))
     app.add_event_handler("startup", update_search_suggestions_task)
     app.add_event_handler("startup", update_all_post_scores)
@@ -82,6 +106,8 @@ def register_startup_tasks(app: FastAPI) -> None:
 
         app.add_event_handler("shutdown", _shutdown_scheduler)
         app.state.scheduler = scheduler
+
+    app.state._startup_tasks_registered = True
 
 
 def _configure_scheduler() -> Optional[BackgroundScheduler]:
@@ -175,7 +201,10 @@ def cleanup_old_notifications() -> None:
     db = SessionLocal()
     try:
         notification_service = NotificationService(db)
-        notification_service.cleanup_old_notifications(30)
+        result = notification_service.cleanup_old_notifications(30)
+        if inspect.isawaitable(result):
+            return _run_async_blocking(result)
+        return result
     finally:
         db.close()
 
@@ -193,8 +222,18 @@ def retry_failed_notifications() -> None:
             .all()
         )
         notification_service = NotificationService(db)
+        errors = []
         for notification in notifications:
-            notification_service.retry_failed_notification(notification.id)
+            try:
+                result = notification_service.retry_failed_notification(notification.id)
+                if inspect.isawaitable(result):
+                    _run_async_blocking(result)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Failed to retry notification %s: %s", notification.id, exc)
+                errors.append(exc)
+        if errors and len(errors) == len(notifications):
+            # Surface failure when every notification retry failed.
+            raise errors[0]
     finally:
         db.close()
 
@@ -203,7 +242,7 @@ def retry_failed_notifications() -> None:
 def cleanup_expired_reels_task() -> None:
     db = SessionLocal()
     try:
-        ReelService(db).cleanup_expired_reels()
+        return ReelService(db).cleanup_expired_reels()
     except Exception as exc:  # pragma: no cover - defensive log
         logger.error("Failed to cleanup expired reels: %s", exc)
         raise

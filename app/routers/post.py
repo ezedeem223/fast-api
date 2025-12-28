@@ -1,13 +1,8 @@
-# app/routers/post.py
+"""Posts router.
 
-"""
-This module defines the API endpoints for managing posts in the social media application.
-It includes functionalities for:
-    - Searching, creating, updating, and deleting posts.
-    - Uploading media files (images, audio, short videos).
-    - Handling reposts, poll posts, comments, notifications, and exporting posts as PDF.
-
-Helper functions and global constants are defined at the beginning to organize the code.
+Scope: CRUD for posts/comments, reposts, polls, media uploads, audio, recommendations, translations, and PDF export.
+Auth: All endpoints require authenticated users (oauth2.get_current_user).
+Side effects: Rate limits on create/update/poll endpoints; cache invalidation on writes; notifications/sharing on create; translation opt-in via query param; email/WS broadcasts on certain flows.
 """
 
 # =====================================================
@@ -258,7 +253,7 @@ async def create_posts(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
-    """Create a new post after validating content and triggering side-effects."""
+    """Create a new post after validating content and triggering side-effects (emails/broadcast/cache bust)."""
     result = service.create_post(
         background_tasks=background_tasks,
         payload=post,
@@ -349,7 +344,7 @@ async def update_post(
     service: PostService = Depends(get_post_service),
 ):
     """
-    Update an existing post with new content and information using the shared service layer.
+    Update an existing post with new content; invalidates cached lists/details.
     """
     result = service.update_post(
         post_id=id,
@@ -529,7 +524,7 @@ def discover_daily_memories(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
 ):
-    """1.3 Rediscovery: Get 'On This Day' memories."""
+    """1.3 Rediscovery: Get 'On This Day' memories (cached per user for 1h)."""
     return service.get_on_this_day_memories(current_user.id)
 
 
@@ -652,8 +647,8 @@ def archive_post(
 
 
 @router.get("/", response_model=List[schemas.PostOut])
-# Task 5: Add cache decorator
-@cache(prefix="posts:list", ttl=60, include_user=False)
+# Cache per-user to avoid leaking unauthorized responses into other callers.
+@cache(prefix="posts:list", ttl=60, include_user=True)
 async def get_posts(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: PostService = Depends(get_post_service),
@@ -666,8 +661,7 @@ async def get_posts(
     ),
 ):
     """
-    Retrieve posts along with aggregated vote counts.
-    Applies translation for post content and title.
+    Retrieve posts along with aggregated vote counts; optional translation controlled by query flag.
     """
     return await service.list_posts(
         current_user=current_user,

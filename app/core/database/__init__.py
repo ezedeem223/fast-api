@@ -1,10 +1,11 @@
 """Core database access helpers with optimized connection pooling."""
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
+from app.models.base import Base
 
 
 def build_engine(database_url: str):
@@ -51,10 +52,6 @@ engine = build_engine(SQLALCHEMY_DATABASE_URL)
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Declarative base
-Base = declarative_base()
-
 
 def get_db():
     """Provide a database session."""

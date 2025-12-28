@@ -1,6 +1,4 @@
-"""
-Prometheus monitoring configuration.
-"""
+"""Prometheus monitoring configuration with duplicate-registration guard."""
 
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -10,14 +8,10 @@ _metrics_configured = False
 
 
 def setup_monitoring(app: FastAPI) -> None:
-    """
-    Setup Prometheus instrumentation.
+    """Attach Prometheus instrumentation once per process/test run.
 
-    This exposes a /metrics endpoint that Prometheus can scrape.
-    It automatically collects:
-    - http_requests_total
-    - http_request_duration_seconds
-    - http_requests_created
+    Exposes `/metrics` for scraping and collects request totals, duration, and in-flight gauges.
+    Uses a global flag and app.state marker to avoid duplicate registration during tests.
     """
     global _metrics_configured
     if _metrics_configured or getattr(app.state, "metrics_enabled", False):

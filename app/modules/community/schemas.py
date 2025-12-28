@@ -28,6 +28,7 @@ class CommunityUpdate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[int] = None
     tags: Optional[List[int]] = None
+    is_active: Optional[bool] = None
 
 
 class CommunitySettingsUpdate(BaseModel):
@@ -222,6 +223,38 @@ class CommunityInvitationResponse(BaseModel):
     )
 
 
+class CategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class CategoryOut(CategoryCreate):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Category(CategoryBase):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TagBase(BaseModel):
+    name: str
+
+
+class Tag(TagBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 __all__ = [
     "CommunityAnalytics",
     "CommunityActivityAnalytics",
@@ -255,4 +288,10 @@ __all__ = [
     "CommunityStatisticsBase",
     "CommunityStatisticsCreate",
     "CommunityUpdate",
+    "CategoryBase",
+    "CategoryCreate",
+    "CategoryOut",
+    "Category",
+    "TagBase",
+    "Tag",
 ]

@@ -259,9 +259,13 @@ class MessageService:
 
         if payload.sticker_id:
             sticker = self._get_valid_sticker(payload.sticker_id)
-            if sticker:
-                new_message.sticker_id = sticker.id
-                new_message.message_type = schemas.MessageType.STICKER
+            if not sticker:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sticker not found or not approved",
+                )
+            new_message.sticker_id = sticker.id
+            new_message.message_type = schemas.MessageType.STICKER
 
         return new_message
 
@@ -710,6 +714,10 @@ class MessageService:
             message_type=schemas.MessageType.FILE,
         )
         self.db.add(new_message)
+        attachment = models.MessageAttachment(
+            message=new_message, file_url=str(file_path), file_type=audio_file.content_type or "audio"
+        )
+        self.db.add(attachment)
         self.db.commit()
         self.db.refresh(new_message)
 
@@ -722,6 +730,7 @@ class MessageService:
             "new_audio_message",
             new_message.id,
         )
+        update_conversation_statistics(self.db, new_message.conversation_id, new_message)
         return new_message
 
     async def unread_count(self, *, current_user: models.User) -> int:
@@ -828,6 +837,10 @@ class MessageService:
             conversation_id=conversation_id,
         )
         self.db.add(new_message)
+        attachment = models.MessageAttachment(
+            message=new_message, file_url=str(file_location), file_type=file.content_type or "file"
+        )
+        self.db.add(attachment)
         self.db.commit()
         self.db.refresh(new_message)
 
@@ -840,6 +853,7 @@ class MessageService:
             "new_file",
             new_message.id,
         )
+        update_conversation_statistics(self.db, conversation_id, new_message)
         return {"message": "File sent successfully"}
 
     async def download_file(

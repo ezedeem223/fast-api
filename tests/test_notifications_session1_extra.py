@@ -248,6 +248,44 @@ async def test_connection_manager_cleans_up_broken_connections():
     assert manager.active_connections.get(1) == []
 
 
+@pytest.mark.asyncio
+async def test_connection_manager_enforces_limit(monkeypatch):
+    manager = ConnectionManager(max_connections_per_user=1)
+    ws1 = AsyncMock()
+    ws1.accept = AsyncMock()
+    ws1.close = AsyncMock()
+    await manager.connect(ws1, user_id=7)
+
+    ws2 = AsyncMock()
+    ws2.accept = AsyncMock()
+    ws2.close = AsyncMock()
+
+    allowed = await manager.connect(ws2, user_id=7)
+    assert allowed is False
+    ws2.close.assert_awaited()
+    assert manager.connection_counts[7] == 1
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_mirrors_presence(monkeypatch):
+    manager = ConnectionManager()
+    ws = AsyncMock()
+    ws.accept = AsyncMock()
+    ws.close = AsyncMock()
+
+    set_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.modules.notifications.realtime.cache_manager.enabled", True
+    )
+    monkeypatch.setattr("app.modules.notifications.realtime.cache_manager.redis", object())
+    monkeypatch.setattr(
+        "app.modules.notifications.realtime.cache_manager.set_with_tags", set_mock
+    )
+
+    await manager.connect(ws, user_id=9)
+    set_mock.assert_awaited()
+
+
 def test_get_or_create_and_get_model_by_id(session, test_user, monkeypatch, caplog):
     created = common.get_or_create(
         session,
@@ -289,6 +327,22 @@ async def test_notification_batcher_flush_noop(monkeypatch):
     batcher = NotificationBatcher()
     await batcher.flush()
     send_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notification_batcher_digest_flush(monkeypatch):
+    send_mock = AsyncMock()
+    monkeypatch.setattr("app.modules.notifications.batching.send_email_notification", send_mock)
+    batcher = NotificationBatcher(digest_window_seconds=0.01, digest_max_size=5)
+
+    await batcher.add_digest({"channel": "email", "recipient": "d@example.com", "title": "t1", "content": "c1"})
+    await asyncio.sleep(0.02)
+    await batcher.add_digest({"channel": "email", "recipient": "d@example.com", "title": "t2", "content": "c2"})
+    await batcher.flush_digests()
+
+    assert send_mock.await_count >= 1
+    body = send_mock.call_args.args[0].body
+    assert "t1" in body and "t2" in body
 
 
 def test_notification_repository_filters_and_status(session, test_user):

@@ -40,6 +40,7 @@ from app.core.database.query_helpers import (
     optimize_post_query,
     paginate_query,
 )
+from app.core.cache.redis_cache import cache_manager
 
 
 def _create_pdf(post: models.Post):
@@ -79,6 +80,7 @@ logger = logging.getLogger(__name__)
 
 
 class PostService:
+    """Business logic for posts (CRUD, polls, audio, living memory, reposts, scoring, notifications)."""
     def __init__(self, db: Session):
         self.db = db
 
@@ -122,7 +124,7 @@ class PostService:
         mention_notifier_fn: Callable,
         analyze_content_fn: Callable[[str], dict] | None = None,
     ) -> models.Post:
-        """Create a post, enforcing content rules, legacy analysis hooks, and downstream notifications."""
+        """Create a post, enforce content rules, then trigger notifications/sharing/scoring side effects."""
         if not current_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -207,6 +209,14 @@ class PostService:
 
         self.db.add(new_post)
         self.db.commit()
+        author = (
+            self.db.query(models.User)
+            .filter(models.User.id == current_user.id)
+            .first()
+        )
+        if author and hasattr(author, "post_count"):
+            author.post_count = (author.post_count or 0) + 1
+            self.db.commit()
         self.db.refresh(new_post)
 
         if getattr(payload, "is_living_testimony", False):
@@ -299,6 +309,7 @@ class PostService:
                 new_post.id,
             )
 
+        self._invalidate_post_cache(new_post.id)
         return self._prepare_post_response(new_post, current_user)
 
     async def get_post(
@@ -491,6 +502,7 @@ class PostService:
         post_query.delete(synchronize_session=False)
         self.db.commit()
         log_user_event(self.db, current_user.id, "delete_post", {"post_id": post_id})
+        self._invalidate_post_cache(post_id)
 
     def update_post(
         self,
@@ -559,7 +571,8 @@ class PostService:
 
         self.db.commit()
         self.db.refresh(post)
-        return post
+        self._invalidate_post_cache(post.id)
+        return self._prepare_post_response(post, current_user)
 
     def create_short_video(
         self,
@@ -854,6 +867,7 @@ class PostService:
         post.allow_reposts = not post.allow_reposts
         self.db.commit()
         self.db.refresh(post)
+        self._invalidate_post_cache(post.id)
         return self._prepare_post_response(post, current_user)
 
     def toggle_archive_post(
@@ -875,6 +889,7 @@ class PostService:
         post.archived_at = func.now() if post.is_archived else None
         self.db.commit()
         self.db.refresh(post)
+        self._invalidate_post_cache(post.id)
         return self._prepare_post_response(post, current_user)
 
     def analyze_existing_post(
@@ -1088,6 +1103,16 @@ class PostService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="User is not verified."
             )
+        if len(payload.options) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least two options are required for a poll",
+            )
+        if len(payload.options) > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Too many poll options",
+            )
         new_post = models.Post(
             owner_id=current_user.id,
             title=payload.title,
@@ -1154,6 +1179,10 @@ class PostService:
             )
             .first()
         )
+        if existing_vote and existing_vote.option_id == option_id:
+            raise HTTPException(
+                status_code=400, detail="You have already voted for this option"
+            )
         if existing_vote:
             existing_vote.option_id = option_id
         else:
@@ -1350,3 +1379,11 @@ class PostService:
             )
 
         return results
+
+    def _invalidate_post_cache(self, post_id: int) -> None:
+        """Best-effort cache invalidation for post list/detail caches."""
+        try:
+            cache_manager.invalidate_nowait("posts:list:*")
+            cache_manager.invalidate_nowait(f"posts:detail:{post_id}")
+        except Exception:
+            logger.debug("Cache invalidation skipped for post %s", post_id)

@@ -90,5 +90,80 @@ class LocalEconomyService:
         self.db.refresh(txn)
         return txn
 
+    def update_listing(self, *, listing_id: int, current_user, payload: SimpleNamespace | object) -> models.LocalMarketListing:
+        _ensure_user(current_user)
+        listing = (
+            self.db.query(models.LocalMarketListing)
+            .filter(models.LocalMarketListing.id == listing_id)
+            .first()
+        )
+        if not listing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
+        if listing.seller_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update listing")
+
+        title = getattr(payload, "title", listing.title)
+        price = getattr(payload, "price", listing.price)
+        description = getattr(payload, "description", listing.description)
+        if not title or price is None or price <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid update data")
+
+        listing.title = title
+        listing.price = price
+        listing.description = description
+        self.db.commit()
+        self.db.refresh(listing)
+        return listing
+
+    def delete_listing(self, *, listing_id: int, current_user) -> dict:
+        _ensure_user(current_user)
+        listing = (
+            self.db.query(models.LocalMarketListing)
+            .filter(models.LocalMarketListing.id == listing_id)
+            .first()
+        )
+        if not listing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
+        if listing.seller_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete listing")
+        self.db.delete(listing)
+        self.db.commit()
+        return {"message": "Listing deleted"}
+
+    def create_cooperative_transaction(
+        self, *, cooperative_id: int, user_id: int, amount: float, notes: str | None = None
+    ) -> models.CooperativeTransaction:
+        if amount <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Amount must be positive")
+        coop = (
+            self.db.query(models.DigitalCooperative)
+            .filter(models.DigitalCooperative.id == cooperative_id)
+            .first()
+        )
+        if not coop:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cooperative not found")
+
+        member = (
+            self.db.query(models.CooperativeMember)
+            .filter(
+                models.CooperativeMember.cooperative_id == cooperative_id,
+                models.CooperativeMember.user_id == user_id,
+            )
+            .first()
+        )
+        if not member:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a cooperative member")
+
+        txn = models.CooperativeTransaction(
+            cooperative_id=cooperative_id,
+            amount=amount,
+            description=notes or "",
+        )
+        coop.revenue = (coop.revenue or 0) + amount
+        self.db.add(txn)
+        self.db.commit()
+        self.db.refresh(txn)
+        return txn
+
 
 __all__ = ["LocalEconomyService", "ALLOWED_CATEGORIES"]

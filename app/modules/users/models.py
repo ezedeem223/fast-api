@@ -1,4 +1,7 @@
-"""SQLAlchemy models and enums for the users domain."""
+"""SQLAlchemy models and enums for the users domain.
+
+Includes user profiles/roles, verification/bans, sessions/tokens, activities/events, and statistics.
+"""
 
 from __future__ import annotations
 

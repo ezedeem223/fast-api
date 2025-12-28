@@ -11,6 +11,7 @@ from app.oauth2 import get_current_user
 from app.modules.fact_checking.models import FactCheckStatus, Fact
 from app.modules.fact_checking.service import FactCheckingService
 from app.modules.users.models import User
+from app.routers.admin_dashboard import get_current_admin
 
 router = APIRouter(prefix="/fact-checking", tags=["Fact Checking"])
 
@@ -36,6 +37,11 @@ class FactCorrectionRequest(BaseModel):
 
 class FactVoteRequest(BaseModel):
     vote_type: str  # "support" or "oppose"
+
+
+class FactOverrideRequest(BaseModel):
+    status: FactCheckStatus
+    note: Optional[str] = None
 
 
 # Endpoints
@@ -199,3 +205,21 @@ async def search_facts(
         }
         for fact in facts
     ]
+
+
+@router.put("/admin/override/{fact_id}")
+async def override_fact_status(
+    fact_id: int,
+    request: FactOverrideRequest,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Allow admins to override fact status with an audit note."""
+    fact = FactCheckingService.override_fact_status(
+        db=db,
+        fact_id=fact_id,
+        admin_id=current_admin.id,
+        status=request.status,
+        note=request.note,
+    )
+    return {"id": fact.id, "status": fact.status, "verification_score": fact.verification_score}

@@ -1,4 +1,10 @@
-"""FFmpeg/speech helpers for media processing."""
+"""FFmpeg/speech helpers for media processing.
+
+Features:
+- Video -> audio extraction via FFmpeg.
+- Speech-to-text via SpeechRecognition/Google API.
+- AV scanning shim in `scan_file_for_viruses` (defensive: treats scanner failure as clean).
+"""
 
 from __future__ import annotations
 

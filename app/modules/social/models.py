@@ -16,6 +16,7 @@ from sqlalchemy import (
     Float,
     JSON,
     Text,
+    Index,
 )
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from sqlalchemy import Enum as SAEnum
@@ -136,6 +137,10 @@ class Follow(Base):
     """Follower/following relationships between users."""
 
     __tablename__ = "follows"
+    __table_args__ = (
+        Index("ix_follows_followed_id", "followed_id"),
+        Index("ix_follows_follower_id", "follower_id"),
+    )
 
     follower_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True

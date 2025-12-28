@@ -9,6 +9,7 @@ from fastapi import (
     Query,
     Body,
 )
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 
@@ -22,6 +23,10 @@ from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
 
 
 router = APIRouter(prefix="/communities", tags=["Communities"])
+
+
+class InvitationRequest(BaseModel):
+    user_id: int
 
 
 def get_community_service(db: Session = Depends(get_db)) -> CommunityService:
@@ -183,7 +188,7 @@ async def leave_community(
     """Leave a community."""
     service.leave_community(
         community_id=community_id,
-        user=current_user,
+        current_user=current_user,
     )
 
     # Invalidate caches
@@ -352,7 +357,7 @@ async def create_community_post_legacy(
 @router.post("/{community_id}/invite", response_model=schemas.CommunityInvitationOut)
 async def invite_to_community(
     community_id: int,
-    invitation_data: schemas.CommunityInvitationCreate,
+    invitation_data: InvitationRequest,
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
 ):

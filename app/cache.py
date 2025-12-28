@@ -1,6 +1,7 @@
 from functools import wraps
 from cachetools import TTLCache
 import pickle
+from pickle import PicklingError
 
 # A dictionary to hold separate caches for each decorated function.
 # This allows each function to have its own TTL based on the provided expire parameter.
@@ -29,7 +30,10 @@ def cache(expire=300):
             Wrapper function that checks for cached result before calling the async function.
             """
             # Create a unique key based on function name, arguments, and keyword arguments.
-            key = pickle.dumps((func.__name__, args, kwargs))
+            try:
+                key = pickle.dumps((func.__name__, args, kwargs))
+            except PicklingError:
+                key = repr((func.__name__, args, kwargs))
 
             # If the key exists in the local cache, return the cached result.
             if key in local_cache:

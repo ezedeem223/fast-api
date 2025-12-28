@@ -152,6 +152,32 @@ class FactCheckingService:
         return vote
 
     @staticmethod
+    def override_fact_status(
+        db: Session,
+        *,
+        fact_id: int,
+        admin_id: int,
+        status: FactCheckStatus,
+        note: Optional[str] = None,
+    ) -> Fact:
+        """Allow admins to override a fact's status directly."""
+        fact = db.query(Fact).filter(Fact.id == fact_id).first()
+        if not fact:
+            raise ValueError("Fact not found")
+
+        fact.status = status
+        fact.updated_at = datetime.now(timezone.utc)
+        fact.verification_score = 1.0 if status == FactCheckStatus.VERIFIED else fact.verification_score
+        if note:
+            # store note in description history for traceability
+            existing = fact.description or ""
+            fact.description = f"{existing}\n[override:{admin_id}] {note}".strip()
+
+        db.commit()
+        db.refresh(fact)
+        return fact
+
+    @staticmethod
     def add_misinformation_warning(
         db: Session,
         post_id: Optional[int],

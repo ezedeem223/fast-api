@@ -1,0 +1,63 @@
+{
+  "title": "FastAPI Service Overview",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Request Rate",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m]))"
+        }
+      ],
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate (%)",
+      "targets": [
+        {
+          "expr": "100 * (sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])))"
+        }
+      ],
+      "options": { "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "In-Flight Requests",
+      "targets": [
+        {
+          "expr": "sum(fastapi_inprogress)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU Saturation",
+      "targets": [
+        {
+          "expr": "avg(rate(process_cpu_seconds_total[1m]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "DB Connections",
+      "targets": [
+        {
+          "expr": "sum(pg_stat_activity_count)"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

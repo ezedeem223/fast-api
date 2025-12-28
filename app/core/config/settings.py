@@ -6,12 +6,21 @@ Environment precedence:
 - CORS is normalized from `CORS_ORIGINS` (comma-separated) with a conservative default allowlist.
 - RSA keys are resolved relative to the repo root when given relative paths and must be non-empty.
 - Redis is optional: failure to connect logs an error but keeps the app running.
+
+Key expectations (defaults in parentheses):
+- `APP_ENV` controls settings class selection (`production` default).
+- Database: `DATABASE_URL` or component parts (`DATABASE_*`), with `_test` suffix enforced in tests.
+- Redis: `REDIS_URL` enables cache; absence keeps cache disabled without failing startup.
+- TLS/hosts: `ALLOWED_HOSTS` (JSON or comma list), `FORCE_HTTPS` (true in production if unset).
+- Crypto: `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` (repo-relative if not absolute).
+- Mail: credentials optional; defaults to empty values in tests/CI; TLS flags removed to avoid dotenv quirks.
 """
 
 import os
+import json
 import logging
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, List
 
 import redis
 from dotenv import load_dotenv
@@ -51,11 +60,12 @@ class Settings(BaseSettings):
     """Application configuration loaded from environment variables.
 
     Notes on integration and fallbacks:
-    - `database_*` fields prefer `DATABASE_URL`; otherwise compose from individual parts, with `_test` suffix enforcement for tests.
-    - Feature toggles use `_env_flag` so unset stays None/False instead of stringy truthiness.
+    - `DATABASE_URL` is preferred; otherwise we compose from components and enforce `_test` names when requested.
+    - Feature toggles use `_env_flag` so unset stays None/False instead of string truthiness.
     - Mail TLS/SSL flags are stripped before constructing `ConnectionConfig` to avoid dotenv quirks.
     - `REDIS_URL` is optional; connectivity errors log and disable caching instead of crashing.
     - CORS origins are derived once at init to avoid mutation issues in Pydantic models.
+    - RSA keys resolve relative to repo root when paths are not absolute and must be non-empty.
     """
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
@@ -77,7 +87,16 @@ class Settings(BaseSettings):
     database_username: Optional[str] = os.getenv("DATABASE_USERNAME")
     database_ssl_mode: str = os.getenv("DATABASE_SSL_MODE", "require")
     environment: str = os.getenv("APP_ENV", "production")
-    force_https: bool = bool(_env_flag("FORCE_HTTPS", default=False))
+    force_https: bool = False
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    log_dir: str = os.getenv("LOG_DIR", "logs")
+    use_json_logs: bool = _env_flag("USE_JSON_LOGS", default=True)
+    otel_exporter_otlp_endpoint: Optional[str] = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_enabled: Optional[bool] = _env_flag("OTEL_ENABLED", default=None)
+    sentry_dsn: Optional[str] = os.getenv("SENTRY_DSN")
+    sentry_traces_sample_rate: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    # Accept raw string from env to avoid JSON parse errors; we normalize to list in __init__
+    allowed_hosts: Optional[str] = os.getenv("ALLOWED_HOSTS")
     cors_origins: list[str] = []
     MAX_OWNED_COMMUNITIES: int = int(os.getenv("MAX_OWNED_COMMUNITIES", 5))
     MAX_PENDING_INVITATIONS: int = int(os.getenv("MAX_PENDING_INVITATIONS", 50))
@@ -176,6 +195,9 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        env_override = os.getenv("APP_ENV")
+        if env_override:
+            object.__setattr__(self, "environment", env_override)
         self._rsa_private_key = self._read_key_file(
             self.rsa_private_key_path, "private"
         )
@@ -204,6 +226,33 @@ class Settings(BaseSettings):
                 "https://www.example.com",
             ]
         object.__setattr__(self, "cors_origins", origins)
+
+        hosts_raw = self.allowed_hosts or os.getenv("ALLOWED_HOSTS", "")
+        hosts: list[str]
+        if hosts_raw:
+            try:
+                hosts = [h.strip() for h in json.loads(hosts_raw)]
+            except Exception:
+                hosts = [h.strip() for h in str(hosts_raw).split(",") if h.strip()]
+        else:
+            hosts = ["localhost", "127.0.0.1", "testserver"]
+        # Only force-add testserver when running tests to keep prod lists intact.
+        env_lower = self.environment.lower()
+        if env_lower == "test" and "testserver" not in hosts:
+            hosts.append("testserver")
+        object.__setattr__(self, "allowed_hosts", hosts)
+
+        env_force_https = os.getenv("FORCE_HTTPS")
+        if self.environment.lower() == "production":
+            if env_force_https is None or env_force_https.strip() == "":
+                object.__setattr__(self, "force_https", True)
+            else:
+                lowered = env_force_https.lower()
+                object.__setattr__(
+                    self,
+                    "force_https",
+                    lowered not in {"0", "false", "no", "off"},
+                )
 
     def get_database_url(self, *, use_test: bool = False) -> str:
         """Resolve the SQLAlchemy database URL for runtime or tests.

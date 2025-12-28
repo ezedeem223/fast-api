@@ -42,6 +42,7 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ["DISABLE_EXTERNAL_NOTIFICATIONS"] = "1"
 os.environ["ENABLE_TRANSLATION"] = "0"
 os.environ["REDIS_URL"] = ""
+os.environ.setdefault("ANYIO_BACKENDS", "asyncio")
 
 from app import models
 from app.core.config import settings
@@ -65,6 +66,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["DISABLE_EXTERNAL_NOTIFICATIONS"] = "1"
 os.environ["ENABLE_TRANSLATION"] = "0"
 os.environ["REDIS_URL"] = ""
+os.environ.setdefault("ANYIO_BACKENDS", "asyncio")
 
 # Force Redis off during tests to avoid real network calls.
 settings.__class__.redis_client = None

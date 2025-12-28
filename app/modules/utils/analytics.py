@@ -146,6 +146,8 @@ def calculate_post_score(
 ) -> float:
     """Calculate score considering vote delta, comments, and age with decay to favor recency."""
     vote_difference = upvotes - downvotes
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600.0
     score = (vote_difference + comment_count) / (age_hours + 2) ** 1.8
     return score

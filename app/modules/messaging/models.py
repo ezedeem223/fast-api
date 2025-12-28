@@ -1,4 +1,8 @@
-"""SQLAlchemy models and enums for the messaging domain."""
+"""SQLAlchemy models and enums for the messaging domain.
+
+Includes conversations/members, messages/attachments, encrypted sessions, calls/screen shares,
+and conversation statistics used by analytics. Enums describe call/message types and roles.
+"""
 
 from __future__ import annotations
 
@@ -185,6 +189,7 @@ class Message(Base):
     )
     link_preview = Column(JSON, nullable=True)
     language = Column(String, nullable=False, default="en")
+    has_emoji = Column(Boolean, default=False)
 
     # Backwards compatibility alias for legacy code that expected a `created_at` column.
     created_at = synonym("timestamp")

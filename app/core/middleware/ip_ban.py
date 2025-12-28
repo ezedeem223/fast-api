@@ -1,4 +1,7 @@
-"""IP ban middleware."""
+"""IP ban middleware.
+
+Blocks requests from banned IPs in non-test environments; skips checks in tests to keep fixtures light.
+"""
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

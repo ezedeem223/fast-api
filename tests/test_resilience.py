@@ -54,3 +54,19 @@ def test_message_validation_limits(
     )
     assert response.status_code == 422
     assert expected_detail in response.json()["detail"]
+
+
+def test_post_creation_survives_economy_failure(monkeypatch, authorized_client):
+    # Force SocialEconomyService to throw during post creation to simulate DB interruption.
+    monkeypatch.setattr(
+        "app.modules.social.economy_service.SocialEconomyService.update_post_score",
+        lambda self, post_id: (_ for _ in ()).throw(RuntimeError("db down")),
+    )
+    monkeypatch.setattr(
+        "app.modules.social.economy_service.SocialEconomyService.check_and_award_badges",
+        lambda self, user_id: None,
+    )
+    res = authorized_client.post(
+        "/posts/", json={"title": "Resilient", "content": "Even if economy fails"}
+    )
+    assert res.status_code in (200, 201)

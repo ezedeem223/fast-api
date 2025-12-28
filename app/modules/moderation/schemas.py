@@ -24,6 +24,7 @@ class WordSeverity(str, Enum):
 class BannedWordBase(BaseModel):
     word: str
     severity: WordSeverity = WordSeverity.warn
+    is_regex: bool = False
 
 
 class BannedWordCreate(BannedWordBase):
@@ -33,6 +34,7 @@ class BannedWordCreate(BannedWordBase):
 class BannedWordUpdate(BaseModel):
     word: Optional[str] = None
     severity: Optional[WordSeverity] = None
+    is_regex: Optional[bool] = None
 
 
 class BannedWordOut(BannedWordBase):

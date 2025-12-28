@@ -20,6 +20,10 @@ class FakeWebSocket:
 
     def __init__(self, messages):
         self._messages = list(messages)
+        self.closed = False
+
+    async def close(self, *_, **__):
+        self.closed = True
 
     async def receive_text(self):
         if not self._messages:
@@ -141,7 +145,7 @@ async def test_send_real_time_notification_exception_logged(monkeypatch, caplog)
 
 @pytest.mark.asyncio
 async def test_websocket_empty_message_disconnect(monkeypatch):
-    connect_mock = AsyncMock()
+    connect_mock = AsyncMock(return_value=True)
     disconnect_mock = AsyncMock()
     send_mock = AsyncMock(side_effect=AssertionError("should not send"))
     monkeypatch.setattr(ws_manager, "connect", connect_mock)
@@ -157,7 +161,7 @@ async def test_websocket_empty_message_disconnect(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_websocket_disconnect_clean(monkeypatch):
-    connect_mock = AsyncMock()
+    connect_mock = AsyncMock(return_value=True)
     disconnect_mock = AsyncMock()
     send_mock = AsyncMock()
     monkeypatch.setattr(ws_manager, "connect", connect_mock)
@@ -172,7 +176,7 @@ async def test_websocket_disconnect_clean(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_websocket_general_exception_logs(monkeypatch):
-    connect_mock = AsyncMock()
+    connect_mock = AsyncMock(return_value=True)
     disconnect_mock = AsyncMock()
     send_mock = AsyncMock()
     monkeypatch.setattr(ws_manager, "connect", connect_mock)
@@ -187,7 +191,7 @@ async def test_websocket_general_exception_logs(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_websocket_no_repeat_after_empty(monkeypatch):
-    connect_mock = AsyncMock()
+    connect_mock = AsyncMock(return_value=True)
     disconnect_mock = AsyncMock()
     send_mock = AsyncMock(side_effect=AssertionError("should not send"))
     monkeypatch.setattr(ws_manager, "connect", connect_mock)
@@ -199,3 +203,16 @@ async def test_websocket_no_repeat_after_empty(monkeypatch):
     # Once empty triggers disconnect; send not called; receive_text not re-used.
     send_mock.assert_not_called()
     disconnect_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_websocket_auth_requires_token(monkeypatch):
+    from app.api import websocket as ws_module
+
+    fake_ws = SimpleNamespace()
+    fake_ws.close = AsyncMock()
+    monkeypatch.setattr(ws_module.settings, "environment", "production")
+
+    user = await ws_module._authenticate_websocket(fake_ws, claimed_user_id=5, token=None)
+    assert user is None
+    fake_ws.close.assert_awaited()

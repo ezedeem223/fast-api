@@ -9,6 +9,11 @@ Integration details:
 import requests
 from bs4 import BeautifulSoup
 import validators
+from urllib.parse import urlparse
+
+# Basic domain/content guards to avoid previewing clearly unsafe content.
+BLOCKED_DOMAINS = {"malware.test", "phishing.test"}
+BANNED_KEYWORDS = {"malware", "phishing", "exploit"}
 
 
 def extract_link_preview(url: str) -> dict | None:
@@ -20,8 +25,14 @@ def extract_link_preview(url: str) -> dict | None:
     if not validators.url(url):
         return None
 
+    parsed = urlparse(url)
+    if parsed.hostname and parsed.hostname.lower() in BLOCKED_DOMAINS:
+        return None
+
     try:
         response = requests.get(url, timeout=5)
+        if getattr(response, "status_code", 200) >= 400:
+            return None
         soup = BeautifulSoup(response.content, "html.parser")
 
         title = soup.title.string.strip() if soup.title and soup.title.string else ""
@@ -40,6 +51,10 @@ def extract_link_preview(url: str) -> dict | None:
         og_image = soup.find("meta", property="og:image")
         if og_image and og_image.get("content"):
             image = og_image["content"]
+
+        combined = " ".join([title, description]).lower()
+        if any(word in combined for word in BANNED_KEYWORDS):
+            return None
 
         return {"title": title, "description": description, "image": image, "url": url}
     except Exception as e:

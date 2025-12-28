@@ -17,6 +17,8 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=${ALGORITHM}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - FORCE_HTTPS=true
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
   postgres:
     image: postgres
     environment:

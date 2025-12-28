@@ -13,6 +13,7 @@ from .models import (
     Block,
     BlockLog,
     BlockAppeal,
+    AuditLog,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "Block",
     "BlockLog",
     "BlockAppeal",
+    "AuditLog",
 ]

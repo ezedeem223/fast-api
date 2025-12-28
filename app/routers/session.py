@@ -1,4 +1,4 @@
-"""Session router for managing user sessions, key exchanges, and logout flows."""
+"""Session router for managing encrypted session setup, key updates, and teardown."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -85,10 +85,17 @@ def update_encrypted_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Update the session keys with the new values provided.
-    session.root_key = session_update.root_key
-    session.chain_key = session_update.chain_key
-    session.next_header_key = session_update.next_header_key
-    session.ratchet_key = session_update.ratchet_key
+    def _to_bytes(val):
+        if isinstance(val, bytes):
+            return val
+        if hasattr(val, "encode"):
+            return val.encode()
+        return bytes(val)
+
+    session.root_key = _to_bytes(session_update.root_key)
+    session.chain_key = _to_bytes(session_update.chain_key)
+    session.next_header_key = _to_bytes(session_update.next_header_key)
+    session.ratchet_key = _to_bytes(session_update.ratchet_key)
 
     db.commit()
     db.refresh(session)

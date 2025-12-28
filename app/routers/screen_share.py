@@ -1,3 +1,5 @@
+"""Screen share router handling start/stop/update lifecycle and notifications."""
+
 from fastapi import (
     APIRouter,
     Depends,

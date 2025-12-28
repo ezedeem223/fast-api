@@ -69,7 +69,10 @@ class BannedWordService:
 
         total = query.count()
         words = query.offset(skip).limit(limit).all()
-        return {"total": total, "words": words}
+        serialized = [
+            schemas.BannedWordOut.model_validate(w).model_dump() for w in words
+        ]
+        return {"total": total, "words": serialized}
 
     def remove_word(self, *, word_id: int, current_user: User) -> dict:
         word = self.db.query(BannedWord).filter(BannedWord.id == word_id).first()

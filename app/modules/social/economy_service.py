@@ -2,6 +2,13 @@ from sqlalchemy.orm import Session
 from app.modules.posts.models import Post, Reaction
 from app.modules.users.models import Badge, User, UserBadge
 import math
+from collections import defaultdict
+from typing import Iterable, Dict, Tuple
+from sqlalchemy import func
+try:
+    from app.modules.social import economy_accel
+except Exception:
+    economy_accel = None
 
 
 class SocialEconomyService:
@@ -10,6 +17,8 @@ class SocialEconomyService:
 
     def calculate_quality_score(self, content: str) -> float:
         """Heuristic quality score based on length, formatting, and lexical diversity."""
+        if economy_accel and economy_accel.AVAILABLE:
+            return economy_accel.quality_score(content)
         score = 0.0
         length = len(content)
 
@@ -40,15 +49,7 @@ class SocialEconomyService:
             self.db.query(Reaction).filter(Reaction.post_id == post.id).count()
         )
         comments_count = len(post.comments)
-
-        raw_score = (likes_count * 1) + (comments_count * 2)
-
-        # log(1) = 0, log(10) = 1, log(100) = 2...
-        if raw_score == 0:
-            return 0.0
-
-        normalized_score = math.log(raw_score + 1) * 20
-        return min(100.0, normalized_score)
+        return self._engagement_from_counts(likes_count, comments_count)
 
     def calculate_originality_score(self, post: Post) -> float:
         """Simple originality heuristic: penalize reposts heavily."""
@@ -80,6 +81,73 @@ class SocialEconomyService:
 
         self.db.commit()
         return total_score
+
+    def bulk_update_post_scores(self, post_ids: Iterable[int]) -> Dict[int, float]:
+        """
+        Optimized batch scorer for multiple posts to reduce DB round-trips.
+
+        Returns a mapping of post_id -> total_score.
+        """
+        ids = list(post_ids)
+        if not ids:
+            return {}
+
+        # Preload posts in one query
+        posts = (
+            self.db.query(Post)
+            .filter(Post.id.in_(ids))
+            .all()
+        )
+        if not posts:
+            return {}
+
+        # Aggregate reactions/comments counts in bulk
+        reactions_counts: Dict[int, int] = defaultdict(int)
+        for post_id, count in (
+            self.db.query(Reaction.post_id, func.count(Reaction.id))
+            .filter(Reaction.post_id.in_(ids))
+            .group_by(Reaction.post_id)
+            .all()
+        ):
+            reactions_counts[post_id] = count
+
+        comments_counts: Dict[int, int] = defaultdict(int)
+        for post_id, count in (
+            self.db.query(Post.id, func.count(func.nullif(Post.id, None)))
+            .join(Post.comments)
+            .filter(Post.id.in_(ids))
+            .group_by(Post.id)
+            .all()
+        ):
+            comments_counts[post_id] = count
+
+        scores: Dict[int, float] = {}
+        for post in posts:
+            likes = reactions_counts.get(post.id, 0)
+            comments = comments_counts.get(post.id, 0)
+            q_score = self.calculate_quality_score(post.content)
+            e_score = self._engagement_from_counts(likes, comments)
+            o_score = self.calculate_originality_score(post)
+            total = (q_score * 0.5) + (e_score * 0.4) + (o_score * 0.1)
+            post.quality_score = q_score
+            post.originality_score = o_score
+            post.score = total
+            scores[post.id] = total
+            # Credit user without extra query by using relationship
+            if post.owner:
+                post.owner.social_credits = (post.owner.social_credits or 0) + total * 0.05
+
+        self.db.commit()
+        return scores
+
+    def _engagement_from_counts(self, likes_count: int, comments_count: int) -> float:
+        if economy_accel and economy_accel.AVAILABLE:
+            return economy_accel.engagement_score(likes_count, comments_count)
+        raw_score = (likes_count * 1) + (comments_count * 2)
+        if raw_score == 0:
+            return 0.0
+        normalized_score = math.log(raw_score + 1) * 20
+        return min(100.0, normalized_score)
 
     # === [ADDITION START] ===
     def check_and_award_badges(self, user_id: int):

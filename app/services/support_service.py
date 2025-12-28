@@ -44,5 +44,21 @@ class SupportService:
         self.db.refresh(resp)
         return resp
 
+    def update_ticket_status(self, ticket_id: int, status_value: models.TicketStatus) -> models.SupportTicket:
+        ticket = self.db.query(models.SupportTicket).filter(models.SupportTicket.id == ticket_id).first()
+        if not ticket:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+        ticket.status = status_value
+        self.db.commit()
+        self.db.refresh(ticket)
+        return ticket
+
+    def submit_report(self, reporter_id: int, reason: str, post_id: int | None, comment_id: int | None) -> models.Report:
+        report = models.Report(reporter_id=reporter_id, reason=reason, post_id=post_id, comment_id=comment_id)
+        self.db.add(report)
+        self.db.commit()
+        self.db.refresh(report)
+        return report
+
 
 __all__ = ["SupportService"]

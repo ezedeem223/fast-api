@@ -1,4 +1,9 @@
-"""Comment router handling CRUD, moderation flags, and legacy compatibility helpers."""
+"""Comment router handling CRUD, moderation flags, and legacy compatibility helpers.
+
+Scope: create/read/update/delete comments, flagging, reactions, translations; includes cache invalidation.
+Auth: All endpoints require authenticated users.
+Side effects: rate limits on writes; emails for mentions; cache busting on create/update/delete.
+"""
 
 from fastapi import APIRouter, status, Depends, BackgroundTasks, Query, Request
 from sqlalchemy.orm import Session

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List
 
 from fastapi_mail import MessageSchema
 
@@ -12,17 +12,35 @@ from .email import send_email_notification
 
 
 class NotificationBatcher:
-    """Batch processor for notifications."""
+    """Batch processor for notifications.
 
-    def __init__(self, max_batch_size: int = 100, max_wait_time: float = 1.0) -> None:
+    Supports short-lived batching (to coalesce bursts) and digest-style
+    batching for daily/periodic digests.
+    """
+
+    def __init__(
+        self,
+        max_batch_size: int = 100,
+        max_wait_time: float = 1.0,
+        *,
+        digest_window_seconds: float = 86_400.0,
+        digest_max_size: int = 50,
+    ) -> None:
         self.batch = []
         self.max_batch_size = max_batch_size
         self.max_wait_time = max_wait_time
         self._lock = asyncio.Lock()
         self._last_flush = datetime.now(timezone.utc)
 
+        # Digest buffers (per-recipient) for daily summaries.
+        self.digest_window_seconds = digest_window_seconds
+        self.digest_max_size = digest_max_size
+        self._digest_batches: Dict[str, List[dict]] = {}
+        self._digest_last_flush: Dict[str, datetime] = {}
+        self._digest_lock = asyncio.Lock()
+
     async def add(self, notification: dict) -> None:
-        """Add a notification to the batch and flush if thresholds are reached."""
+        """Add a notification to the burst batch and flush if thresholds are reached."""
         notifications_to_send = None
         now = datetime.now(timezone.utc)
         async with self._lock:
@@ -35,8 +53,28 @@ class NotificationBatcher:
         if notifications_to_send:
             await self._process_batch(notifications_to_send)
 
+    async def add_digest(self, notification: dict) -> None:
+        """Queue a notification for the daily/periodic digest."""
+        recipient = notification.get("recipient")
+        if not recipient:
+            return
+
+        to_flush: List[dict] | None = None
+        now = datetime.now(timezone.utc)
+        async with self._digest_lock:
+            bucket = self._digest_batches.setdefault(recipient, [])
+            bucket.append(notification)
+            last_flush = self._digest_last_flush.get(recipient, now)
+            elapsed = (now - last_flush).total_seconds()
+            if len(bucket) >= self.digest_max_size or elapsed >= self.digest_window_seconds:
+                to_flush = list(bucket)
+                self._digest_batches[recipient] = []
+                self._digest_last_flush[recipient] = now
+        if to_flush:
+            await self._send_digest_email(recipient, to_flush)
+
     async def flush(self) -> None:
-        """Flush the current batch."""
+        """Flush the current burst batch."""
         notifications_to_send = None
         async with self._lock:
             if not self.batch:
@@ -45,6 +83,20 @@ class NotificationBatcher:
             self.batch = []
             self._last_flush = datetime.now(timezone.utc)
         await self._process_batch(notifications_to_send)
+
+    async def flush_digests(self) -> None:
+        """Flush all pending digest buckets."""
+        digests = []
+        async with self._digest_lock:
+            if not self._digest_batches:
+                return
+            for recipient, bucket in self._digest_batches.items():
+                if bucket:
+                    digests.append((recipient, list(bucket)))
+            self._digest_batches = {}
+            self._digest_last_flush = {}
+        for recipient, bucket in digests:
+            await self._send_digest_email(recipient, bucket)
 
     async def _process_batch(self, notifications: List[dict]) -> None:
         """Process notifications grouped by channel."""
@@ -86,6 +138,16 @@ class NotificationBatcher:
             )
             await send_email_notification(message)
 
+    async def _send_digest_email(self, recipient: str, notifications: List[dict]) -> None:
+        """Send a digest email that summarizes multiple notifications."""
+        message = MessageSchema(
+            subject="Your notification digest",
+            recipients=[recipient],
+            body=self._format_digest_email(notifications),
+            subtype="html",
+        )
+        await send_email_notification(message)
+
     async def _send_batch_push(self, notifications: List[dict]) -> None:
         """Placeholder for batched push delivery (implementation pending)."""
         # TODO: integrate push batching with Firebase/admin SDK
@@ -104,6 +166,19 @@ class NotificationBatcher:
                 for n in notifications
             ]
         )
+
+    @staticmethod
+    def _format_digest_email(notifications: List[dict]) -> str:
+        """Return HTML for digest-style notifications (typically daily)."""
+        lines = []
+        for n in notifications:
+            timestamp = n.get("created_at") or datetime.now(timezone.utc).isoformat()
+            lines.append(
+                f"<div><h3>{n.get('title','Update')}</h3>"
+                f"<p>{n.get('content','')}</p>"
+                f"<small>{timestamp}</small></div>"
+            )
+        return "\n".join(lines)
 
 
 __all__ = ["NotificationBatcher"]

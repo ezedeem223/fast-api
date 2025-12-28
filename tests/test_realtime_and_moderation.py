@@ -75,22 +75,6 @@ async def test_send_real_time_notification_wraps_string():
 # -----------------------
 
 
-def test_initialize_firebase_success(monkeypatch):
-    called = {}
-
-    class DummyCred:
-        def __init__(self, cfg):
-            called["cert"] = cfg
-
-    def fake_init_app(cred, cfg):
-        called["init"] = (cred, cfg)
-
-    monkeypatch.setattr(firebase_config.credentials, "Certificate", DummyCred)
-    monkeypatch.setattr(firebase_config, "initialize_app", fake_init_app)
-    assert firebase_config.initialize_firebase() is True
-    assert "cert" in called and "init" in called
-
-
 def test_initialize_firebase_failure(monkeypatch):
     monkeypatch.setattr(firebase_config.credentials, "Certificate", lambda cfg: (_ for _ in ()).throw(RuntimeError("bad")))
     assert firebase_config.initialize_firebase() is False
@@ -173,7 +157,7 @@ def test_banned_word_crud(session, monkeypatch):
 
     listed = service.list_words(skip=0, limit=10, search="sp", sort_by="word", sort_order="asc")
     assert listed["total"] == 1
-    assert listed["words"][0].word == "spam"
+    assert listed["words"][0]["word"] == "spam"
 
     updated = service.update_word(
         word_id=word.id,

@@ -463,6 +463,38 @@ class UserService:
         self.db.commit()
         return {"message": "Logged out from all other devices"}
 
+    def list_sessions(self, current_user: User) -> List[UserSession]:
+        """Return active sessions for the current user."""
+        return (
+            self.db.query(UserSession)
+            .filter(UserSession.user_id == current_user.id)
+            .order_by(UserSession.created_at.desc())
+            .all()
+        )
+
+    def revoke_session(self, current_user: User, session_id: str) -> Dict[str, str]:
+        """Terminate a specific session for the current user."""
+        session_obj = (
+            self.db.query(UserSession)
+            .filter(
+                UserSession.user_id == current_user.id,
+                UserSession.session_id == session_id,
+            )
+            .first()
+        )
+        if not session_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found",
+            )
+        self.db.delete(session_obj)
+        self.db.commit()
+        # Optionally blacklist the session id to prevent reuse.
+        token_entry = TokenBlacklist(token=session_id, user_id=current_user.id)
+        self.db.add(token_entry)
+        self.db.commit()
+        return {"message": "Session revoked"}
+
     # ----- Discovery -----
     def get_suggested_follows(self, current_user: User, limit: int) -> List[User]:
         if not current_user.interests:

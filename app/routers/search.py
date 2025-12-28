@@ -86,8 +86,9 @@ async def search(
     spell_suggestion = format_spell_suggestions(search_params.query, suggestions)
 
     query = search_posts(search_params.query, db)
+    sort_value = str(search_params.sort_by).upper()
     sorted_query = sort_search_results(
-        query, search_params.sort_by, search_text=search_params.query
+        query, sort_value, search_text=search_params.query
     )
     results = sorted_query.all()
     typesense_client = get_typesense_client()
@@ -126,8 +127,12 @@ async def search(
         set([stat.query for stat in popular_searches + user_searches])
     )
 
+    serialized_results = [
+        schemas.PostOut.model_validate(post, from_attributes=True) for post in results
+    ]
+
     search_response = {
-        "results": results,
+        "results": serialized_results,
         "spell_suggestion": spell_suggestion,
         "search_suggestions": search_suggestions,
     }
@@ -145,7 +150,7 @@ async def search(
     return search_response
 
 
-@router.get("/advanced", response_model=List[schemas.PostOut])
+@router.get("/advanced", response_model=schemas.AdvancedSearchResponse)
 async def advanced_search(
     query: Optional[str] = None,
     start_date: Optional[datetime] = None,

@@ -1,7 +1,9 @@
-"""
-File: oauth2.py
-Description: This module handles JWT token creation, verification, and retrieval of the current user and admin.
-It integrates with IP management utilities for enhanced security and performs proper error handling and logging.
+"""JWT utilities for auth and session enforcement.
+
+Responsibilities:
+- Create and verify RSA-signed access tokens with expirations.
+- Resolve current session/user/admin with IP ban/evasion checks and token blacklist enforcement.
+- Surface HTTP-friendly errors for invalid/expired tokens and banned users.
 """
 
 # ============================================
@@ -46,13 +48,10 @@ class TokenData(schemas.BaseModel):
 # Token Creation Function
 # ============================================
 def create_access_token(data: dict):
-    """
-    Creates a JWT access token with an expiration time.
+    """Create a JWT access token signed with the RSA private key.
 
-    - Copies the input data.
-    - Adds an expiration field using the current UTC time plus the specified minutes.
-    - If 'user_id' is present, converts it to an integer.
-    - Encodes the token using the RSA private key.
+    - Clones payload, normalizes user_id to int, and sets exp claim.
+    - Uses RSA private key so downstream services can verify with the public key.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -80,12 +79,7 @@ def create_access_token(data: dict):
 # Current Session Retrieval Function
 # ============================================
 def get_current_session(token: str = Depends(oauth2_scheme)):
-    """
-    Extracts the current session_id from the token.
-
-    - Decodes the token using the RSA public key.
-    - Returns the session_id if present; otherwise, raises HTTPException.
-    """
+    """Extract current session_id from token using the RSA public key."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid Credentials",  # Message in English
@@ -106,13 +100,7 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
 # Token Verification Function
 # ============================================
 def verify_access_token(token: str, credentials_exception):
-    """
-    Verifies the JWT access token.
-
-    - Decodes the token using the RSA public key.
-    - Retrieves and validates the user_id.
-    - Returns a TokenData object containing the user_id.
-    """
+    """Verify JWT access token (exp/user_id) and return TokenData or raise HTTPException."""
     try:
         logger.debug(f"Token to verify: {token[:20]}...")
         payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
@@ -147,17 +135,7 @@ def get_current_user(
     db: Session = Depends(get_db),
     request: Request = None,
 ):
-    """
-    Retrieves the current user based on the provided token.
-
-    - If the request is provided, checks the client's IP address.
-    - Decodes the token using the RSA public key.
-    - Verifies that the token is not blacklisted.
-    - Checks for IP evasion attempts.
-    - Ensures that the user is not banned.
-    - Updates the user's current token in the database.
-    - Returns the User object.
-    """
+    """Return authenticated user with IP ban/evasion checks and blacklist enforcement."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid Credentials",  # Message in English
@@ -206,17 +184,24 @@ def get_current_user(
                 logger.warning(f"Possible IP evasion detected for user {user.id}")
 
         # Check if the user is banned
-        if user.current_ban_end and user.current_ban_end > datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User is banned until {user.current_ban_end}",
-            )
+        if user.current_ban_end:
+            ban_end = user.current_ban_end
+            if ban_end.tzinfo is None:
+                ban_end = ban_end.replace(tzinfo=timezone.utc)
+            if ban_end > datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"User is banned until {ban_end}",
+                )
 
         # Update the user's current token in the database
         user.current_token = token
         db.commit()
 
         return user
+    except HTTPException:
+        # Allow deliberate HTTP errors (bans/blacklist) to propagate as-is.
+        raise
     except Exception as e:
         logger.error(f"Database Error in get_current_user: {str(e)}")
         raise HTTPException(
@@ -231,13 +216,7 @@ def get_current_user(
 def get_current_admin(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> User:
-    """
-    Retrieves the current admin user.
-
-    - Retrieves the current user.
-    - Checks if the user's role is 'admin'.
-    - Raises HTTPException if the user does not have admin privileges.
-    """
+    """Return current user if admin; otherwise raise 403."""
     user = get_current_user(token, db)
     if user.role != UserRole.ADMIN:
         raise HTTPException(

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import io
 import base64
+import polars as pl
 from .models import SearchStatistics
 from app.modules.users.models import User, UserEvent
 from app.modules.search import SearchStatOut
@@ -297,11 +298,11 @@ def clean_old_statistics(db: Session, days: int = 30):
 
 def generate_search_trends_chart():
     """
-    Generate a line chart showing search trends over time.
+    Generate a line chart showing search trends over time using polars for aggregation.
     Returns the chart as a base64 encoded PNG image.
     """
-    db = next(get_db())  # Ensure get_db() is properly defined in your project
-    data = (
+    db = next(get_db())
+    rows = (
         db.query(
             func.date(getattr(SearchStatistics, _STAT_TS_ATTR)).label("date"),
             func.count(SearchStatistics.id).label("count"),
@@ -311,11 +312,14 @@ def generate_search_trends_chart():
         .all()
     )
 
-    dates = [row.date for row in data]
-    counts = [row.count for row in data]
+    if not rows:
+        return ""
+
+    df = pl.DataFrame({"date": [r.date for r in rows], "count": [r.count for r in rows]})
+    df = df.sort("date")
 
     plt.figure(figsize=(12, 6))
-    sns.lineplot(x=dates, y=counts)
+    sns.lineplot(x=df["date"].to_list(), y=df["count"].to_list())
     plt.title("Search Trends Over Time")
     plt.xlabel("Date")
     plt.ylabel("Number of Searches")
@@ -331,6 +335,27 @@ def generate_search_trends_chart():
     graphic = base64.b64encode(image_png)
     graphic = graphic.decode("utf-8")
     return graphic
+
+
+def polars_merge_stats(stats_a: dict | None, stats_b: dict | None) -> dict:
+    """
+    Merge two stats dictionaries using polars for fast aggregation of numeric fields.
+    """
+    stats_a = stats_a or {}
+    stats_b = stats_b or {}
+    if not stats_a:
+        return stats_b
+    if not stats_b:
+        return stats_a
+    df = pl.DataFrame(
+        {
+            "key": list(stats_a.keys()) + list(stats_b.keys()),
+            "value": list(stats_a.values()) + list(stats_b.values()),
+        }
+    )
+    agg = df.group_by("key").agg(pl.col("value").sum()).to_dict(False)
+    merged = dict(zip(agg["key"], agg["value"]))
+    return merged
 
 
 # ------------------------- Conversation Statistics Function -------------------------

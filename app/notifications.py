@@ -2,6 +2,11 @@
 
 This module re-exports the new package structure so existing imports keep
 functioning while the refactor is rolled out incrementally.
+
+Layers:
+- Realtime: ConnectionManager manages WebSocket sessions and send_personal_message.
+- Email/Push: email helpers queue/schedule/trigger notifications; retry logic in service layer.
+- Orchestration: NotificationService/DeliveryManager/RetryHandler handle persistence, batching, and multi-channel delivery.
 """
 
 from typing import Union
@@ -42,7 +47,6 @@ from app.modules.notifications.service import (
 )
 
 
-@handle_async_errors
 async def send_real_time_notification(user_id: int, message: Union[str, dict]):
     """Send a real-time notification via the re-exported connection manager."""
     payload = (
@@ -50,7 +54,11 @@ async def send_real_time_notification(user_id: int, message: Union[str, dict]):
         if isinstance(message, str)
         else message
     )
-    await manager.send_personal_message(payload, user_id)
+    try:
+        await manager.send_personal_message(payload, user_id)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error("Error in send_real_time_notification: %s", exc)
+        return
     logger.info("Real-time notification sent to user %s", user_id)
 
 

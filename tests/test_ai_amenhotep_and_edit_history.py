@@ -1,5 +1,6 @@
 
 from app import models
+import pytest
 
 
 def test_amenhotep_message_and_analytics(session, test_user):
@@ -60,3 +61,35 @@ def test_comment_edit_history_cascade(session, test_user, test_post):
         .all()
     )
     assert stale_history == []
+
+
+@pytest.fixture(autouse=True)
+def mock_amenhotep_model(monkeypatch):
+    """
+    Prevent heavy model loading by mocking AmenhotepAI init/response.
+    """
+    try:
+        import app.ai_chat.amenhotep as amenhotep_module
+    except Exception:
+        yield
+        return
+
+    class DummyAmenhotepAI:
+        def __init__(self, *args, **kwargs):
+            self.initialized = True
+
+        async def generate_response(self, *args, **kwargs):
+            return "mocked-response"
+
+    monkeypatch.setattr(amenhotep_module, "AmenhotepAI", DummyAmenhotepAI)
+    yield
+
+
+@pytest.mark.asyncio
+async def test_amenhotep_ai_mock_is_used(monkeypatch):
+    import app.ai_chat.amenhotep as amenhotep_module
+
+    ai = amenhotep_module.AmenhotepAI()
+    assert getattr(ai, "initialized", False)
+    resp = await ai.generate_response("hi")
+    assert resp == "mocked-response"

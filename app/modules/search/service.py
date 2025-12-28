@@ -1,4 +1,9 @@
-"""Search domain services reused across routers and background jobs."""
+"""Search domain services reused across routers and background jobs.
+
+Notes:
+- Integrates with Typesense when enabled; otherwise falls back to DB search.
+- Search statistics updated per user query and can be cached via app.modules.search.cache helpers.
+"""
 
 from __future__ import annotations
 

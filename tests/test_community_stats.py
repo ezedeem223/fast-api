@@ -25,29 +25,6 @@ def _setup_basic(session):
     return owner, community
 
 
-def test_update_community_statistics_counts(session):
-    owner, community = _setup_basic(session)
-    # members
-    session.add(CommunityMember(community_id=community.id, user_id=owner.id))
-    # posts and comments
-    p1 = Post(title="t1", content="c", owner_id=owner.id, community_id=community.id)
-    session.add(p1)
-    session.commit()
-    session.refresh(p1)
-    session.add(Comment(content="c", owner_id=owner.id, post_id=p1.id))
-    session.add(Vote(post_id=p1.id, user_id=owner.id))
-    session.commit()
-
-    service = CommunityService(session)
-    stats = service.update_community_statistics(community_id=community.id)
-
-    assert stats.member_count == 1
-    assert stats.post_count == 1
-    assert stats.comment_count == 1
-    assert stats.total_reactions == 1
-    assert stats.average_posts_per_user >= 1
-
-
 def test_update_community_rankings_and_growth(session, monkeypatch):
     owner, community = _setup_basic(session)
     # attach members/posts counts

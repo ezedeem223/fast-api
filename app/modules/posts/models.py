@@ -1,4 +1,8 @@
-"""Post domain SQLAlchemy models and enums."""
+"""Post domain SQLAlchemy models and enums.
+
+Includes posts/comments/reactions, poll entities, social media postings, and living memory relations.
+Uses array/jsonb columns that gracefully degrade to JSON on SQLite for tests.
+"""
 
 from __future__ import annotations
 

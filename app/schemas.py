@@ -594,44 +594,6 @@ class Verify2FAResponse(BaseModel):
 # ================================================================
 
 
-# Category schemas remain local because app.modules.community does not expose them.
-class CategoryBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-
-
-class CategoryCreate(CategoryBase):
-    name: str
-    description: Optional[str] = None
-
-
-class CategoryOut(CategoryCreate):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class Category(CategoryBase):
-    id: int
-    name: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TagBase(BaseModel):
-    name: str
-
-
-class TagCreate(TagBase):
-    pass
-
-
-class Tag(TagBase):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # ================================================================
 # Resolve Forward References
 # This section ensures that forward references are updated.

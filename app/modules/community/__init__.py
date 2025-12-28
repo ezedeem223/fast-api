@@ -14,9 +14,18 @@ from .models import (
     SearchStatistics,
     Tag,
     Reel,
+    ArchivedReel,
     Article,
     CommunityArchive,
     DigitalMuseumItem,
+)
+from .schemas import (
+    CategoryBase,
+    CategoryCreate,
+    CategoryOut,
+    Category as CategorySchema,
+    TagBase,
+    Tag as TagSchema,
 )
 
 __all__ = [
@@ -33,8 +42,14 @@ __all__ = [
     "SearchStatistics",
     "Tag",
     "Reel",
+    "ArchivedReel",
     "Article",
     "CommunityArchive",
     "DigitalMuseumItem",
+    "CategoryBase",
+    "CategoryCreate",
+    "CategoryOut",
+    "CategorySchema",
+    "TagBase",
+    "TagSchema",
 ]
-

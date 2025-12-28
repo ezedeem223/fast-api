@@ -102,7 +102,10 @@ class WellnessService:
 
         if session:
             session.ended_at = datetime.now(timezone.utc)
-            duration = (session.ended_at - session.started_at).total_seconds() / 60
+            start = session.started_at
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            duration = (session.ended_at - start).total_seconds() / 60
             session.duration_minutes = int(duration)
 
             db.commit()

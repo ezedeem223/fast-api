@@ -30,6 +30,7 @@ from app.schemas import (
     CommunityCreate,
     CommunityInvitationCreate,
     CommunityMemberUpdate,
+    CommunitySettingsUpdate,
     CommunityUpdate,
     PostCreate,
 )
@@ -77,6 +78,17 @@ class CommunityService:
                 ),
             )
 
+        existing = (
+            self.db.query(Community)
+            .filter(func.lower(Community.name) == payload.name.lower())
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Community with this name already exists",
+            )
+
         new_community = Community(
             owner_id=current_user.id,
             **payload.model_dump(exclude={"tags", "rules", "category_id"}),
@@ -105,13 +117,14 @@ class CommunityService:
             tags = self.db.query(Tag).filter(Tag.id.in_(payload.tags)).all()
             new_community.tags.extend(tags)
 
-        if payload.rules:
+        if getattr(payload, "rules", None):
             for rule in payload.rules:
-                new_rule = CommunityRule(
-                    content=rule.content,
-                    description=rule.description,
-                    priority=rule.priority,
+                rule_text = getattr(rule, "rule", None) or getattr(
+                    rule, "content", None
                 )
+                if not rule_text:
+                    continue
+                new_rule = CommunityRule(rule=rule_text)
                 new_community.rules.append(new_rule)
 
         self.db.add(new_community)
@@ -260,6 +273,35 @@ class CommunityService:
         )
         return community
 
+    def get_community_or_404(self, community_id: int) -> Community:
+        community = (
+            self.db.query(Community)
+            .options(
+                joinedload(Community.members),
+                joinedload(Community.rules),
+                joinedload(Community.tags),
+            )
+            .filter(Community.id == community_id)
+            .first()
+        )
+        if not community:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Community not found",
+            )
+        return community
+
+    def is_member(self, community_id: int, user_id: int) -> bool:
+        return (
+            self.db.query(CommunityMember)
+            .filter(
+                CommunityMember.community_id == community_id,
+                CommunityMember.user_id == user_id,
+            )
+            .first()
+            is not None
+        )
+
     def update_community(
         self,
         *,
@@ -278,6 +320,35 @@ class CommunityService:
         self._ensure_permissions(current_user, community, CommunityRole.OWNER)
 
         update_data = payload.model_dump(exclude_unset=True)
+
+        if "name" in update_data:
+            desired_name = update_data["name"]
+            existing = (
+                self.db.query(Community)
+                .filter(
+                    func.lower(Community.name) == desired_name.lower(),
+                    Community.id != community_id,
+                )
+                .first()
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Community with this name already exists",
+                )
+
+        if "is_active" in update_data:
+            desired_state = update_data.pop("is_active")
+            if community.is_active == desired_state:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Community is already inactive"
+                        if desired_state is False
+                        else "Community is already active"
+                    ),
+                )
+            community.is_active = desired_state
 
         if "category_id" in update_data:
             category = (
@@ -302,8 +373,16 @@ class CommunityService:
 
         if "rules" in update_data:
             community.rules.clear()
-            for rule_data in update_data["rules"]:
-                new_rule = CommunityRule(**rule_data.model_dump())
+            for rule_data in update_data["rules"] or []:
+                rule_dict = (
+                    rule_data.model_dump()
+                    if hasattr(rule_data, "model_dump")
+                    else dict(rule_data)
+                )
+                rule_text = rule_dict.get("rule") or rule_dict.get("content")
+                if not rule_text:
+                    continue
+                new_rule = CommunityRule(rule=rule_text)
                 community.rules.append(new_rule)
             update_data.pop("rules")
 
@@ -336,7 +415,8 @@ class CommunityService:
         *,
         community_id: int,
         user_id: int,
-        payload: CommunityMemberUpdate,
+        payload: Optional[CommunityMemberUpdate] = None,
+        new_role: Optional[CommunityRole] = None,
         current_user: User,
     ) -> CommunityMember:
         community = (
@@ -369,13 +449,17 @@ class CommunityService:
                 status_code=403, detail="Cannot change the role of the community owner"
             )
 
-        if payload.role == CommunityRole.OWNER:
+        role_value = payload.role if payload else new_role
+        if role_value is None:
+            raise HTTPException(status_code=400, detail="Role is required")
+
+        if role_value == CommunityRole.OWNER:
             raise HTTPException(
                 status_code=400, detail="Cannot assign owner role to a member"
             )
 
         old_role = member.role
-        member.role = payload.role
+        member.role = role_value
         member.role_updated_at = datetime.now(timezone.utc)
         member.role_updated_by = current_user.id
 
@@ -385,7 +469,7 @@ class CommunityService:
         create_notification(
             self.db,
             user_id,
-            f"Your role in community {community.name} has been changed from {old_role} to {payload.role}",
+            f"Your role in community {community.name} has been changed from {old_role} to {role_value}",
             f"/community/{community_id}",
             "role_update",
             None,
@@ -506,6 +590,25 @@ class CommunityService:
                 detail="You are not allowed to respond to this invitation",
             )
 
+        expiry_days = getattr(settings, "INVITATION_EXPIRY_DAYS", 0)
+        if invitation.status == "expired":
+            raise HTTPException(
+                status_code=410, detail="This invitation has expired"
+            )
+        created_at = invitation.created_at
+        if created_at and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if (
+            expiry_days
+            and created_at
+            and created_at <= datetime.now(timezone.utc) - timedelta(days=expiry_days)
+        ):
+            invitation.status = "expired"
+            self.db.commit()
+            raise HTTPException(
+                status_code=410, detail="This invitation has expired"
+            )
+
         if invitation.status != "pending":
             raise HTTPException(
                 status_code=400, detail="This invitation has already been processed"
@@ -557,6 +660,125 @@ class CommunityService:
         self.db.commit()
         return {"message": message}
 
+    def create_invitation(
+        self, *, community_id: int, invited_user_id: int, inviter: User
+    ) -> CommunityInvitation:
+        community = (
+            self.db.query(Community).filter(Community.id == community_id).first()
+        )
+        if not community:
+            raise HTTPException(status_code=404, detail="Community not found")
+
+        self._ensure_permissions(inviter, community, CommunityRole.MEMBER)
+
+        invitee = self.db.query(User).filter(User.id == invited_user_id).first()
+        if not invitee:
+            raise HTTPException(status_code=404, detail="Invited user not found")
+
+        existing_member = (
+            self.db.query(CommunityMember)
+            .filter(
+                CommunityMember.community_id == community_id,
+                CommunityMember.user_id == invited_user_id,
+            )
+            .first()
+        )
+        if existing_member:
+            raise HTTPException(
+                status_code=400, detail="User is already a member of this community"
+            )
+
+        existing_invitation = (
+            self.db.query(CommunityInvitation)
+            .filter(
+                CommunityInvitation.community_id == community_id,
+                CommunityInvitation.invitee_id == invited_user_id,
+                CommunityInvitation.status == "pending",
+            )
+            .first()
+        )
+        if existing_invitation:
+            raise HTTPException(
+                status_code=400, detail="An invitation is already pending for this user"
+            )
+
+        active_invitations = (
+            self.db.query(CommunityInvitation)
+            .filter(
+                CommunityInvitation.community_id == community_id,
+                CommunityInvitation.inviter_id == inviter.id,
+                CommunityInvitation.status == "pending",
+            )
+            .count()
+        )
+        if active_invitations >= settings.MAX_PENDING_INVITATIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot send more than {settings.MAX_PENDING_INVITATIONS} "
+                    "pending invitations"
+                ),
+            )
+
+        invitation = CommunityInvitation(
+            community_id=community_id,
+            inviter_id=inviter.id,
+            invitee_id=invited_user_id,
+        )
+        self.db.add(invitation)
+        self.db.commit()
+        self.db.refresh(invitation)
+        return invitation
+
+    def get_user_invitations(
+        self, *, user_id: int, skip: int = 0, limit: int = 20, status: Optional[str] = None
+    ) -> List[CommunityInvitation]:
+        query = self.db.query(CommunityInvitation).filter(
+            CommunityInvitation.invitee_id == user_id
+        )
+        if status:
+            query = query.filter(CommunityInvitation.status == status)
+        return (
+            query.order_by(desc(CommunityInvitation.created_at))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def accept_invitation(
+        self, *, invitation_id: int, user: User
+    ) -> CommunityMember:
+        self.respond_to_invitation(
+            invitation_id=invitation_id, current_user=user, accept=True
+        )
+        invitation = (
+            self.db.query(CommunityInvitation)
+            .filter(CommunityInvitation.id == invitation_id)
+            .first()
+        )
+        if not invitation:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+
+        member = (
+            self.db.query(CommunityMember)
+            .filter(
+                CommunityMember.community_id == invitation.community_id,
+                CommunityMember.user_id == user.id,
+            )
+            .first()
+        )
+        if not member:
+            raise HTTPException(
+                status_code=500,
+                detail="Member was not created after accepting invitation",
+            )
+        return member
+
+    def decline_invitation(self, *, invitation_id: int, user: User) -> None:
+        self.respond_to_invitation(
+            invitation_id=invitation_id, current_user=user, accept=False
+        )
+
     def leave_community(
         self,
         *,
@@ -606,12 +828,78 @@ class CommunityService:
 
         return {"message": "You have left the community"}
 
+    def get_members(
+        self,
+        *,
+        community_id: int,
+        skip: int = 0,
+        limit: int = 50,
+        role: Optional[str] = None,
+    ) -> List[CommunityMember]:
+        query = self.db.query(CommunityMember).filter(
+            CommunityMember.community_id == community_id
+        )
+        if role:
+            try:
+                role_enum = CommunityRole(role)
+                query = query.filter(CommunityMember.role == role_enum)
+            except ValueError:
+                return []
+        return (
+            query.options(joinedload(CommunityMember.user))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def remove_member(
+        self,
+        *,
+        community_id: int,
+        user_id: int,
+        current_user: User,
+    ) -> None:
+        community = (
+            self.db.query(Community)
+            .options(joinedload(Community.members))
+            .filter(Community.id == community_id)
+            .first()
+        )
+        if not community:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
+            )
+
+        self._ensure_permissions(current_user, community, CommunityRole.ADMIN)
+
+        member = (
+            self.db.query(CommunityMember)
+            .filter(
+                CommunityMember.community_id == community_id,
+                CommunityMember.user_id == user_id,
+            )
+            .first()
+        )
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found in community")
+        if member.role == CommunityRole.OWNER:
+            raise HTTPException(
+                status_code=403, detail="Cannot remove the community owner"
+            )
+
+        self.db.delete(member)
+        self.db.commit()
+
     def cleanup_expired_invitations(self) -> int:
+        expiry_days = getattr(settings, "INVITATION_EXPIRY_DAYS", 0)
+        if not expiry_days:
+            return 0
+        cutoff = datetime.now(timezone.utc) - timedelta(days=expiry_days)
         expired_invitations = (
             self.db.query(CommunityInvitation)
             .filter(
                 CommunityInvitation.status == "pending",
-                CommunityInvitation.expires_at <= datetime.now(timezone.utc),
+                CommunityInvitation.created_at <= cutoff,
             )
             .all()
         )
@@ -657,6 +945,27 @@ class CommunityService:
             )
 
         return True
+
+    def get_community_posts(
+        self,
+        community_id: int,
+        skip: int = 0,
+        limit: int = 20,
+        sort_by: str = "created_at",
+        order: str = "desc",
+    ) -> List[Post]:
+        query = self.db.query(Post).filter(Post.community_id == community_id)
+        sort_mapping = {
+            "created_at": Post.created_at,
+            "votes": getattr(Post, "likes_count", Post.created_at),
+            "comments": getattr(Post, "comments_count", Post.created_at),
+        }
+        sort_column = sort_mapping.get(sort_by, Post.created_at)
+        if order == "asc":
+            query = query.order_by(asc(sort_column))
+        else:
+            query = query.order_by(desc(sort_column))
+        return query.offset(skip).limit(limit).all()
 
     def join_community(
         self,
@@ -744,6 +1053,12 @@ class CommunityService:
         if not community:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
+            )
+
+        if community.is_active is False:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Community is archived and cannot accept new posts",
             )
 
         member = next(
@@ -1240,3 +1555,120 @@ class CommunityService:
         output.seek(0)
         filename = f"community_{community_id}_{data_type}_{datetime.now().strftime('%Y%m%d')}.csv"
         return output.getvalue(), filename
+
+    def get_community_stats(
+        self, *, community_id: int, days: int = 30
+    ) -> Dict[str, float]:
+        # Ensure we have a fresh snapshot for today.
+        try:
+            self.update_community_statistics(community_id=community_id)
+        except Exception:
+            # If stats update fails we still want to return a safe payload.
+            pass
+
+        cutoff = date.today() - timedelta(days=days)
+        stats = (
+            self.db.query(CommunityStatistics)
+            .filter(
+                CommunityStatistics.community_id == community_id,
+                CommunityStatistics.date >= cutoff,
+            )
+            .order_by(desc(CommunityStatistics.date))
+            .first()
+        )
+
+        if not stats:
+            return {
+                "date": date.today(),
+                "member_count": 0,
+                "post_count": 0,
+                "comment_count": 0,
+                "active_users": 0,
+                "total_reactions": 0,
+                "average_posts_per_user": 0.0,
+            }
+
+        return {
+            "date": stats.date,
+            "member_count": stats.member_count or 0,
+            "post_count": stats.post_count or 0,
+            "comment_count": stats.comment_count or 0,
+            "active_users": stats.active_users or 0,
+            "total_reactions": stats.total_reactions or 0,
+            "average_posts_per_user": stats.average_posts_per_user or 0.0,
+        }
+
+    def get_user_communities(
+        self,
+        *,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 20,
+        role: Optional[str] = None,
+    ) -> List[Community]:
+        query = (
+            self.db.query(Community)
+            .join(CommunityMember, CommunityMember.community_id == Community.id)
+            .filter(CommunityMember.user_id == user_id)
+        )
+        if role:
+            try:
+                role_enum = CommunityRole(role)
+                query = query.filter(CommunityMember.role == role_enum)
+            except ValueError:
+                return []
+
+        return query.offset(skip).limit(limit).all()
+
+    def get_owned_communities(
+        self, *, owner_id: int, skip: int = 0, limit: int = 20
+    ) -> List[Community]:
+        return (
+            self.db.query(Community)
+            .filter(Community.owner_id == owner_id)
+            .order_by(desc(Community.created_at))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def update_settings(
+        self,
+        *,
+        community_id: int,
+        settings: CommunitySettingsUpdate,
+        current_user: User,
+    ) -> Community:
+        community = (
+            self.db.query(Community).filter(Community.id == community_id).first()
+        )
+        if not community:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
+            )
+
+        self._ensure_permissions(current_user, community, CommunityRole.OWNER)
+        update_data = settings.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(community, key, value)
+
+        self.db.commit()
+        self.db.refresh(community)
+        return community
+
+    def delete_community(self, *, community_id: int, current_user: User) -> None:
+        community = (
+            self.db.query(Community).filter(Community.id == community_id).first()
+        )
+        if not community:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Community not found"
+            )
+        if community.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the owner can delete the community",
+            )
+
+        self.db.delete(community)
+        self.db.commit()

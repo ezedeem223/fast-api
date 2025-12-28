@@ -1,4 +1,13 @@
-"""Centralized API router registration to keep feature routers discoverable in one place."""
+"""Centralized API router registration with feature grouping.
+
+Groups:
+- Core user-generated content: posts, comments, votes, follows, blocks.
+- Auth/OAuth/sessions: auth, oauth, social_auth, session, p2fa.
+- Community/moderation/admin: communities, hashtags, reactions, moderators, category management, stats, moderation tools.
+- Messaging/calls/realtime: message, call, screen_share, call_signaling, notifications, reels.
+- Business/support/impact: business, support, impact.
+- Utilities and AI: search, amenhotep, fact_checking, wellness, collaboration, sticker, report.
+"""
 
 from fastapi import APIRouter
 
@@ -27,6 +36,7 @@ from app.routers import (
     reaction,
     report,
     screen_share,
+    call_signaling,
     search,
     session,
     social_auth,
@@ -70,6 +80,7 @@ api_router.include_router(reaction.router)
 api_router.include_router(message.router)
 api_router.include_router(call.router)
 api_router.include_router(screen_share.router)
+api_router.include_router(call_signaling.router)
 api_router.include_router(notifications.router)
 api_router.include_router(reels.router)
 

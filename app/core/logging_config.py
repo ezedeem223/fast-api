@@ -1,6 +1,7 @@
-"""
-Logging Configuration for the Application
-Provides structured, rotating logs with different levels and formats.
+"""Logging configuration.
+
+Provides structured, rotating logs with optional JSON output. Binds lightweight contextvars
+(request_id/user_id/ip) to every record for correlation across middleware and handlers.
 """
 
 import logging
@@ -10,13 +11,16 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from contextvars import ContextVar
+
+# Context variables used across middleware/handlers to enrich logs
+request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+user_id_ctx: ContextVar[Optional[int]] = ContextVar("user_id", default=None)
+ip_ctx: ContextVar[Optional[str]] = ContextVar("ip_address", default=None)
 
 
 class JSONFormatter(logging.Formatter):
-    """
-    Custom formatter that outputs logs in JSON format.
-    Useful for log aggregation systems like ELK, Splunk, etc.
-    """
+    """Emit logs as JSON for aggregation (ELK/Splunk/etc.)."""
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
@@ -55,9 +59,7 @@ class JSONFormatter(logging.Formatter):
 
 
 class ColoredFormatter(logging.Formatter):
-    """
-    Formatter that adds colors to console output for better readability.
-    """
+    """Add ANSI colors to console output for local readability."""
 
     # ANSI color codes
     COLORS = {
@@ -84,6 +86,47 @@ class ColoredFormatter(logging.Formatter):
         return result
 
 
+class ContextEnricher(logging.Filter):
+    """Inject contextvars (request_id, user_id, ip_address) into every log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - trivial
+        request_id = request_id_ctx.get()
+        user_id = user_id_ctx.get()
+        ip_address = ip_ctx.get()
+        if request_id and not hasattr(record, "request_id"):
+            record.request_id = request_id
+        if user_id and not hasattr(record, "user_id"):
+            record.user_id = user_id
+        if ip_address and not hasattr(record, "ip_address"):
+            record.ip_address = ip_address
+        return True
+
+
+def bind_request_context(
+    *, request_id: Optional[str] = None, user_id: Optional[int] = None, ip_address: Optional[str] = None
+):
+    """Bind request context into contextvars; returns tokens for reset."""
+    tokens = []
+    if request_id is not None:
+        tokens.append(("request_id", request_id_ctx.set(request_id)))
+    if user_id is not None:
+        tokens.append(("user_id", user_id_ctx.set(user_id)))
+    if ip_address is not None:
+        tokens.append(("ip_address", ip_ctx.set(ip_address)))
+    return tokens
+
+
+def reset_request_context(tokens):
+    """Reset bound contextvars using tokens returned by bind_request_context."""
+    for key, token in tokens:
+        if key == "request_id":
+            request_id_ctx.reset(token)
+        elif key == "user_id":
+            user_id_ctx.reset(token)
+        elif key == "ip_address":
+            ip_ctx.reset(token)
+
+
 def setup_logging(
     log_level: str = "INFO",
     log_dir: Optional[str] = None,
@@ -93,17 +136,16 @@ def setup_logging(
     use_json: bool = False,
     use_colors: bool = True,
 ) -> None:
-    """
-    Setup logging configuration for the application.
+    """Configure root logging.
 
     Args:
-        log_level: Minimum logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_dir: Directory to store log files. If None, logs only to console
-        app_name: Application name used in log filenames
-        max_bytes: Maximum size of each log file before rotation
-        backup_count: Number of backup files to keep
-        use_json: If True, use JSON format for file logs
-        use_colors: If True, use colored output for console logs
+        log_level: Minimum logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+        log_dir: Directory to store log files; if None, logs only to console.
+        app_name: Application name used in log filenames.
+        max_bytes: Max size per log file before rotation.
+        backup_count: Number of rotated files to keep.
+        use_json: If True, use JSON for file handlers (better for aggregation).
+        use_colors: If True, add ANSI colors to console output.
     """
     # Create log directory if specified
     if log_dir:
@@ -123,6 +165,8 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
     _reset_handlers(root_logger)
+    context_filter = ContextEnricher()
+    root_logger.addFilter(context_filter)
 
     # Console Handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -220,6 +264,7 @@ def setup_logging(
         access_logger.addHandler(access_handler)
         access_logger.setLevel(logging.INFO)
         access_logger.propagate = False
+        access_logger.addFilter(context_filter)
 
     # Suppress noisy loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)

@@ -1,3 +1,5 @@
+"""Placeholder router for social media posts (LinkedIn/Reddit) — currently disabled/commented."""
+
 # from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 # from sqlalchemy.orm import Session
 # from datetime import datetime, timedelta, timezone

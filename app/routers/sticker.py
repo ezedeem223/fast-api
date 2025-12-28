@@ -1,6 +1,7 @@
 """Sticker router for packs/categories/reports and media upload validation."""
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 import os
@@ -13,11 +14,20 @@ import emoji
 # Import project modules
 from .. import models, schemas, oauth2
 from app.core.database import get_db
+from app.modules.users.models import UserRole
+from app.modules.stickers import models as sticker_models
 
 router = APIRouter(prefix="/stickers", tags=["Stickers"])
 
 # Directory where sticker images will be stored
 UPLOAD_DIRECTORY = "static/stickers"
+
+
+def _is_admin(user: models.User) -> bool:
+    role = getattr(user, "role", "")
+    if hasattr(role, "value"):
+        role = role.value
+    return str(role).lower() == "admin" or getattr(user, "is_admin", False)
 
 # ------------------------------------------------------------------
 #                         Endpoints
@@ -40,7 +50,20 @@ def create_sticker_pack(
 
     Returns the created sticker pack.
     """
-    new_pack = models.StickerPack(name=pack.name, creator_id=current_user.id)
+    existing = (
+        db.query(sticker_models.StickerPack)
+        .filter(
+            func.lower(sticker_models.StickerPack.name) == pack.name.lower(),
+            sticker_models.StickerPack.creator_id == current_user.id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="Sticker pack with this name already exists"
+        )
+
+    new_pack = sticker_models.StickerPack(name=pack.name, creator_id=current_user.id)
     db.add(new_pack)
     db.commit()
     db.refresh(new_pack)
@@ -67,8 +90,8 @@ async def create_sticker(
     """
     # Verify that the sticker pack exists and belongs to the current user
     pack = (
-        db.query(models.StickerPack)
-        .filter(models.StickerPack.id == sticker.pack_id)
+        db.query(sticker_models.StickerPack)
+        .filter(sticker_models.StickerPack.id == sticker.pack_id)
         .first()
     )
     if not pack or pack.creator_id != current_user.id:
@@ -97,14 +120,14 @@ async def create_sticker(
         image.save(image_path)
 
         # Create the sticker record with image URL and associated pack
-        new_sticker = models.Sticker(
+        new_sticker = sticker_models.Sticker(
             name=sticker.name, image_url=image_path, pack_id=sticker.pack_id
         )
 
         # Retrieve and assign sticker categories based on provided IDs
         categories = (
-            db.query(models.StickerCategory)
-            .filter(models.StickerCategory.id.in_(sticker.category_ids))
+            db.query(sticker_models.StickerCategory)
+            .filter(sticker_models.StickerCategory.id.in_(sticker.category_ids))
             .all()
         )
         new_sticker.categories = categories
@@ -121,16 +144,23 @@ async def create_sticker(
 @router.get("/pack/{pack_id}", response_model=schemas.StickerPackWithStickers)
 def get_sticker_pack(pack_id: int, db: Session = Depends(get_db)):
     """Endpoint: get_sticker_pack."""
-    pack = db.query(models.StickerPack).filter(models.StickerPack.id == pack_id).first()
+    pack = (
+        db.query(sticker_models.StickerPack)
+        .filter(sticker_models.StickerPack.id == pack_id)
+        .first()
+    )
     if not pack:
         raise HTTPException(status_code=404, detail="Sticker pack not found")
     return pack
 
 
 @router.get("/", response_model=List[schemas.Sticker])
-def get_stickers(db: Session = Depends(get_db)):
+def get_stickers(approved_only: bool = True, db: Session = Depends(get_db)):
     """Endpoint: get_stickers."""
-    stickers = db.query(models.Sticker).all()
+    query = db.query(sticker_models.Sticker)
+    if approved_only:
+        query = query.filter(sticker_models.Sticker.approved.is_(True))
+    stickers = query.all()
     return stickers
 
 
@@ -138,7 +168,9 @@ def get_stickers(db: Session = Depends(get_db)):
 def search_stickers(query: str, db: Session = Depends(get_db)):
     """Endpoint: search_stickers."""
     stickers = (
-        db.query(models.Sticker).filter(models.Sticker.name.ilike(f"%{query}%")).all()
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.name.ilike(f"%{query}%"))
+        .all()
     )
     return stickers
 
@@ -164,10 +196,14 @@ def approve_sticker(
 
     Returns a success message upon approval.
     """
-    if current_user.role != "ADMIN":
+    if not _is_admin(current_user):
         raise HTTPException(status_code=403, detail="Only admins can approve stickers")
 
-    sticker = db.query(models.Sticker).filter(models.Sticker.id == sticker_id).first()
+    sticker = (
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.id == sticker_id)
+        .first()
+    )
     if not sticker:
         raise HTTPException(status_code=404, detail="Sticker not found")
 
@@ -195,12 +231,22 @@ def create_sticker_category(
 
     Returns the created sticker category.
     """
-    if current_user.role != "ADMIN":
+    if not _is_admin(current_user):
         raise HTTPException(
             status_code=403, detail="Only admins can create sticker categories"
         )
 
-    new_category = models.StickerCategory(name=category.name)
+    existing = (
+        db.query(sticker_models.StickerCategory)
+        .filter(func.lower(sticker_models.StickerCategory.name) == category.name.lower())
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409, detail="Sticker category with this name already exists"
+        )
+
+    new_category = sticker_models.StickerCategory(name=category.name)
     db.add(new_category)
     db.commit()
     db.refresh(new_category)
@@ -223,12 +269,25 @@ def report_sticker(
     Returns the created sticker report.
     """
     sticker = (
-        db.query(models.Sticker).filter(models.Sticker.id == report.sticker_id).first()
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.id == report.sticker_id)
+        .first()
     )
     if not sticker:
         raise HTTPException(status_code=404, detail="Sticker not found")
 
-    new_report = models.StickerReport(
+    existing = (
+        db.query(sticker_models.StickerReport)
+        .filter(
+            sticker_models.StickerReport.sticker_id == report.sticker_id,
+            sticker_models.StickerReport.reporter_id == current_user.id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already reported this sticker")
+
+    new_report = sticker_models.StickerReport(
         sticker_id=report.sticker_id, reporter_id=current_user.id, reason=report.reason
     )
     db.add(new_report)
@@ -249,19 +308,19 @@ def get_sticker_reports(
 
     Returns a list of reported stickers.
     """
-    if current_user.role != "ADMIN":
+    if not _is_admin(current_user):
         raise HTTPException(
             status_code=403, detail="Only admins can view sticker reports"
         )
 
-    reports = db.query(models.StickerReport).all()
+    reports = db.query(sticker_models.StickerReport).all()
     return reports
 
 
 @router.get("/categories", response_model=List[schemas.StickerCategory])
 def get_sticker_categories(db: Session = Depends(get_db)):
     """Endpoint: get_sticker_categories."""
-    categories = db.query(models.StickerCategory).all()
+    categories = db.query(sticker_models.StickerCategory).all()
     return categories
 
 
@@ -269,8 +328,53 @@ def get_sticker_categories(db: Session = Depends(get_db)):
 def get_stickers_by_category(category_id: int, db: Session = Depends(get_db)):
     """Endpoint: get_stickers_by_category."""
     stickers = (
-        db.query(models.Sticker)
-        .filter(models.Sticker.categories.any(id=category_id))
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.categories.any(id=category_id))
         .all()
     )
     return stickers
+
+
+@router.put("/{sticker_id}/disable")
+def disable_sticker(
+    sticker_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Disable (hide) a sticker from listings."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can disable stickers")
+
+    sticker = (
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.id == sticker_id)
+        .first()
+    )
+    if not sticker:
+        raise HTTPException(status_code=404, detail="Sticker not found")
+
+    sticker.approved = False
+    db.commit()
+    return {"message": "Sticker disabled"}
+
+
+@router.put("/{sticker_id}/enable")
+def enable_sticker(
+    sticker_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Re-enable a sticker."""
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only admins can enable stickers")
+
+    sticker = (
+        db.query(sticker_models.Sticker)
+        .filter(sticker_models.Sticker.id == sticker_id)
+        .first()
+    )
+    if not sticker:
+        raise HTTPException(status_code=404, detail="Sticker not found")
+    sticker.approved = True
+    db.commit()
+    return {"message": "Sticker enabled"}

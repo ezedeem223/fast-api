@@ -97,3 +97,27 @@ def test_search_posts(authorized_client, test_posts):
     res = authorized_client.get("/posts/?search=first")
     assert res.status_code == 200
     # You might need to adjust the assertion based on your actual response structure
+
+
+def test_post_with_emoji_only_content(authorized_client):
+    res = authorized_client.post(
+        "/posts/", json={"title": "😀 title", "content": "😀😀😀"}
+    )
+    assert res.status_code in (200, 201)
+    body = res.json()
+    assert body["content"].startswith("😀")
+
+
+def test_post_rejects_sql_injection_like_payload(authorized_client):
+    payload = {"title": "sql test", "content": "'; DROP TABLE users;--"}
+    res = authorized_client.post("/posts/", json=payload)
+    # Accept either validation error or successful handling; must not 500
+    assert res.status_code != 500
+
+
+def test_large_content_handled_gracefully(authorized_client):
+    big_content = "x" * 5000
+    res = authorized_client.post(
+        "/posts/", json={"title": "Big Content", "content": big_content}
+    )
+    assert res.status_code in (200, 201, 422)

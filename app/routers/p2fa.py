@@ -82,6 +82,8 @@ async def enable_2fa(
 
         return {"otp_secret": secret, "qr_code": qr_code}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error enabling 2FA: {str(e)}")
         db.rollback()
@@ -116,6 +118,8 @@ async def disable_2fa(
 
         return {"message": "Two-factor authentication has been disabled."}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error disabling 2FA: {str(e)}")
         db.rollback()
@@ -151,6 +155,8 @@ async def verify_2fa(
 
         return {"message": "OTP verified successfully"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error verifying 2FA: {str(e)}")
         raise HTTPException(

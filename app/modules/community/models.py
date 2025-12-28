@@ -1,4 +1,7 @@
-"""Community domain SQLAlchemy models and enums."""
+"""Community domain SQLAlchemy models and enums.
+
+Models cover communities, invitations/membership/roles, tags/categories, search stats/suggestions,
+and archives (reels/articles/digital museum items)."""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Text,
     UniqueConstraint,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.sqltypes import TIMESTAMP
@@ -233,6 +237,10 @@ class SearchStatistics(Base):
     """Aggregated statistics for search behaviour."""
 
     __tablename__ = "search_statistics"
+    __table_args__ = (
+        UniqueConstraint("user_id", "term", name="uq_search_statistics_user_term"),
+        Index("ix_search_statistics_term", "term"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -284,6 +292,23 @@ class Reel(Base):
 
     owner = relationship("User", back_populates="reels")
     community = relationship("Community", back_populates="reels")
+
+
+class ArchivedReel(Base):
+    """Archived copy of expired reels for audit/history."""
+
+    __tablename__ = "archived_reels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reel_id = Column(Integer, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    video_url = Column(String, nullable=False)
+    description = Column(String)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    community_id = Column(Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    view_count = Column(Integer, default=0)
+    archived_at = Column(DateTime(timezone=True), server_default=timestamp_default())
 
 
 class Article(Base):

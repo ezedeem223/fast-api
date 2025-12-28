@@ -23,6 +23,7 @@ from ..analytics import (
     get_recent_searches,
     generate_search_trends_chart,
 )
+from app.modules.fact_checking.models import Fact, FactCheckStatus
 
 from cachetools import cached, TTLCache
 
@@ -104,6 +105,41 @@ async def get_statistics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching statistics: {str(e)}",
+        )
+
+
+@router.get("/fact-check/stats")
+@cached(admin_cache)
+async def get_fact_check_stats(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    """Fact-checking status counts and recent pending facts."""
+    try:
+        counts = (
+            db.query(Fact.status, func.count(Fact.id))
+            .group_by(Fact.status)
+            .all()
+        )
+        count_map = {status.value if isinstance(status, FactCheckStatus) else status: cnt for status, cnt in counts}
+        pending = (
+            db.query(Fact)
+            .filter(Fact.status == FactCheckStatus.PENDING)
+            .order_by(Fact.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        return {
+            "counts": count_map,
+            "recent_pending": [
+                {"id": f.id, "claim": f.claim, "submitted": f.created_at}
+                for f in pending
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch fact-check stats: {str(e)}",
         )
 
 

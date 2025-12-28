@@ -12,19 +12,19 @@ from .settings import Settings
 
 
 class DevelopmentSettings(Settings):
-    """Settings tuned for local development."""
+    """Settings tuned for local development (verbose logging, permissive hosts)."""
 
     environment: str = "development"
 
 
 class ProductionSettings(Settings):
-    """Settings tuned for production."""
+    """Settings tuned for production (HTTPS enforced by default; use explicit ALLOWED_HOSTS)."""
 
     environment: str = "production"
 
 
 class TestSettings(Settings):
-    """Settings tuned for automated tests."""
+    """Settings tuned for automated tests (prefers test DB URLs and disables heavy services)."""
 
     environment: str = "test"
 
@@ -54,4 +54,5 @@ def get_settings() -> Settings:
 
 @lru_cache
 def get_mail_client() -> FastMail:
+    """Return a cached FastMail client configured from current settings."""
     return FastMail(get_settings().mail_config)

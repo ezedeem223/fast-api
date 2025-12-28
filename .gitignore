@@ -23,3 +23,9 @@ content_classifier.joblib
 content_vectorizer.joblib
 app/firebase-credentials/
 scripts/__pycache__/
+data/amenhotep/*.onnx
+rust/**/target/
+logs/
+.coverage
+coverage.xml
+.alembic*.db

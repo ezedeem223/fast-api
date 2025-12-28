@@ -1,4 +1,9 @@
-"""Database engine and session management utilities."""
+"""Database engine and session management utilities.
+
+- Builds per-backend engine kwargs (SQLite vs Postgres) with safe pooling defaults.
+- Derives the URL from settings, using the test database automatically when APP_ENV=test.
+- Exposes a SessionLocal factory and a scoped `get_db` dependency with guaranteed cleanup.
+"""
 
 from __future__ import annotations
 
@@ -6,18 +11,16 @@ from typing import Generator
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine, make_url
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.models.base import Base
 from datetime import datetime, timezone
 
 
-Base = declarative_base()
-
-
 def _engine_kwargs(database_url: str) -> dict:
-    """Return engine keyword arguments tuned per backend."""
+    """Return engine keyword arguments tuned per backend (SQLite vs pooled Postgres)."""
     url = make_url(database_url)
     if url.drivername.startswith("sqlite"):
         return {

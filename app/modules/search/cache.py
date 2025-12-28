@@ -1,4 +1,10 @@
-"""Utility helpers for caching search statistics/suggestions in Redis."""
+"""Utility helpers for caching search statistics/suggestions in Redis.
+
+Design:
+- Fail-open: if Redis is absent/unreachable, functions return None and bypass cache hits.
+- Keys are plain strings; payloads are JSON-serialized with TTL.
+- Used by analytics/search services to avoid DB hits for popular/recent/user stats.
+"""
 
 from __future__ import annotations
 

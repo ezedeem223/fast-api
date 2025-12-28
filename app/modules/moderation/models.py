@@ -14,6 +14,8 @@ from sqlalchemy import (
     Interval,
     ForeignKey,
     Enum,
+    Boolean,
+    JSON,
 )
 from sqlalchemy.orm import relationship
 
@@ -85,6 +87,7 @@ class BannedWord(Base):
     id = Column(Integer, primary_key=True, index=True)
     word = Column(String, unique=True, nullable=False)
     severity = Column(Enum("warn", "ban", name="word_severity"), default="warn")
+    is_regex = Column(Boolean, default=False, server_default="0")
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
 
@@ -178,6 +181,22 @@ class BlockAppeal(Base):
     block = relationship("Block", back_populates="appeals")
     user = relationship("User", foreign_keys=[user_id], back_populates="block_appeals")
     reviewer = relationship("User", foreign_keys=[reviewer_id])
+
+
+class AuditLog(Base):
+    """Audit trail for admin actions."""
+
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String, nullable=False)
+    target_type = Column(String, nullable=True)
+    target_id = Column(Integer, nullable=True)
+    details = Column(JSON, default=dict, server_default="{}")
+    created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+
+    admin = relationship("User")
 
 
 __all__ = [

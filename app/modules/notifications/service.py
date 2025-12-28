@@ -31,6 +31,34 @@ from .common import (
 from .email import send_email_notification
 from .realtime import manager
 from .repository import NotificationRepository
+import os
+
+try:
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    redis = None
+
+_redis_client = None
+
+
+def _publish_realtime_broadcast(message: dict) -> None:
+    """Optional Redis fan-out for external WS gateway; best-effort."""
+    global _redis_client
+    url = os.getenv("REALTIME_REDIS_URL")
+    channel = os.getenv("REALTIME_REDIS_CHANNEL", "realtime:broadcast")
+    if not url or not redis:
+        return
+    if _redis_client is None:
+        try:
+            _redis_client = redis.from_url(url)
+        except Exception:
+            _redis_client = False
+    if not _redis_client:
+        return
+    try:
+        _redis_client.publish(channel, json.dumps(message))
+    except Exception:
+        pass
 
 
 MAX_METADATA_BYTES = 2048
@@ -84,6 +112,8 @@ class NotificationDeliveryManager:
                 logger.warning(
                     "No delivery channels enabled for user %s", notification.user_id
                 )
+                # Leave status as-is (pending) and do not schedule retries when there are no channels.
+                self.db.commit()
                 return False
             results = await asyncio.gather(*delivery_tasks, return_exceptions=True)
             success = all(not isinstance(r, Exception) for r in results)
@@ -114,6 +144,9 @@ class NotificationDeliveryManager:
 
             if notification.retry_count < self.max_retries:
                 await self._schedule_retry(notification)
+                return False
+            # Fallback persistence if no retry path executes.
+            self.db.commit()
             return False
 
     async def _process_language(
@@ -253,6 +286,7 @@ class NotificationDeliveryManager:
                 },
             }
             await manager.send_personal_message(message, notification.user_id)
+            _publish_realtime_broadcast(message)
         except Exception as exc:
             logger.error("Error sending realtime notification: %s", exc)
 
@@ -380,7 +414,12 @@ class NotificationService:
             if scheduled_for and scheduled_for > datetime.now(timezone.utc):
                 self._schedule_delivery(new_notification)
             else:
-                await self.deliver_notification(new_notification)
+                # Clear any stale cached delivery result for this notification id before delivering.
+                delivery_status_cache.pop(f"delivery_{new_notification.id}", None)
+                delivered = await self.deliver_notification(new_notification)
+                if delivered is False and new_notification.status == notification_models.NotificationStatus.PENDING:
+                    new_notification.status = notification_models.NotificationStatus.FAILED
+                    self.db.commit()
             logger.info("Notification created for user %s", user_id)
             return new_notification
         except Exception as exc:

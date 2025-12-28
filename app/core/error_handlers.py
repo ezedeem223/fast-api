@@ -1,6 +1,11 @@
-"""
-Global Exception Handlers for the Application
-Provides unified error response format and logging.
+"""Global exception handlers with unified response shape.
+
+Behavior:
+- AppException: returns structured `error.code/message/details` with path and timestamp.
+- Validation errors: returns field-level messages with 422 status (handles both legacy and new fastapi code).
+- Rate limits: returns 429 with retry hint.
+- SQLAlchemy errors: returns 500 without leaking DB details.
+- General exceptions: in dev/test, echo error/traceback for faster debugging; in prod, return generic 500.
 """
 
 import logging

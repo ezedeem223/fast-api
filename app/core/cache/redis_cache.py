@@ -1,19 +1,24 @@
-"""
-Redis Cache Module
-Provides decorators and utilities for caching API responses and function results.
+"""Redis cache facade with graceful degradation.
+
+Features:
+- Async Redis client with optional compression, tag-based invalidation, and batch helpers.
+- Stampede protection via per-key asyncio locks.
+- In-memory fallback store when Redis is missing/uninitialized to keep tests and degraded mode running.
 """
 
 import json
 import logging
 import hashlib
 import functools
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 import time
+import base64
+import zlib
+import asyncio
 
 import redis.asyncio as redis
 
 from app.core.config import settings
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +29,12 @@ class RedisCache:
         self.redis: Optional[redis.Redis] = None
         self.enabled = False
         self.default_ttl = 300  # 5 minutes default
+        self.ttl_overrides: Dict[str, int] = {
+            "comments:list": 120,
+            "user_settings": 3600,
+        }
+        self._compression_threshold = 1024  # bytes
+        self._locks: Dict[str, asyncio.Lock] = {}
         self.failed_init = False  # track init failures for test env readiness
         # Lightweight in-memory fallback store used when a provided redis-like object
         # does not implement get/set (e.g., certain test doubles).
@@ -84,7 +95,7 @@ class RedisCache:
         return f"{prefix}:{hashed}"
 
     async def get(self, key: str) -> Any:
-        """Get value from cache."""
+        """Get value from cache (respects in-memory fallback when Redis is stubbed)."""
         if not self.enabled or not self.redis:
             return None
         # Fallback to in-memory store when the backend stub lacks required APIs.
@@ -99,13 +110,15 @@ class RedisCache:
             return value
         try:
             data = await self.redis.get(key)
-            return json.loads(data) if data else None
+            if not data:
+                return None
+            return self._decode_value(data)
         except Exception as e:
             logger.error(f"Cache get error for key {key}: {e}")
             return None
 
     async def set(self, key: str, value: Any, ttl: int = None) -> None:
-        """Set value in cache."""
+        """Set value with optional TTL; stores in fallback when Redis backend is absent."""
         if not self.enabled or not self.redis:
             return
         # Fallback path for simple stubs without set()
@@ -114,8 +127,8 @@ class RedisCache:
             self._fallback_store[key] = (value, exp_ts)
             return
         try:
-            serialized = json.dumps(value, default=str)
-            await self.redis.set(key, serialized, ex=ttl or self.default_ttl)
+            serialized = self._encode_value(value)
+            await self.redis.set(key, serialized, ex=self._resolve_ttl(key, ttl))
         except Exception as e:
             logger.error(f"Cache set error for key {key}: {e}")
 
@@ -155,8 +168,8 @@ class RedisCache:
         try:
             pipe = self.redis.pipeline()
             for key, value in items.items():
-                serialized = json.dumps(value, default=str)
-                pipe.set(key, serialized, ex=ttl or self.default_ttl)
+                serialized = self._encode_value(value)
+                pipe.set(key, serialized, ex=self._resolve_ttl(key, ttl))
             await pipe.execute()
         except Exception as e:
             logger.error(f"Cache set_many error: {e}")
@@ -172,7 +185,7 @@ class RedisCache:
             results = await pipe.execute()
 
             return {
-                key: json.loads(value) if value else None
+                key: self._decode_value(value) if value else None
                 for key, value in zip(keys, results)
             }
         except Exception as e:
@@ -236,6 +249,71 @@ class RedisCache:
 
     # ===== Helper Functions =====
 
+    def _encode_value(self, value: Any) -> str:
+        """Serialize and optionally compress a value into a string safe for Redis."""
+        serialized = json.dumps(value, default=str).encode("utf-8")
+        if len(serialized) >= self._compression_threshold:
+            compressed = zlib.compress(serialized)
+            return "1|" + base64.b64encode(compressed).decode("ascii")
+        return "0|" + serialized.decode("utf-8")
+
+    def _decode_value(self, data: Any) -> Any:
+        """Decode a value stored with `_encode_value`."""
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        if not isinstance(data, str):
+            return data
+        # Handle double-encoded strings (e.g., JSON-dumped value returned from fake Redis)
+        if len(data) >= 2 and data[0] == '"' and data[-1] == '"':
+            data = data[1:-1]
+        if data.startswith("1|"):
+            payload = base64.b64decode(data[2:])
+            return json.loads(payload)
+        if data.startswith("0|"):
+            try:
+                return json.loads(data[2:])
+            except Exception:
+                try:
+                    coerced = data[2:].replace('\\"', '"')
+                    return json.loads(coerced)
+                except Exception:
+                    pass
+        # Fallback for legacy/plain storage
+        try:
+            return json.loads(data)
+        except Exception:
+            return None
+
+    def _resolve_ttl(self, key: str, ttl: Optional[int]) -> int:
+        if ttl is not None:
+            return ttl
+        for prefix, override in self.ttl_overrides.items():
+            if key.startswith(prefix):
+                return override
+        return self.default_ttl
+
+    def set_ttl_override(self, prefix: str, ttl: int) -> None:
+        """Override default TTL for keys starting with prefix."""
+        self.ttl_overrides[prefix] = ttl
+
+    def _get_lock(self, key: str) -> asyncio.Lock:
+        """Return an asyncio lock for a cache key to guard against stampedes."""
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        return self._locks[key]
+
+    def invalidate_nowait(self, pattern: str) -> None:
+        """Fire-and-forget invalidation helper for sync code paths."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                asyncio.run(self.invalidate(pattern))
+            except RuntimeError:
+                pass
+            return
+        loop.create_task(self.invalidate(pattern))
+
 
 def cache_key_user(prefix: str, user_id: int, **kwargs) -> str:
     """Generate cache key for user-specific data."""
@@ -250,17 +328,7 @@ def cache_key_list(prefix: str, **kwargs) -> str:
 
 
 async def cached_query(cache_key: str, query_fn, ttl: int = 300, tags: list = None):
-    """
-    Generic function to cache query results.
-
-    Usage:
-        posts = await cached_query(
-            cache_key="posts:user:123",
-            query_fn=lambda: db.query(Post).filter(...).all(),
-            ttl=600,
-            tags=["posts", "user:123"]
-        )
-    """
+    """Cache helper for reusable query lambdas with optional tag invalidation."""
     # Try to get from cache
     cached_data = await cache_manager.get(cache_key)
     if cached_data is not None:
@@ -312,7 +380,7 @@ def cache(
                     user_suffix = f":u{user.id}"
 
             # Generate Cache Key
-            # We create a simpler key generation strategy for endpoints
+            # Simple, deterministic hash of non-request args to avoid leaks across users/services.
             params = {
                 k: v
                 for k, v in kwargs.items()
@@ -326,24 +394,93 @@ def cache(
             cache_key = f"{prefix}{user_suffix}:{param_str}"
 
             # Try to get from cache
-            cached_data = await cache_manager.get(cache_key)
-            if cached_data is not None:
-                logger.debug(f"Cache hit: {cache_key}")
-                return cached_data
+            lock = cache_manager._get_lock(cache_key)
+            async with lock:
+                cached_data = await cache_manager.get(cache_key)
+                if cached_data is not None:
+                    logger.debug(f"Cache hit: {cache_key}")
+                    return cached_data
 
-            # Execute function
-            result = await func(*args, **kwargs)
+                # Execute function
+                result = await func(*args, **kwargs)
 
-            # Function result might be a Pydantic model or list of models
-            # We need to convert it to dict/json compatible format before caching
-            # FastAPI handles Pydantic serialization automatically for response,
-            # but for manual caching we rely on json.dumps default=str above.
+                # Function result might be a Pydantic model or list of models
+                # We need to convert it to dict/json compatible format before caching
+                # FastAPI handles Pydantic serialization automatically for response,
+                # but for manual caching we rely on json.dumps default=str above.
 
-            # Store in cache (Fire and forget set to avoid blocking)
-            await cache_manager.set(cache_key, result, ttl)
+                # Store in cache (Fire and forget set to avoid blocking)
+                await cache_manager.set(cache_key, result, ttl)
 
-            return result
+                return result
 
         return wrapper
 
     return decorator
+
+
+    # ===== Internal helpers =====
+
+    def _encode_value(self, value: Any) -> str:
+        """Serialize and optionally compress a value into a string safe for Redis."""
+        serialized = json.dumps(value, default=str).encode("utf-8")
+        if len(serialized) >= self._compression_threshold:
+            compressed = zlib.compress(serialized)
+            return "1|" + base64.b64encode(compressed).decode("ascii")
+        return "0|" + serialized.decode("utf-8")
+
+    def _decode_value(self, data: str) -> Any:
+        """Decode a value stored with `_encode_value`."""
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        if not isinstance(data, str):
+            return data
+        if len(data) >= 2 and data[0] == '"' and data[-1] == '"':
+            data = data[1:-1]
+        if data.startswith("1|"):
+            payload = base64.b64decode(data[2:])
+            return json.loads(payload)
+        if data.startswith("0|"):
+            try:
+                return json.loads(data[2:])
+            except Exception:
+                try:
+                    coerced = data[2:].replace('\\"', '"')
+                    return json.loads(coerced)
+                except Exception:
+                    pass
+        # Fallback for legacy/plain storage
+        try:
+            return json.loads(data)
+        except Exception:
+            return None
+
+    def _resolve_ttl(self, key: str, ttl: Optional[int]) -> int:
+        if ttl is not None:
+            return ttl
+        for prefix, override in self.ttl_overrides.items():
+            if key.startswith(prefix):
+                return override
+        return self.default_ttl
+
+    def set_ttl_override(self, prefix: str, ttl: int) -> None:
+        """Override default TTL for keys starting with prefix."""
+        self.ttl_overrides[prefix] = ttl
+
+    def _get_lock(self, key: str) -> asyncio.Lock:
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        return self._locks[key]
+
+    async def invalidate_nowait(self, pattern: str) -> None:
+        """Fire-and-forget invalidation helper for sync code paths."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                asyncio.run(self.invalidate(pattern))
+            except RuntimeError:
+                # Already in loop but not retrievable
+                pass
+            return
+        loop.create_task(self.invalidate(pattern))

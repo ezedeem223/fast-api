@@ -18,15 +18,16 @@ def check_content(db: Session, content: str):
 
     The function retrieves all banned words from the database, then searches the content
     using regular expressions. It uses word boundaries (\\b) to ensure exact word matches and
-    performs a case-insensitive search.
+    performs a case-insensitive search. Regex patterns are honored when `is_regex` is set.
     """
     banned_words = db.query(models.BannedWord).all()
     warnings = []
     bans = []
 
     for banned_word in banned_words:
-        # Construct a regex pattern to match the banned word as a whole word
-        pattern = r"\b" + re.escape(banned_word.word) + r"\b"
+        pattern = (
+            banned_word.word if getattr(banned_word, "is_regex", False) else rf"\b{re.escape(banned_word.word)}\b"
+        )
         if re.search(pattern, content, re.IGNORECASE):
             if banned_word.severity == "warn":
                 warnings.append(banned_word.word)
@@ -48,14 +49,14 @@ def filter_content(db: Session, content: str):
         str: The content with banned words replaced by asterisks of the same length.
 
     The function retrieves all banned words from the database and uses regular expressions
-    to replace each occurrence with asterisks. This ensures that the structure of the text is maintained
-    while the banned words are obscured.
+    (word boundaries when not regex) to replace each occurrence with asterisks, preserving text structure.
     """
     banned_words = db.query(models.BannedWord).all()
 
     for banned_word in banned_words:
-        # Construct a regex pattern to match the banned word as a whole word
-        pattern = r"\b" + re.escape(banned_word.word) + r"\b"
+        pattern = (
+            banned_word.word if getattr(banned_word, "is_regex", False) else rf"\b{re.escape(banned_word.word)}\b"
+        )
         replacement = "*" * len(banned_word.word)
         content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
 

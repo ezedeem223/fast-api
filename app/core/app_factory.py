@@ -1,4 +1,11 @@
-"""Application factory helpers to keep app/main.py lightweight."""
+"""Application factory helpers to keep app/main.py lightweight.
+
+Responsibilities:
+- Bootstrap logging/tracing/monitoring before constructing the app.
+- Configure middleware ordering (host/HTTPS -> logging -> CORS -> language/IP filters -> rate limit).
+- Include routers (HTTP + WebSocket), health checks, static/uploads mounts, and startup tasks.
+- Provide test-friendly overrides (rate limiter disabled in tests, reset settings between runs).
+"""
 
 from __future__ import annotations
 
@@ -39,6 +46,7 @@ from app.core.middleware.logging_middleware import LoggingMiddleware
 from app.core.error_handlers import register_exception_handlers
 from app.core.cache.redis_cache import cache_manager
 from app.core.monitoring import setup_monitoring  # Task 7: Import Monitoring
+from app.core.telemetry import setup_tracing, setup_sentry
 
 logger = logging.getLogger(__name__)
 manager = ConnectionManager()
@@ -85,11 +93,13 @@ class HostRedirectMiddleware(LoggingMiddleware):
 
 
 def _configure_app(app: FastAPI) -> None:
+    """Wire middleware, CORS, routers, and startup tasks in deterministic order."""
     allowed_hosts = (
         getattr(settings.__class__, "allowed_hosts", None)
         or getattr(settings, "allowed_hosts", None)
         or ["*"]
     )
+    # Middleware ordering matters: host/HTTPS checks first, then logging/CORS, then language/IP filters.
     if allowed_hosts and not (len(allowed_hosts) == 1 and allowed_hosts[0] == "*"):
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
@@ -123,10 +133,7 @@ def _configure_app(app: FastAPI) -> None:
 
 
 def _reset_test_overrides() -> None:
-    """
-    Clean up test-specific monkeypatches that can leak between create_app calls.
-    Currently ensures allowed_hosts/force_https revert for subsequent tests.
-    """
+    """Reset test-only overrides so repeated app instantiations stay isolated."""
     if getattr(settings, "environment", "").lower() != "test":
         return
 
@@ -150,6 +157,7 @@ def _reset_test_overrides() -> None:
 
 
 def _register_routes(app: FastAPI) -> None:
+    """Register root, health checks, and protected sample endpoints."""
     @app.get("/")
     async def root():
         return {"message": "Hello, World!"}
@@ -157,11 +165,13 @@ def _register_routes(app: FastAPI) -> None:
     # Task 8: Liveness Check (Is the app process running?)
     @app.get("/livez", tags=["Health"])
     async def livez():
+        """Confirm the process is up without touching external dependencies."""
         return {"status": "ok"}
 
     # Task 8: Readiness Check (Are dependencies like DB and Redis ready?)
     @app.get("/readyz", tags=["Health"])
     async def readyz(db: Session = Depends(get_db)):
+        """Validate DB connectivity and Redis availability before serving traffic."""
         health_status = {"database": "unknown", "redis": "unknown"}
         is_ready = True
 
@@ -239,6 +249,7 @@ def _register_routes(app: FastAPI) -> None:
 
 
 def _mount_static_files(app: FastAPI) -> None:
+    """Mount static and uploads directories with optional cache-control headers."""
     try:
         static_dir = Path(settings.static_root)
         uploads_dir = Path(settings.uploads_root)
@@ -288,6 +299,7 @@ def _mount_static_files(app: FastAPI) -> None:
 
 
 def _lifespan_factory():
+    """Create lifespan context to initialize and tear down shared resources."""
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup
@@ -303,6 +315,7 @@ def _lifespan_factory():
 
 
 def _maybe_train_classifier() -> None:
+    """Train content classifier lazily outside tests when artifacts are missing."""
     if settings.environment.lower() != "test" and not (
         Path("content_classifier.joblib").exists()
         and Path("content_vectorizer.joblib").exists()
@@ -312,8 +325,12 @@ def _maybe_train_classifier() -> None:
 
 def create_app() -> FastAPI:
     """
-    Application Factory to create and configure the FastAPI application.
-    Integrates Logging, Error Handling, Rate Limiting, and Middleware.
+    Build and configure the FastAPI application.
+
+    Sets up logging first, then telemetry/tracing, middleware, routers, health checks,
+    cache/monitoring hooks, and test-friendly defaults (e.g., rate limiter off in tests).
+    Startup tasks (scheduler/Firebase/search) run outside test env; content classifier
+    trains lazily when artifacts are missing.
     """
 
     # Task 4: Setup Logging System first
@@ -356,6 +373,19 @@ def create_app() -> FastAPI:
     # Configure Middleware and Routes
     _configure_app(app)
     _register_routes(app)
+    setup_tracing(
+        app,
+        service_name=getattr(settings, "site_name", "fast-api"),
+        enabled=bool(
+            getattr(settings, "otel_enabled", False)
+            or getattr(settings, "otel_exporter_otlp_endpoint", None)
+        ),
+    )
+    setup_sentry(
+        getattr(settings, "sentry_dsn", None),
+        environment=settings.environment,
+        traces_sample_rate=getattr(settings, "sentry_traces_sample_rate", 0.1),
+    )
 
     # Task 3: Register Unified Exception Handlers
     # This replaces the old _register_exception_handlers function
