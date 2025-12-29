@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from app import models
 from app.modules.utils import content, analytics
 

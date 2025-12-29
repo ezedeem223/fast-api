@@ -1,12 +1,10 @@
-import asyncio
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app import models
 from app.modules.notifications import models as notif_models
-from app.modules.notifications.service import NotificationService, NotificationDeliveryManager
+from app.modules.notifications.service import NotificationService
 from app.notifications import create_notification as sync_create_notification
 from tests.conftest import TestingSessionLocal
 

@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta
 
-from fastapi import HTTPException
-
 from app import models
 from app.routers import search as search_router
 from app.modules.search.typesense_client import TypesenseClient

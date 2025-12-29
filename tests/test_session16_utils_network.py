@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import pytest
-
 from app import models
 from app.modules.utils import network
 

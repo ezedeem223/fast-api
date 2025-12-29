@@ -1,5 +1,3 @@
-import pytest
-
 from app.modules.search import cache as search_cache
 
 

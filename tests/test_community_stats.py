@@ -2,8 +2,6 @@ from datetime import date, datetime, timedelta, timezone
 
 from app.services.community.service import CommunityService
 from app.modules.community.models import Community, CommunityMember, CommunityStatistics
-from app.modules.posts.models import Post, Comment
-from app.modules.social import Vote
 from app.modules.users.models import User
 
 

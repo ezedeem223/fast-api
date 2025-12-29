@@ -2,10 +2,8 @@ import types
 
 import pytest
 from fastapi.responses import JSONResponse
-from starlette.testclient import TestClient
 
 from app import models
-from app.core.config import settings
 from app.routers import oauth as oauth_router
 from app.routers import social_auth
 

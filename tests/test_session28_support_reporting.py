@@ -104,6 +104,6 @@ def test_audit_logging_record_filter_and_export(session):
     csv_val = csv_buf.getvalue()
     assert "admin_id" in csv_val and "action" in csv_val
 
-    json_payload = json.dumps([{"admin_id": l.admin_id, "action": l.action} for l in logs])
+    json_payload = json.dumps([{"admin_id": log.admin_id, "action": log.action} for log in logs])
     parsed = json.loads(json_payload)
     assert parsed[0]["action"]

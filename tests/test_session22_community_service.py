@@ -1,8 +1,6 @@
-from datetime import datetime, timedelta, timezone
-
 import pytest
 
-from app import models, schemas
+from app import models
 from app.services.community import CommunityService
 from app.services.community import service as community_service
 
@@ -63,7 +61,7 @@ def test_invite_accept_decline(session, monkeypatch):
     )
     assert inv.community_id == community.id
 
-    accepted = svc.accept_invitation(invitation_id=inv.id, user=invitee)
+    _ = svc.accept_invitation(invitation_id=inv.id, user=invitee)
     member_row = (
         session.query(models.CommunityMember)
         .filter_by(community_id=community.id, user_id=invitee.id)

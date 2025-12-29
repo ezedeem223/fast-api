@@ -1,6 +1,4 @@
 from types import SimpleNamespace
-
-import pytest
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
 from starlette.testclient import TestClient

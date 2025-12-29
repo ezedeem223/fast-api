@@ -1,8 +1,6 @@
 import re
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from app import models
 from app.content_filter import check_content, filter_content
 from app.modules.fact_checking.models import FactCheckStatus

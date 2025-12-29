@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-import pytest
-
 from app import link_preview
 
 

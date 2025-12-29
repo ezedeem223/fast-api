@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from app import models
 from app.core.config import settings
 from app.oauth2 import create_access_token

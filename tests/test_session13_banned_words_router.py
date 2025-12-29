@@ -1,7 +1,7 @@
 import pytest
 from fastapi import FastAPI
 
-from app import models, oauth2, schemas
+from app import models, oauth2
 from app.core.database import get_db
 from app.modules.moderation.models import BannedWord
 from app.routers import banned_words

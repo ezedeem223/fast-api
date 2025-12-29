@@ -1,6 +1,3 @@
-import datetime
-
-import pytest
 from fastapi import status
 
 from app import models
@@ -65,7 +62,7 @@ def test_appeal_creation_and_duplicate(client, session, test_user, test_user2, m
     created = client.post("/block/", json=payload, headers=headers_user2)
     assert created.status_code == status.HTTP_201_CREATED
     block = session.query(models.Block).filter_by(blocker_id=test_user2.id).first()
-    block_id = block.id
+    _ = block.id
 
     # blocked user appeals
     appeal_payload = {"block_id": block.id, "reason": "please unblock"}

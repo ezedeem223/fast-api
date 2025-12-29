@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
-from app import crypto, oauth2, models
+from app import oauth2, models
 from app.core.config.settings import Settings
 
 
