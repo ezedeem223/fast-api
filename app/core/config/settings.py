@@ -276,6 +276,16 @@ class Settings(BaseSettings):
         """
         effective_use_test = bool(use_test)
 
+        # Always re-read the process environment to honor runtime/monkeypatched values
+        # instead of relying solely on class defaults that may have been set at import time.
+        env_database_url = os.getenv("DATABASE_URL")
+        env_test_database_url = os.getenv("TEST_DATABASE_URL")
+        env_hostname = os.getenv("DATABASE_HOSTNAME")
+        env_username = os.getenv("DATABASE_USERNAME")
+        env_password = os.getenv("DATABASE_PASSWORD")
+        env_dbname = os.getenv("DATABASE_NAME")
+        env_dbport = os.getenv("DATABASE_PORT")
+
         if effective_use_test:
             test_url = self._resolve_test_database_url()
             if test_url:
@@ -305,6 +315,9 @@ class Settings(BaseSettings):
                 return f"{base_url}?sslmode={self.database_ssl_mode}"
             return base_url
 
+        if env_test_database_url:
+            return env_test_database_url
+
         if self.test_database_url:
             return self.test_database_url
 
@@ -321,15 +334,21 @@ class Settings(BaseSettings):
         3) Derive from Postgres components with a *_test suffix.
         4) Fallback to sqlite for ad-hoc local runs.
         """
+        env_test_database_url = os.getenv("TEST_DATABASE_URL")
+        if env_test_database_url:
+            return env_test_database_url
+
+        env_database_url = os.getenv("DATABASE_URL")
+
         if self.test_database_url:
             return self.test_database_url
 
-        if self.database_url:
+        if env_database_url or self.database_url:
             try:
                 # Prefer safe derivation using SQLAlchemy URL parsing when available.
                 from sqlalchemy.engine import make_url  # type: ignore
 
-                url = make_url(self.database_url)
+                url = make_url(env_database_url or self.database_url)
                 if url.drivername.startswith("sqlite"):
                     return str(url)
                 db_name = url.database or ""
@@ -339,8 +358,9 @@ class Settings(BaseSettings):
                 url = url.set(database=suffix_name)
                 return str(url)
             except Exception:
-                if "sqlite" in self.database_url:
-                    return self.database_url
+                candidate = env_database_url or self.database_url
+                if candidate and "sqlite" in candidate:
+                    return candidate
 
         hostname = os.getenv("DATABASE_HOSTNAME", self.database_hostname)
         username = os.getenv("DATABASE_USERNAME", self.database_username)
