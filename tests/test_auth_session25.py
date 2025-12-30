@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from types import SimpleNamespace
 
@@ -6,7 +5,6 @@ import pytest
 from jose import jwt
 
 from app import models
-from app.core.config import settings
 from app.routers import auth
 
 

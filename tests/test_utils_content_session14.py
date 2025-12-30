@@ -1,5 +1,3 @@
-import pytest
-
 from app.modules.utils import content as utils_content
 
 
@@ -21,9 +19,6 @@ def test_check_content_against_rules_matches_regex():
 
 
 def test_train_content_classifier_runs(monkeypatch, tmp_path):
-    clf_path = tmp_path / "classifier.joblib"
-    vec_path = tmp_path / "vectorizer.joblib"
-
     monkeypatch.setattr(
         utils_content.joblib,
         "dump",

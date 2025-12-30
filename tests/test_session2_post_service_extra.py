@@ -1,7 +1,6 @@
 import pytest
 
 from app import models, schemas
-from app.modules.posts.models import PostRelation
 from app.services.posts.post_service import PostService
 from fastapi import BackgroundTasks, HTTPException
 

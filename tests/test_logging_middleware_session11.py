@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import pytest
 from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 

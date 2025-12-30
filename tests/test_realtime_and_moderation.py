@@ -3,10 +3,7 @@ import pytest
 import app.firebase_config as firebase_config
 import app.link_preview as link_preview
 from app import models, schemas
-from app.modules.notifications.realtime import (
-    ConnectionManager,
-    send_real_time_notification,
-)
+from app.modules.notifications.realtime import ConnectionManager
 from app.services.moderation.banned_word_service import BannedWordService
 
 # -----------------------

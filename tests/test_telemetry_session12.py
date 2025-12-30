@@ -1,7 +1,3 @@
-import os
-
-import pytest
-
 import app.core.telemetry as telemetry
 
 

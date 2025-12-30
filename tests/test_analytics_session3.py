@@ -1,5 +1,3 @@
-import pytest
-
 import app.analytics as analytics
 
 

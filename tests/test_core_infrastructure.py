@@ -3,8 +3,6 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.cache.redis_cache import cache, cache_manager
-from app.core.database import get_db
-from app.main import app
 from app.routers import search as search_router
 
 

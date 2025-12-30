@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app import models, schemas
+from app import models
 from app.core.app_factory import create_app
 from app.routers import admin_dashboard
 from tests.conftest import TestingSessionLocal

@@ -1,6 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from io import BytesIO
-from pathlib import Path
 
 import pytest
 
@@ -8,7 +6,7 @@ from app import models, schemas
 from app.modules.posts.models import PostRelation
 from app.modules.utils.security import hash as hash_password
 from app.services.posts.post_service import PostService
-from fastapi import BackgroundTasks, HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException
 
 
 def _user(session, email="post@example.com", verified=True, privacy="public"):

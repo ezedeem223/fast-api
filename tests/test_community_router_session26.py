@@ -1,7 +1,6 @@
-import pytest
 from fastapi import status
 
-from app import models, schemas
+from app import models
 from app.core.app_factory import create_app
 from app.routers import community as community_router
 from tests.conftest import TestingSessionLocal
@@ -25,7 +24,7 @@ def seed_user(db, email="owner@example.com"):
 
 def test_create_and_get_community():
     with TestingSessionLocal() as db:
-        user = seed_user(db)
+        seed_user(db)
         client = make_client(db)
         payload = {"name": "RouterComm", "description": "desc", "category_id": None, "tags": []}
 

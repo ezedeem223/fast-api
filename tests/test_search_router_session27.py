@@ -1,6 +1,3 @@
-import asyncio
-import os
-
 import pytest
 
 from app import models
@@ -76,7 +73,7 @@ async def test_search_typesense_failure_falls_back(monkeypatch, session):
 
 @pytest.mark.asyncio
 async def test_autocomplete_caches_results(monkeypatch, session):
-    user = _user(session)
+    _user(session)
     suggestion = models.SearchSuggestion(term="he", usage_count=5)
     session.add(suggestion)
     session.commit()

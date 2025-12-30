@@ -1,6 +1,3 @@
-import types
-
-import pytest
 from fastapi import status
 
 from app.core import app_factory

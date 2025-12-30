@@ -1,7 +1,4 @@
-import json
 from types import SimpleNamespace
-
-import pytest
 
 from app.modules.search import cache as search_cache
 from app.modules.utils import search as utils_search
