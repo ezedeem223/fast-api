@@ -4,17 +4,21 @@ Features:
 - Async Redis client with optional compression, tag-based invalidation, and batch helpers.
 - Stampede protection via per-key asyncio locks.
 - In-memory fallback store when Redis is missing/uninitialized to keep tests and degraded mode running.
+
+Operational notes:
+- Fails open when REDIS_URL is absent or init fails; metrics/tests can inspect `failed_init`.
+- Accepts redis-like stubs (without get/set) by transparently falling back to an in-memory store.
 """
 
+import asyncio
+import base64
+import functools
+import hashlib
 import json
 import logging
-import hashlib
-import functools
-from typing import Any, Optional, Dict
 import time
-import base64
 import zlib
-import asyncio
+from typing import Any, Dict, Optional
 
 import redis.asyncio as redis
 
@@ -25,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class RedisCache:
     """Async Redis cache facade with graceful fallback when Redis is unavailable or stubbed."""
+
     def __init__(self):
         self.redis: Optional[redis.Redis] = None
         self.enabled = False
@@ -41,7 +46,7 @@ class RedisCache:
         self._fallback_store: dict[str, tuple[Any, Optional[float]]] = {}
 
     async def init_cache(self):
-        """Initialize Redis connection pool."""
+        """Initialize Redis connection pool, setting enabled/failed_init flags appropriately."""
         try:
             if not settings.redis_url:
                 # Fail open: leave caching disabled instead of blocking app startup when Redis is not configured.
@@ -65,7 +70,7 @@ class RedisCache:
             self.failed_init = True
 
     async def close(self):
-        """Close Redis connection."""
+        """Close Redis connection and reset failure flags."""
         if not self.redis:
             self.failed_init = False
             return
@@ -123,7 +128,11 @@ class RedisCache:
             return
         # Fallback path for simple stubs without set()
         if not hasattr(self.redis, "set"):
-            exp_ts = (time.time() + (ttl or self.default_ttl)) if (ttl or self.default_ttl) else None
+            exp_ts = (
+                (time.time() + (ttl or self.default_ttl))
+                if (ttl or self.default_ttl)
+                else None
+            )
             self._fallback_store[key] = (value, exp_ts)
             return
         try:
@@ -417,7 +426,6 @@ def cache(
         return wrapper
 
     return decorator
-
 
     # ===== Internal helpers =====
 

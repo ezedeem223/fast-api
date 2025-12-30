@@ -1,5 +1,6 @@
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from app import models
 from tests.conftest import TestingSessionLocal
@@ -25,7 +26,9 @@ def community(session, test_user):
     return community
 
 
-def _create_reel(session, owner_id: int, community_id: int, *, expires_at, is_active: bool = True):
+def _create_reel(
+    session, owner_id: int, community_id: int, *, expires_at, is_active: bool = True
+):
     reel = models.Reel(
         title="seed",
         video_url="https://videos.local/story.mp4",
@@ -57,11 +60,17 @@ def test_create_reel_endpoint(authorized_client, community):
     assert data["is_active"] is True
 
 
-def test_list_active_reels_filters_expired(authorized_client, session, community, test_user):
+def test_list_active_reels_filters_expired(
+    authorized_client, session, community, test_user
+):
     now = datetime.now(timezone.utc)
-    active = _create_reel(session, test_user["id"], community.id, expires_at=now + timedelta(hours=1))
+    active = _create_reel(
+        session, test_user["id"], community.id, expires_at=now + timedelta(hours=1)
+    )
     active_id = active.id
-    _create_reel(session, test_user["id"], community.id, expires_at=now - timedelta(hours=1))
+    _create_reel(
+        session, test_user["id"], community.id, expires_at=now - timedelta(hours=1)
+    )
 
     response = authorized_client.get(f"/reels/active?community_id={community.id}")
     assert response.status_code == 200
@@ -72,7 +81,9 @@ def test_list_active_reels_filters_expired(authorized_client, session, community
 
 def test_delete_reel_marks_inactive(authorized_client, session, community, test_user):
     now = datetime.now(timezone.utc)
-    reel = _create_reel(session, test_user["id"], community.id, expires_at=now + timedelta(hours=1))
+    reel = _create_reel(
+        session, test_user["id"], community.id, expires_at=now + timedelta(hours=1)
+    )
     reel_id = reel.id
 
     response = authorized_client.delete(f"/reels/{reel_id}")
@@ -89,7 +100,9 @@ def test_delete_reel_marks_inactive(authorized_client, session, community, test_
 
 def test_increment_view_count(authorized_client, session, community, test_user):
     now = datetime.now(timezone.utc)
-    reel = _create_reel(session, test_user["id"], community.id, expires_at=now + timedelta(hours=1))
+    reel = _create_reel(
+        session, test_user["id"], community.id, expires_at=now + timedelta(hours=1)
+    )
     reel_id = reel.id
 
     response = authorized_client.post(f"/reels/{reel_id}/view")

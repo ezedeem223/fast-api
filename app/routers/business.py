@@ -3,15 +3,17 @@
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from typing import List
 
-# Local imports
-from .. import schemas, oauth2
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.services.business import BusinessService
 from app.modules.users.models import User
+from app.services.business import BusinessService
+from fastapi import APIRouter, Depends
+
+# Local imports
+from .. import oauth2, schemas
 
 # =====================================================
 # =============== Global Variables ====================
@@ -22,6 +24,7 @@ router = APIRouter(prefix="/business", tags=["Business"])
 def get_business_service(db: Session = Depends(get_db)) -> BusinessService:
     """Endpoint: get_business_service."""
     return BusinessService(db)
+
 
 # =====================================================
 # ==================== Endpoints ======================
@@ -48,7 +51,9 @@ async def register_business(
       - Commits changes and returns the updated user.
 
     """
-    return service.register_business(current_user=current_user, business_info=business_info)
+    return service.register_business(
+        current_user=current_user, business_info=business_info
+    )
 
 
 @router.post("/verify", response_model=schemas.BusinessUserOut)

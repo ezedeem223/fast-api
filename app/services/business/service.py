@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import schemas
-from app.modules.users.models import User, UserType, VerificationStatus
 from app.modules.social.models import BusinessTransaction
+from app.modules.users.models import User, UserType, VerificationStatus
 from app.modules.utils.files import save_upload_file
+from fastapi import HTTPException, status
 
 
 class BusinessService:

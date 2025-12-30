@@ -1,11 +1,11 @@
 """Reporting router for abuse reports on posts/comments."""
 
-from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app import models, schemas, oauth2
+from app import models, oauth2, schemas
 from app.core.database import get_db
 from app.services.reporting import submit_report
+from fastapi import APIRouter, Depends, status
 
 router = APIRouter(prefix="/report", tags=["Reports"])
 

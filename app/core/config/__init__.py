@@ -1,7 +1,10 @@
-"""Core configuration package."""
+"""Core configuration package.
 
+Exposes cached `settings` and `FastMail` client so imports are cheap and deterministic.
+"""
+
+from .environment import get_mail_client, get_settings
 from .settings import CustomConnectionConfig, Settings
-from .environment import get_settings, get_mail_client
 
 settings = get_settings()
 fm = get_mail_client()

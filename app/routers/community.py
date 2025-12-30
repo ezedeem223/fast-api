@@ -1,26 +1,30 @@
-"""Community router for membership, rules, invitations, and analytics endpoints."""
+"""Community router for membership, rules, invitations, and analytics endpoints.
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    status,
-    BackgroundTasks,
-    Query,
-    Body,
-)
+Handles join/leave, invites, rule management, caching hooks, and analytics. Auth required
+for mutating endpoints; read endpoints may be public depending on service layer policy.
+"""
+
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
-
-from .. import models, schemas, oauth2
-from app.core.database import get_db
-from ..notifications import queue_email_notification, schedule_email_notification  # noqa: F401
-
-from app.services.community.service import CommunityService
 
 from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
+from app.core.database import get_db
+from app.services.community.service import CommunityService
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
 
+from .. import models, oauth2, schemas
+from ..notifications import queue_email_notification  # noqa: F401
+from ..notifications import schedule_email_notification  # noqa: F401
 
 router = APIRouter(prefix="/communities", tags=["Communities"])
 
@@ -67,7 +71,9 @@ async def create_community(
     response_model=List[schemas.CommunityOut],
     summary="Get list of communities",
 )
-@cache(prefix="communities:list", ttl=180, include_user=False)  # Cache response for performance.
+@cache(
+    prefix="communities:list", ttl=180, include_user=False
+)  # Cache response for performance.
 async def get_communities(
     current_user: models.User = Depends(oauth2.get_current_user),
     service: CommunityService = Depends(get_community_service),
@@ -94,7 +100,9 @@ async def get_communities(
 
 
 @router.get("/{community_id}", response_model=schemas.CommunityDetailOut)
-@cache(prefix="community:detail", ttl=120, include_user=False)  # Cache response for performance.
+@cache(
+    prefix="community:detail", ttl=120, include_user=False
+)  # Cache response for performance.
 async def get_community(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -200,7 +208,9 @@ async def leave_community(
 
 
 @router.get("/{community_id}/members", response_model=List[schemas.CommunityMemberOut])
-@cache(prefix="community:members", ttl=120, include_user=False)  # Cache response for performance.
+@cache(
+    prefix="community:members", ttl=120, include_user=False
+)  # Cache response for performance.
 async def get_community_members(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -274,7 +284,9 @@ async def remove_member(
 
 
 @router.get("/{community_id}/posts", response_model=List[schemas.PostOut])
-@cache(prefix="community:posts", ttl=60, include_user=False)  # Cache response for performance.
+@cache(
+    prefix="community:posts", ttl=60, include_user=False
+)  # Cache response for performance.
 async def get_community_posts(
     community_id: int,
     current_user: models.User = Depends(oauth2.get_current_user),

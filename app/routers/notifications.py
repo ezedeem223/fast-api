@@ -1,33 +1,40 @@
-"""Notifications router covering preferences, feeds, and delivery/analytics operations."""
+"""Notifications router covering preferences, feeds, and delivery/analytics operations.
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
-from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+User endpoints: list/unread counts, mark read/archive, preferences update, group expand.
+Admin endpoints: system stats, delivery logs, retry failed notifications.
+Caching: read endpoints leverage Redis cache decorators with user scoping; writes bust caches.
+"""
+
 from datetime import datetime
-from .. import models, schemas, oauth2
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy.orm import Session
+
+from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
+from app.core.database import get_db
+from app.core.middleware.rate_limit import limiter
+from app.modules.notifications.analytics import NotificationAnalyticsService
 from app.modules.notifications.models import (
     NotificationCategory,
     NotificationPriority,
     NotificationStatus,
 )
-from app.core.database import get_db
-from app.modules.notifications.service import (
-    NotificationService,
-    NotificationManager,
-)
-from app.modules.notifications.analytics import NotificationAnalyticsService
-from app.core.middleware.rate_limit import limiter
-from app.core.cache.redis_cache import cache, cache_manager  # Cache helpers.
+from app.modules.notifications.service import NotificationManager, NotificationService
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+_subscriptions_registry: Dict[int, str] = {}
 
 
 # === Notifications Endpoints ===
 
 
 @router.get("/", response_model=List[schemas.NotificationOut])
-@cache(prefix="notifications", ttl=60, include_user=True)  # Cache response for performance.
+@cache(
+    prefix="notifications", ttl=60, include_user=True
+)  # Cache response for performance.
 async def get_notifications(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
@@ -53,6 +60,29 @@ async def get_notifications(
         since=since,
     )
     return await notification_service.execute_query(query, skip, limit)
+
+
+@router.post("/subscribe")
+async def subscribe_notifications(
+    token: Optional[str] = None,
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """
+    Lightweight subscribe endpoint for WS/push style notifications.
+
+    - Missing token rejected.
+    - First-time subscription stored.
+    - Duplicate subscription acknowledged without duplication.
+    """
+    if not token:
+        raise HTTPException(status_code=400, detail="Token required")
+
+    existing = _subscriptions_registry.get(current_user.id)
+    if existing == token:
+        return {"status": "already_subscribed"}
+
+    _subscriptions_registry[current_user.id] = token
+    return {"status": "subscribed", "token": token}
 
 
 @router.get("/unread-count", response_model=Dict[str, int])

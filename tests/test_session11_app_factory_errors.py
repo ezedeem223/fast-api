@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Body
-from fastapi.testclient import TestClient
-from sqlalchemy.exc import SQLAlchemyError
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core import error_handlers, exceptions
+from fastapi import Body, FastAPI
+from fastapi.testclient import TestClient
 
 
 def _make_app():
@@ -19,7 +19,10 @@ def test_app_exception_handler_returns_standard_json():
     @app.get("/boom")
     async def boom():
         raise exceptions.AppException(
-            status_code=418, error_code="teapot", message="short and stout", details={"hint": "tilt"}
+            status_code=418,
+            error_code="teapot",
+            message="short and stout",
+            details={"hint": "tilt"},
         )
 
     with TestClient(app) as client:
@@ -43,6 +46,7 @@ def test_validation_and_rate_limit_handlers():
         class DummyLimit:
             error_message = "hit limit"
             reset_in = 1
+
         raise RateLimitExceeded(DummyLimit())
 
     with TestClient(app, raise_server_exceptions=False) as client:
@@ -79,4 +83,6 @@ def test_sqlalchemy_and_generic_error_handler(monkeypatch):
         assert gen_body["error"]["code"] == "internal_server_error"
         # in test env we should see raw message in details
         assert "explode" in gen_body["error"]["message"]
-        assert "RuntimeError" in "\n".join(gen_body["error"]["details"].get("traceback", []))
+        assert "RuntimeError" in "\n".join(
+            gen_body["error"]["details"].get("traceback", [])
+        )

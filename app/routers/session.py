@@ -1,9 +1,11 @@
 """Session router for managing encrypted session setup, key updates, and teardown."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .. import models, schemas, oauth2, crypto
+
 from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from .. import crypto, models, oauth2, schemas
 
 router = APIRouter(prefix="/sessions", tags=["Encrypted Sessions"])
 

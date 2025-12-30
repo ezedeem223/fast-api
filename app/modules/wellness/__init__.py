@@ -1,11 +1,11 @@
 from .models import (
     DigitalWellnessMetrics,
-    WellnessAlert,
-    WellnessSession,
-    WellnessGoal,
-    WellnessMode,
-    WellnessLevel,
     UsagePattern,
+    WellnessAlert,
+    WellnessGoal,
+    WellnessLevel,
+    WellnessMode,
+    WellnessSession,
 )
 from .service import WellnessService
 

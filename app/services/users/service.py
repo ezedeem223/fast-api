@@ -7,21 +7,22 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import pyotp
-from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.i18n import ALL_LANGUAGES
 from app.modules.users.models import (
+    TokenBlacklist,
     User,
     UserActivity,
+    UserIdentity,
     UserSession,
     UserStatistics,
-    UserIdentity,
-    TokenBlacklist,
 )
-from app.modules.utils.security import hash as hash_password, verify
+from app.modules.utils.security import hash as hash_password
+from app.modules.utils.security import verify
+from fastapi import HTTPException, UploadFile, status
 
 
 class UserService:
@@ -135,7 +136,9 @@ class UserService:
         )
 
         order_column = self._resolve_followers_sort_column(sort_by)
-        query = query.order_by(desc(order_column) if order == "desc" else asc(order_column))
+        query = query.order_by(
+            desc(order_column) if order == "desc" else asc(order_column)
+        )
 
         total = query.count()
         followers = query.offset(skip).limit(limit).all()
@@ -218,7 +221,9 @@ class UserService:
     def get_user_content(
         self, current_user: User, skip: int, limit: int
     ) -> schemas.UserContentOut:
-        posts_query = self.db.query(models.Post).filter(models.Post.owner_id == current_user.id)
+        posts_query = self.db.query(models.Post).filter(
+            models.Post.owner_id == current_user.id
+        )
         if current_user.privacy_level == models.PrivacyLevel.CUSTOM:
             allowed = current_user.custom_privacy.get("allowed_users", [])
             posts_query = posts_query.filter(
@@ -280,7 +285,9 @@ class UserService:
             reels=[schemas.ReelOut.from_orm(reel) for reel in reels],
         )
 
-    def get_user_posts(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+    def get_user_posts(
+        self, user_id: int, skip: int, limit: int
+    ) -> List[schemas.PostOut]:
         posts = (
             self.db.query(models.Post)
             .filter(models.Post.owner_id == user_id)
@@ -302,7 +309,9 @@ class UserService:
         )
         return [schemas.ArticleOut.from_orm(article) for article in articles]
 
-    def get_user_media(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+    def get_user_media(
+        self, user_id: int, skip: int, limit: int
+    ) -> List[schemas.PostOut]:
         media = (
             self.db.query(models.Post)
             .filter(
@@ -318,7 +327,9 @@ class UserService:
         )
         return [schemas.PostOut.from_orm(item) for item in media]
 
-    def get_user_likes(self, user_id: int, skip: int, limit: int) -> List[schemas.PostOut]:
+    def get_user_likes(
+        self, user_id: int, skip: int, limit: int
+    ) -> List[schemas.PostOut]:
         liked_posts = (
             self.db.query(models.Post)
             .join(models.Vote)
@@ -451,7 +462,9 @@ class UserService:
         self.db.commit()
         return {"message": "2FA disabled successfully"}
 
-    def logout_other_sessions(self, current_user: User, current_session: str) -> Dict[str, str]:
+    def logout_other_sessions(
+        self, current_user: User, current_session: str
+    ) -> Dict[str, str]:
         (
             self.db.query(UserSession)
             .filter(
@@ -542,7 +555,9 @@ class UserService:
         return suggested_users
 
     # ----- Analytics -----
-    def get_user_analytics(self, current_user: User, days: int) -> schemas.UserAnalytics:
+    def get_user_analytics(
+        self, current_user: User, days: int
+    ) -> schemas.UserAnalytics:
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
@@ -653,11 +668,14 @@ class UserService:
         self.db.commit()
         return {"message": "Account locked"}
 
-    def perform_admin_action(self, acting_user: User, action: str = "noop") -> Dict[str, str]:
+    def perform_admin_action(
+        self, acting_user: User, action: str = "noop"
+    ) -> Dict[str, str]:
         """Ensure only admins can perform privileged actions."""
         if not getattr(acting_user, "is_admin", False):
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Admin privileges required"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required",
             )
         return {"action": action, "status": "ok"}
 
@@ -735,7 +753,9 @@ class UserService:
         self, current_user: User, linked_user_id: int, relationship_type: str = "alias"
     ) -> UserIdentity:
         if linked_user_id == current_user.id:
-            raise HTTPException(status_code=400, detail="Cannot link to the same account")
+            raise HTTPException(
+                status_code=400, detail="Cannot link to the same account"
+            )
 
         linked_user = self.db.query(User).filter(User.id == linked_user_id).first()
         if not linked_user:

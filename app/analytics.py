@@ -1,19 +1,23 @@
-from sqlalchemy import func
-from datetime import (
-    datetime,
-    timedelta,
-    timezone,
-)  # Added timezone for correct UTC usage
-from . import models
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-from app.core.database import get_db
-import matplotlib.pyplot as plt
-import seaborn as sns
-import io
+"""Analytics helpers for sentiment, search stats, and conversation metrics.
+
+- Uses Transformers/Polars/Matplotlib for analysis and visualization; heavy deps are imported once.
+- Caches search stats via Redis-backed helpers (`get_cached_json`/`set_cached_json`) with invalidation keys.
+- Fails open on errors and logs via `log_analysis_event` so callers can degrade gracefully.
+"""
+
 import base64
+import io
+import logging
+from datetime import datetime, timedelta, timezone
+
+import matplotlib.pyplot as plt
 import polars as pl
-from .models import SearchStatistics
-from app.modules.users.models import User, UserEvent
+import seaborn as sns
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
+from app.core.database import get_db
 from app.modules.search import SearchStatOut
 from app.modules.search.cache import (
     get_cached_json,
@@ -23,8 +27,10 @@ from app.modules.search.cache import (
     set_cached_json,
     user_cache_key,
 )
-from sqlalchemy.orm import Session
-import logging
+from app.modules.users.models import User, UserEvent
+
+from . import models
+from .models import SearchStatistics
 
 _PIPELINE_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
 _sentiment_pipeline = None
@@ -33,15 +39,15 @@ model = None
 _STAT_QUERY_ATTR = "query" if hasattr(SearchStatistics, "query") else "term"
 _STAT_COUNT_ATTR = "count" if hasattr(SearchStatistics, "count") else "searches"
 _STAT_TS_ATTR = (
-    "last_searched"
-    if hasattr(SearchStatistics, "last_searched")
-    else "updated_at"
+    "last_searched" if hasattr(SearchStatistics, "last_searched") else "updated_at"
 )
 
 logger = logging.getLogger(__name__)
 
 
-def log_analysis_event(success: bool, context: dict | None = None, error: Exception | str | None = None) -> None:
+def log_analysis_event(
+    success: bool, context: dict | None = None, error: Exception | str | None = None
+) -> None:
     """
     Lightweight logging helper for analytics operations.
     Never raises even if context is missing or malformed.
@@ -67,7 +73,9 @@ def merge_stats(base: dict | None, incoming: dict | None) -> dict:
     incoming = incoming or {}
     merged = dict(base)
     for key, value in incoming.items():
-        if isinstance(value, (int, float)) and isinstance(merged.get(key), (int, float)):
+        if isinstance(value, (int, float)) and isinstance(
+            merged.get(key), (int, float)
+        ):
             merged[key] = merged[key] + value  # type: ignore[index]
         else:
             merged[key] = value
@@ -75,6 +83,7 @@ def merge_stats(base: dict | None, incoming: dict | None) -> dict:
 
 
 def _get_sentiment_pipeline():
+    """Lazy-load sentiment pipeline to avoid repeated model downloads/import costs."""
     global _sentiment_pipeline, model
     if _sentiment_pipeline is None:
         tokenizer = AutoTokenizer.from_pretrained(_PIPELINE_NAME)
@@ -84,17 +93,24 @@ def _get_sentiment_pipeline():
         )
     return _sentiment_pipeline
 
+
 # ------------------------- Content Analysis Functions -------------------------
 
 
 def analyze_sentiment(text):
     """
     Analyze the sentiment of the given text using a pre-trained transformer model.
-    Returns a dictionary with sentiment label and score.
+    Returns a dictionary with sentiment label and score. Falls back to neutral on errors.
     """
-    pipeline_instance = _get_sentiment_pipeline()
-    result = pipeline_instance(text)[0]
-    return {"sentiment": result["label"], "score": result["score"]}
+    if not text:
+        return {"sentiment": "NEUTRAL", "score": 0.0}
+    try:
+        pipeline_instance = _get_sentiment_pipeline()
+        result = pipeline_instance(text)[0]
+        return {"sentiment": result["label"], "score": result["score"]}
+    except Exception as exc:  # pragma: no cover - defensive; covered in tests via stubbed failure
+        log_analysis_event(False, {"context": "analyze_sentiment"}, exc)
+        return {"sentiment": "NEUTRAL", "score": 0.0}
 
 
 def suggest_improvements(text, sentiment):
@@ -154,8 +170,7 @@ def get_problematic_users(db: Session, threshold: int = 5):
         )
         .filter(
             models.Report.is_valid,
-            models.Report.created_at
-            >= datetime.now(timezone.utc) - timedelta(days=30),
+            models.Report.created_at >= datetime.now(timezone.utc) - timedelta(days=30),
         )
         .group_by(models.Report.reported_user_id)
         .subquery()
@@ -218,7 +233,9 @@ def record_search_query(db: Session, query: str, user_id: int):
         .first()
     )
     if search_stat:
-        setattr(search_stat, _STAT_COUNT_ATTR, getattr(search_stat, _STAT_COUNT_ATTR) + 1)
+        setattr(
+            search_stat, _STAT_COUNT_ATTR, getattr(search_stat, _STAT_COUNT_ATTR) + 1
+        )
         setattr(search_stat, _STAT_TS_ATTR, datetime.now(timezone.utc))
     else:
         search_stat = SearchStatistics(user_id=user_id, **{_STAT_QUERY_ATTR: query})
@@ -315,7 +332,9 @@ def generate_search_trends_chart():
     if not rows:
         return ""
 
-    df = pl.DataFrame({"date": [r.date for r in rows], "count": [r.count for r in rows]})
+    df = pl.DataFrame(
+        {"date": [r.date for r in rows], "count": [r.count for r in rows]}
+    )
     df = df.sort("date")
 
     plt.figure(figsize=(12, 6))

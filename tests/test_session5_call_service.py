@@ -1,15 +1,17 @@
-import pytest
 from datetime import datetime, timezone
 
-from fastapi import HTTPException
+import pytest
 
 from app import models, schemas
-from app.services.messaging.call_service import CallService
 from app.modules.utils.security import hash as hash_password
+from app.services.messaging.call_service import CallService
+from fastapi import HTTPException
 
 
 def _user(session, email="call@example.com"):
-    user = models.User(email=email, hashed_password=hash_password("x"), is_verified=True)
+    user = models.User(
+        email=email, hashed_password=hash_password("x"), is_verified=True
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -32,7 +34,9 @@ async def test_start_call_success_and_limits(session):
     stub = _StubNotifications()
 
     call = await service.start_call(
-        payload=schemas.CallCreate(receiver_id=receiver.id, call_type=models.CallType.VIDEO),
+        payload=schemas.CallCreate(
+            receiver_id=receiver.id, call_type=models.CallType.VIDEO
+        ),
         current_user=caller,
         notification_backend=stub,
     )
@@ -56,7 +60,9 @@ async def test_start_call_success_and_limits(session):
 
     with pytest.raises(HTTPException) as exc:
         await service.start_call(
-            payload=schemas.CallCreate(receiver_id=receiver.id, call_type=models.CallType.AUDIO),
+            payload=schemas.CallCreate(
+                receiver_id=receiver.id, call_type=models.CallType.AUDIO
+            ),
             current_user=caller,
             notification_backend=stub,
         )
@@ -64,7 +70,9 @@ async def test_start_call_success_and_limits(session):
 
     with pytest.raises(HTTPException) as exc:
         await service.start_call(
-            payload=schemas.CallCreate(receiver_id=999999, call_type=models.CallType.AUDIO),
+            payload=schemas.CallCreate(
+                receiver_id=999999, call_type=models.CallType.AUDIO
+            ),
             current_user=caller,
             notification_backend=stub,
         )

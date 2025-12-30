@@ -7,25 +7,30 @@ from datetime import date, datetime, timedelta, timezone
 from io import StringIO
 from typing import Dict, List, Optional, Tuple
 
-from fastapi import HTTPException, status
 from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.analytics import analyze_content
+from app.core.config import settings
 from app.modules.community.models import (
+    Category,
     Community,
     CommunityCategory,
+    CommunityInvitation,
     CommunityMember,
     CommunityRole,
     CommunityRule,
-    CommunityInvitation,
     CommunityStatistics,
-    Category,
     Tag,
 )
-from app.modules.posts.models import Post, Comment
+from app.modules.posts.models import Comment, Post
 from app.modules.social import Vote
 from app.modules.users.models import PrivacyLevel, User
+from app.modules.utils.common import get_user_display_name
+from app.modules.utils.content import check_content_against_rules, check_for_profanity
+from app.modules.utils.events import log_user_event
+from app.modules.utils.translation import get_translated_content
+from app.notifications import create_notification
 from app.schemas import (
     CommunityCreate,
     CommunityInvitationCreate,
@@ -34,15 +39,7 @@ from app.schemas import (
     CommunityUpdate,
     PostCreate,
 )
-from app.modules.utils.content import (
-    check_content_against_rules,
-    check_for_profanity,
-)
-from app.modules.utils.translation import get_translated_content
-from app.modules.utils.common import get_user_display_name
-from app.modules.utils.events import log_user_event
-from app.notifications import create_notification
-from app.core.config import settings
+from fastapi import HTTPException, status
 
 MAX_COMMUNITY_RULES = getattr(settings, "MAX_COMMUNITY_RULES", 20)
 ACTIVITY_THRESHOLD_VIP = getattr(settings, "COMMUNITY_VIP_THRESHOLD", 1000)
@@ -592,9 +589,7 @@ class CommunityService:
 
         expiry_days = getattr(settings, "INVITATION_EXPIRY_DAYS", 0)
         if invitation.status == "expired":
-            raise HTTPException(
-                status_code=410, detail="This invitation has expired"
-            )
+            raise HTTPException(status_code=410, detail="This invitation has expired")
         created_at = invitation.created_at
         if created_at and created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
@@ -605,9 +600,7 @@ class CommunityService:
         ):
             invitation.status = "expired"
             self.db.commit()
-            raise HTTPException(
-                status_code=410, detail="This invitation has expired"
-            )
+            raise HTTPException(status_code=410, detail="This invitation has expired")
 
         if invitation.status != "pending":
             raise HTTPException(
@@ -731,7 +724,12 @@ class CommunityService:
         return invitation
 
     def get_user_invitations(
-        self, *, user_id: int, skip: int = 0, limit: int = 20, status: Optional[str] = None
+        self,
+        *,
+        user_id: int,
+        skip: int = 0,
+        limit: int = 20,
+        status: Optional[str] = None,
     ) -> List[CommunityInvitation]:
         query = self.db.query(CommunityInvitation).filter(
             CommunityInvitation.invitee_id == user_id
@@ -745,9 +743,7 @@ class CommunityService:
             .all()
         )
 
-    def accept_invitation(
-        self, *, invitation_id: int, user: User
-    ) -> CommunityMember:
+    def accept_invitation(self, *, invitation_id: int, user: User) -> CommunityMember:
         self.respond_to_invitation(
             invitation_id=invitation_id, current_user=user, accept=True
         )

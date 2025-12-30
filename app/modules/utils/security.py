@@ -6,8 +6,9 @@ from functools import wraps
 from typing import Any, Awaitable, Callable
 
 from cryptography.fernet import Fernet
-from fastapi import HTTPException, status
 from passlib.context import CryptContext
+
+from fastapi import HTTPException, status
 
 from .common import logger
 
@@ -38,7 +39,9 @@ def update_encryption_key(old_key: str) -> str:
     return new_key.decode()
 
 
-def admin_required(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+def admin_required(
+    func: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
     """Decorator to ensure that the current user has admin privileges."""
 
     @wraps(func)
@@ -53,7 +56,9 @@ def admin_required(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitab
     return wrapper
 
 
-def handle_exceptions(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+def handle_exceptions(
+    func: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
     """Decorator for handling exceptions and returning a standardized error message."""
 
     @wraps(func)
@@ -63,7 +68,9 @@ def handle_exceptions(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awai
         except HTTPException:
             raise
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.exception("Unhandled exception in utility function: %s", func.__name__)
+            logger.exception(
+                "Unhandled exception in utility function: %s", func.__name__
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"An error occurred: {str(exc)}",

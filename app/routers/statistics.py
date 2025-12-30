@@ -1,16 +1,20 @@
-"""Statistics router for system/community analytics and user activity aggregates."""
+"""Statistics router for system/community analytics and user activity aggregates.
+
+Primarily for admin/moderator insights; derives metrics via utility helpers and DB queries.
+"""
 
 from datetime import date, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-# Import project modules
-from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.modules.utils.analytics import get_user_vote_analytics
+from fastapi import APIRouter, Depends, Query
+
+# Import project modules
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/statistics", tags=["Statistics"])
 

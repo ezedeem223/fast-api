@@ -1,15 +1,16 @@
-"""Language-aware HTTP middleware."""
+"""Language-aware HTTP middleware.
 
+Translates JSON responses based on the authenticated user's preference when enabled.
+Runs after routing so it can inspect the resolved user on request.state.
+"""
+
+from app.i18n import translate_text
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.i18n import translate_text
-
 
 async def language_middleware(request: Request, call_next):
-    """
-    Automatically translate JSON responses based on the authenticated user's preference.
-    """
+    """Automatically translate JSON responses based on the authenticated user's preference."""
     response = await call_next(request)
 
     if (
@@ -30,11 +31,11 @@ async def language_middleware(request: Request, call_next):
 
 
 async def translate_json(data, target_lang):
-    """
-    Recursively translate JSON-compatible structures into the target language.
-    """
+    """Recursively translate JSON-compatible structures into the target language."""
     if isinstance(data, dict):
-        return {key: await translate_json(value, target_lang) for key, value in data.items()}
+        return {
+            key: await translate_json(value, target_lang) for key, value in data.items()
+        }
     if isinstance(data, list):
         return [await translate_json(item, target_lang) for item in data]
     if isinstance(data, str):

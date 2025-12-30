@@ -34,7 +34,9 @@ async def test_create_notification_in_app_only(monkeypatch):
         db.commit()
 
         delivery_spy = AsyncMock(return_value=True)
-        monkeypatch.setattr(service.delivery_manager, "deliver_notification", delivery_spy)
+        monkeypatch.setattr(
+            service.delivery_manager, "deliver_notification", delivery_spy
+        )
 
         notification = await service.create_notification(
             user_id=user.id,
@@ -58,7 +60,9 @@ async def test_retry_flow_marks_failed(monkeypatch):
 
         monkeypatch.setattr(service.delivery_manager, "_send_email_notification", _fail)
         monkeypatch.setattr(service.delivery_manager, "_send_push_notification", _fail)
-        monkeypatch.setattr(service.delivery_manager, "_send_realtime_notification", _fail)
+        monkeypatch.setattr(
+            service.delivery_manager, "_send_realtime_notification", _fail
+        )
         # Force prefs to allow all so failure path is exercised without DB-bound prefs
         fake_prefs = notif_models.NotificationPreferences(
             user_id=user.id,

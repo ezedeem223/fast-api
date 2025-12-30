@@ -8,8 +8,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import models
-from app.modules.utils.analytics import update_ban_statistics
 from app.modules.moderation.models import AppealStatus, BlockAppeal
+from app.modules.utils.analytics import update_ban_statistics
 
 REPORT_THRESHOLD = 5  # Number of valid reports required for automatic ban
 REPORT_WINDOW = timedelta(days=30)
@@ -25,6 +25,7 @@ def _get_model_by_id(db: Session, model, id_value):
 
 def _handle_errors(func):
     """Log and re-raise errors to preserve call-stack signal while adding diagnostics."""
+
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -78,10 +79,7 @@ def unblock_user(db: Session, blocker_id: int, blocked_id: int) -> int:
         .filter(
             models.Block.blocker_id == blocker_id,
             models.Block.blocked_id == blocked_id,
-            (
-                models.Block.ends_at.is_(None)
-                | (models.Block.ends_at > now)
-            ),
+            (models.Block.ends_at.is_(None) | (models.Block.ends_at > now)),
         )
         .update({"ends_at": now}, synchronize_session=False)
     )
@@ -152,7 +150,9 @@ def check_auto_ban(db: Session, user_id: int):
 
 
 @_handle_errors
-def submit_block_appeal(db: Session, block_id: int, user_id: int, reason: str) -> BlockAppeal:
+def submit_block_appeal(
+    db: Session, block_id: int, user_id: int, reason: str
+) -> BlockAppeal:
     """Submit an appeal for a given block."""
     if not reason or not reason.strip():
         raise ValueError("Reason required")
@@ -167,7 +167,9 @@ def submit_block_appeal(db: Session, block_id: int, user_id: int, reason: str) -
 
 
 @_handle_errors
-def review_block_appeal(db: Session, appeal_id: int, approve: bool, reviewer_id: int) -> BlockAppeal:
+def review_block_appeal(
+    db: Session, appeal_id: int, approve: bool, reviewer_id: int
+) -> BlockAppeal:
     appeal = _get_model_by_id(db, BlockAppeal, appeal_id)
     appeal.status = AppealStatus.APPROVED if approve else AppealStatus.REJECTED
     appeal.reviewed_at = datetime.now(timezone.utc)

@@ -2,17 +2,15 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from app import celery_worker
-from app.celery_worker import (
-    process_scheduled_notifications,
-    deliver_notification,
-)
+from app.celery_worker import deliver_notification, process_scheduled_notifications
 from app.modules.notifications import models as notification_models
-
 
 # ============== 33) celery process_scheduled_notifications ==============
 
 
-def test_celery_process_scheduled_notifications_enqueues(monkeypatch, session, test_user):
+def test_celery_process_scheduled_notifications_enqueues(
+    monkeypatch, session, test_user
+):
     due = datetime.now(timezone.utc) - timedelta(minutes=1)
     n = notification_models.Notification(
         user_id=test_user["id"],
@@ -45,7 +43,11 @@ def test_celery_process_scheduled_notifications_enqueues(monkeypatch, session, t
             return self.real.query(*args, **kwargs)
 
     monkeypatch.setattr(celery_worker, "SessionLocal", lambda: FakeSession(session))
-    monkeypatch.setattr(celery_worker, "deliver_notification", type("T", (), {"delay": staticmethod(fake_delay)}))
+    monkeypatch.setattr(
+        celery_worker,
+        "deliver_notification",
+        type("T", (), {"delay": staticmethod(fake_delay)}),
+    )
     process_scheduled_notifications()
     assert called["ids"] == [n.id]
 
@@ -117,7 +119,9 @@ def test_celery_deliver_notification_missing(monkeypatch):
     deliver_notification(123)  # should no-op without error
 
 
-def test_celery_deliver_notification_calls_email_and_push(monkeypatch, session, test_user):
+def test_celery_deliver_notification_calls_email_and_push(
+    monkeypatch, session, test_user
+):
     n = notification_models.Notification(
         user_id=test_user["id"],
         content="hi",
@@ -159,7 +163,9 @@ def test_celery_deliver_notification_calls_email_and_push(monkeypatch, session, 
     assert calls["push"] == 1
 
 
-def test_celery_deliver_notification_handles_exceptions(monkeypatch, session, test_user, caplog):
+def test_celery_deliver_notification_handles_exceptions(
+    monkeypatch, session, test_user, caplog
+):
     n = notification_models.Notification(
         user_id=test_user["id"],
         content="hi",

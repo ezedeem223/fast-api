@@ -2,8 +2,8 @@ import pytest
 
 from app import models
 from app.modules.notifications.repository import NotificationRepository
-from app.services.posts import PostService
 from app.routers import search as search_router
+from app.services.posts import PostService
 from tests.test_session7_routers import make_client
 
 
@@ -20,7 +20,9 @@ class _StubRedisBad:
         self.store[key] = value
 
 
-def test_search_ignores_invalid_cache_payload(session, authorized_client, test_user, monkeypatch):
+def test_search_ignores_invalid_cache_payload(
+    session, authorized_client, test_user, monkeypatch
+):
     # seed a post to be found
     post = models.Post(title="Cached Hit", content="body", owner_id=test_user["id"])
     session.add(post)
@@ -30,10 +32,14 @@ def test_search_ignores_invalid_cache_payload(session, authorized_client, test_u
     cache_key = "search:Cached Hit:relevance"
     stub.store[cache_key] = "not-json"
     monkeypatch.setenv("APP_ENV", "dev")
-    monkeypatch.setattr(search_router.settings.__class__, "redis_client", stub, raising=False)
+    monkeypatch.setattr(
+        search_router.settings.__class__, "redis_client", stub, raising=False
+    )
     monkeypatch.setattr(search_router, "_cache_client", lambda: stub)
 
-    resp = authorized_client.post("/search/", json={"query": "Cached Hit", "sort_by": "relevance"})
+    resp = authorized_client.post(
+        "/search/", json={"query": "Cached Hit", "sort_by": "relevance"}
+    )
     assert resp.status_code == 200
     assert resp.json()["results"], "Should recompute when cache payload is invalid"
 
@@ -80,7 +86,9 @@ async def test_post_translation_typeerror_skipped(session, test_user, monkeypatc
 
 
 def test_screen_share_end_not_found(session):
-    user = models.User(email="screen@example.com", hashed_password="x", is_verified=True)
+    user = models.User(
+        email="screen@example.com", hashed_password="x", is_verified=True
+    )
     session.add(user)
     session.commit()
 

@@ -6,34 +6,39 @@ import asyncio
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from http import HTTPStatus
+from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
 import emoji
-from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, notifications, schemas
 from app.analytics import update_conversation_statistics
 from app.core.database import get_db  # noqa: F401 - imported for typing parity
-from app.notifications import (
-    create_notification,
-    queue_email_notification as _queue_email_notification_direct,
-    schedule_email_notification as _schedule_email_notification_direct,
-)
-from app.modules.utils.content import detect_language
-from app.modules.utils.translation import get_translated_content
 from app.modules.utils.common import get_user_display_name
+from app.modules.utils.content import detect_language
 from app.modules.utils.events import log_user_event
 from app.modules.utils.links import update_link_preview as legacy_update_link_preview
+from app.modules.utils.translation import get_translated_content
+from app.notifications import (
+    create_notification,
+)
+from app.notifications import (
+    queue_email_notification as _queue_email_notification_direct,
+)
+from app.notifications import (
+    schedule_email_notification as _schedule_email_notification_direct,
+)
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 
 HTTP_422_UNPROCESSABLE_CONTENT = getattr(
     status, "HTTP_422_UNPROCESSABLE_CONTENT", HTTPStatus.UNPROCESSABLE_ENTITY
 )
+
 
 class MessageService:
     """Encapsulates all message CRUD operations and helper workflows."""
@@ -65,7 +70,9 @@ class MessageService:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return conversation
 
-    def _ensure_conversation_membership(self, conversation_id: str, user_id: int) -> None:
+    def _ensure_conversation_membership(
+        self, conversation_id: str, user_id: int
+    ) -> None:
         member = (
             self.db.query(models.ConversationMember)
             .filter(
@@ -110,9 +117,7 @@ class MessageService:
             query = query.filter(models.User.id != exclude_user_id)
         return query.all()
 
-    def _get_or_create_direct_conversation(
-        self, user_a: int, user_b: int
-    ) -> str:
+    def _get_or_create_direct_conversation(self, user_a: int, user_b: int) -> str:
         conversation_id = self._conversation_id(user_a, user_b)
         conversation = (
             self.db.query(models.Conversation)
@@ -152,7 +157,7 @@ class MessageService:
                 models.Block.blocker_id == blocker_id,
                 models.Block.blocked_id == blocked_id,
                 or_(
-                models.Block.ends_at.is_(None),
+                    models.Block.ends_at.is_(None),
                     models.Block.ends_at > datetime.now(),
                 ),
             )
@@ -210,9 +215,7 @@ class MessageService:
                     status_code=HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="Receiver is required for direct messages",
                 )
-            conversation_key = self._conversation_id(
-                current_user.id, target_receiver
-            )
+            conversation_key = self._conversation_id(current_user.id, target_receiver)
         normalized_content = content_text or None
 
         encrypted_payload = payload.encrypted_content
@@ -279,7 +282,12 @@ class MessageService:
         if not recipients:
             return
         sender_display = get_user_display_name(sender)
-        log_user_event(self.db, sender.id, "send_message", {"conversation_id": message.conversation_id})
+        log_user_event(
+            self.db,
+            sender.id,
+            "send_message",
+            {"conversation_id": message.conversation_id},
+        )
         update_conversation_statistics(self.db, message.conversation_id, message)
         for recipient in recipients:
             create_notification(
@@ -302,7 +310,9 @@ class MessageService:
                 subject="New Message Received",
                 body=f"You have received a new message from {sender.email}.",
             )
-            realtime_payload = f"New message from {sender.email}: {message.content or ''}"
+            realtime_payload = (
+                f"New message from {sender.email}: {message.content or ''}"
+            )
             realtime_target = f"/ws/{recipient.id}"
             personal_message = notifications.manager.send_personal_message
             if asyncio.iscoroutinefunction(personal_message):
@@ -533,12 +543,16 @@ class MessageService:
         background_tasks: BackgroundTasks,
     ) -> models.Message:
         message = (
-            self.db.query(models.Message).filter(models.Message.id == message_id).first()
+            self.db.query(models.Message)
+            .filter(models.Message.id == message_id)
+            .first()
         )
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
         if message.sender_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to edit this message")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to edit this message"
+            )
 
         msg_ts = message.timestamp
         if msg_ts.tzinfo is None:
@@ -548,9 +562,7 @@ class MessageService:
         if getattr(now, "tzinfo", None) is None:
             now = now.replace(tzinfo=timezone.utc)
 
-        if now - msg_ts > timedelta(
-            minutes=self.EDIT_DELETE_WINDOW
-        ):
+        if now - msg_ts > timedelta(minutes=self.EDIT_DELETE_WINDOW):
             raise HTTPException(status_code=400, detail="Edit window has expired")
 
         message.content = payload.content
@@ -559,7 +571,9 @@ class MessageService:
         self.db.refresh(message)
 
         recipient = (
-            self.db.query(models.User).filter(models.User.id == message.receiver_id).first()
+            self.db.query(models.User)
+            .filter(models.User.id == message.receiver_id)
+            .first()
         )
         background_tasks.add_task(
             notifications.send_real_time_notification,
@@ -585,12 +599,16 @@ class MessageService:
         background_tasks: BackgroundTasks,
     ) -> None:
         message = (
-            self.db.query(models.Message).filter(models.Message.id == message_id).first()
+            self.db.query(models.Message)
+            .filter(models.Message.id == message_id)
+            .first()
         )
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
         if message.sender_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this message")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to delete this message"
+            )
         msg_ts = message.timestamp
         if msg_ts.tzinfo is None:
             msg_ts = msg_ts.replace(tzinfo=timezone.utc)
@@ -599,13 +617,13 @@ class MessageService:
         if getattr(now, "tzinfo", None) is None:
             now = now.replace(tzinfo=timezone.utc)
 
-        if now - msg_ts > timedelta(
-            minutes=self.EDIT_DELETE_WINDOW
-        ):
+        if now - msg_ts > timedelta(minutes=self.EDIT_DELETE_WINDOW):
             raise HTTPException(status_code=400, detail="Delete window has expired")
 
         recipient = (
-            self.db.query(models.User).filter(models.User.id == message.receiver_id).first()
+            self.db.query(models.User)
+            .filter(models.User.id == message.receiver_id)
+            .first()
         )
         self.db.delete(message)
         self.db.commit()
@@ -625,7 +643,9 @@ class MessageService:
             None,
         )
 
-    async def get_conversations(self, *, current_user: models.User) -> List[models.Message]:
+    async def get_conversations(
+        self, *, current_user: models.User
+    ) -> List[models.Message]:
         subquery = (
             self.db.query(
                 models.Message.conversation_id,
@@ -661,7 +681,9 @@ class MessageService:
         current_user: models.User,
     ) -> models.Message:
         if location.latitude is None or location.longitude is None:
-            raise HTTPException(status_code=400, detail="Latitude and longitude are required")
+            raise HTTPException(
+                status_code=400, detail="Latitude and longitude are required"
+            )
 
         new_message = models.Message(
             sender_id=current_user.id,
@@ -715,7 +737,9 @@ class MessageService:
         )
         self.db.add(new_message)
         attachment = models.MessageAttachment(
-            message=new_message, file_url=str(file_path), file_type=audio_file.content_type or "audio"
+            message=new_message,
+            file_url=str(file_path),
+            file_type=audio_file.content_type or "audio",
         )
         self.db.add(attachment)
         self.db.commit()
@@ -730,7 +754,9 @@ class MessageService:
             "new_audio_message",
             new_message.id,
         )
-        update_conversation_statistics(self.db, new_message.conversation_id, new_message)
+        update_conversation_statistics(
+            self.db, new_message.conversation_id, new_message
+        )
         return new_message
 
     async def unread_count(self, *, current_user: models.User) -> int:
@@ -758,7 +784,9 @@ class MessageService:
             .first()
         )
         if not stats:
-            raise HTTPException(status_code=404, detail="Conversation statistics not found")
+            raise HTTPException(
+                status_code=404, detail="Conversation statistics not found"
+            )
         return stats
 
     async def mark_message_as_read(
@@ -769,12 +797,16 @@ class MessageService:
         background_tasks: BackgroundTasks,
     ) -> models.Message:
         message = (
-            self.db.query(models.Message).filter(models.Message.id == message_id).first()
+            self.db.query(models.Message)
+            .filter(models.Message.id == message_id)
+            .first()
         )
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
         if message.receiver_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to mark this message as read")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to mark this message as read"
+            )
         if not message.is_read:
             message.is_read = True
             message.read_at = datetime.now(timezone.utc)
@@ -782,7 +814,9 @@ class MessageService:
             self.db.refresh(message)
 
             sender = (
-                self.db.query(models.User).filter(models.User.id == message.sender_id).first()
+                self.db.query(models.User)
+                .filter(models.User.id == message.sender_id)
+                .first()
             )
             if sender and not sender.hide_read_status:
                 background_tasks.add_task(
@@ -838,7 +872,9 @@ class MessageService:
         )
         self.db.add(new_message)
         attachment = models.MessageAttachment(
-            message=new_message, file_url=str(file_location), file_type=file.content_type or "file"
+            message=new_message,
+            file_url=str(file_location),
+            file_type=file.content_type or "file",
         )
         self.db.add(attachment)
         self.db.commit()
@@ -885,7 +921,9 @@ class MessageService:
         if member_ids:
             existing = {
                 row[0]
-                for row in self.db.query(models.User.id).filter(models.User.id.in_(member_ids)).all()
+                for row in self.db.query(models.User.id)
+                .filter(models.User.id.in_(member_ids))
+                .all()
             }
             missing = member_ids - existing
             if missing:
@@ -919,7 +957,9 @@ class MessageService:
         self.db.refresh(conversation)
         return conversation
 
-    def list_user_conversations(self, *, current_user: models.User) -> List[models.Conversation]:
+    def list_user_conversations(
+        self, *, current_user: models.User
+    ) -> List[models.Conversation]:
         return (
             self.db.query(models.Conversation)
             .join(models.ConversationMember)
@@ -980,9 +1020,13 @@ class MessageService:
             .first()
         )
         if not member:
-            raise HTTPException(status_code=404, detail="Member not found in conversation")
+            raise HTTPException(
+                status_code=404, detail="Member not found in conversation"
+            )
         if member.role == models.ConversationMemberRole.OWNER:
-            raise HTTPException(status_code=400, detail="Cannot remove the conversation owner")
+            raise HTTPException(
+                status_code=400, detail="Cannot remove the conversation owner"
+            )
         self.db.delete(member)
         self.db.commit()
         self.db.refresh(conversation)
@@ -1067,12 +1111,19 @@ class MessageService:
         self, *, message_id: int, current_user: models.User
     ) -> models.Message:
         message = (
-            self.db.query(models.Message).filter(models.Message.id == message_id).first()
+            self.db.query(models.Message)
+            .filter(models.Message.id == message_id)
+            .first()
         )
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
-        if message.sender_id != current_user.id and message.receiver_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to view this message")
+        if (
+            message.sender_id != current_user.id
+            and message.receiver_id != current_user.id
+        ):
+            raise HTTPException(
+                status_code=403, detail="Not authorized to view this message"
+            )
         return message
 
     async def update_read_status_visibility(

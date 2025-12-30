@@ -6,7 +6,10 @@ from app.modules.utils import network
 
 
 def test_get_client_ip_prefers_forwarded():
-    req = SimpleNamespace(headers={"X-Forwarded-For": "1.1.1.1, 2.2.2.2"}, client=SimpleNamespace(host="9.9.9.9"))
+    req = SimpleNamespace(
+        headers={"X-Forwarded-For": "1.1.1.1, 2.2.2.2"},
+        client=SimpleNamespace(host="9.9.9.9"),
+    )
     assert network.get_client_ip(req) == "1.1.1.1"
 
     req2 = SimpleNamespace(headers={}, client=SimpleNamespace(host="8.8.8.8"))
@@ -14,8 +17,16 @@ def test_get_client_ip_prefers_forwarded():
 
 
 def test_is_ip_banned_handles_expiry(session):
-    active = models.IPBan(ip_address="10.0.0.1", reason="x", expires_at=datetime.now(timezone.utc) + timedelta(hours=1))
-    expired = models.IPBan(ip_address="10.0.0.2", reason="y", expires_at=datetime.now(timezone.utc) - timedelta(hours=1))
+    active = models.IPBan(
+        ip_address="10.0.0.1",
+        reason="x",
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    expired = models.IPBan(
+        ip_address="10.0.0.2",
+        reason="y",
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
     session.add_all([active, expired])
     session.commit()
 

@@ -1,4 +1,7 @@
-"""Email delivery utilities for notifications."""
+"""Email delivery utilities for notifications.
+
+Thin wrappers around FastMail that construct MessageSchema from notification payloads.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +10,13 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional, Union
 
-from fastapi import BackgroundTasks
 from fastapi_mail import MessageSchema
 
 from app import models
-from app.core.config import settings, fm
+from app.core.config import fm, settings
 from app.core.database import get_db
+from fastapi import BackgroundTasks
+
 from .common import get_model_by_id, handle_async_errors, logger
 
 
@@ -64,9 +68,10 @@ async def send_email_notification(
     """
     Send an email using FastAPI-Mail. Acts as a no-op in test/dev without credentials.
     """
-    if settings.environment.lower() == "test" or os.getenv(
-        "DISABLE_EXTERNAL_NOTIFICATIONS"
-    ) == "1":
+    if (
+        settings.environment.lower() == "test"
+        or os.getenv("DISABLE_EXTERNAL_NOTIFICATIONS") == "1"
+    ):
         # Skip actual delivery in test/dev to keep suites deterministic and avoid external calls.
         logger.info("Email sending skipped in test environment.")
         return
@@ -109,7 +114,9 @@ def schedule_email_notification_by_id(notification_id: int, delay: int = 60) -> 
         await asyncio.sleep(delay)
         db_session = next(get_db())
         try:
-            notification = get_model_by_id(db_session, models.Notification, notification_id)
+            notification = get_model_by_id(
+                db_session, models.Notification, notification_id
+            )
             if not notification:
                 return
 
@@ -122,7 +129,9 @@ def schedule_email_notification_by_id(notification_id: int, delay: int = 60) -> 
                     subtype="html",
                 )
                 await send_email_notification(message)
-                logger.info("Scheduled email notification %s delivered.", notification_id)
+                logger.info(
+                    "Scheduled email notification %s delivered.", notification_id
+                )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Error in scheduled email notification: %s", exc)
         finally:
@@ -150,9 +159,7 @@ async def send_mention_notification(to: str, mentioner: str, post_id: int) -> No
 
 
 @handle_async_errors
-async def send_login_notification(
-    email: str, ip_address: str, user_agent: str
-) -> None:
+async def send_login_notification(email: str, ip_address: str, user_agent: str) -> None:
     """Send a security notification when a new login is detected."""
     subject = "New Login to Your Account"
     body = f"""

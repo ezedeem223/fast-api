@@ -3,17 +3,19 @@
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List
 from datetime import datetime, timedelta
+from typing import List
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.modules.utils.moderation import log_event
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 # Local imports
 from .. import models, oauth2, schemas
-from app.core.database import get_db
 from ..celery_worker import unblock_user
-from app.modules.utils.moderation import log_event
 
 # =====================================================
 # =============== Global Variables ====================

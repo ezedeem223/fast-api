@@ -1,13 +1,13 @@
-import pytest
-from fastapi import BackgroundTasks
 from datetime import datetime, timezone
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
+import pytest
+
 from app import models
 from app.modules.community import CommunityMember
 from app.modules.notifications import models as notification_models
-from app.notifications import (
-    send_real_time_notification,
-)
-from unittest.mock import patch, MagicMock, ANY, AsyncMock
+from app.notifications import send_real_time_notification
+from fastapi import BackgroundTasks
 
 
 @pytest.fixture
@@ -38,18 +38,15 @@ def test_notification_on_new_post(
 ):
     post_data = {"title": "New Post", "content": "New Content", "published": True}
 
-    with patch(
-        "app.routers.post.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.post.schedule_email_notification"
-    ) as mock_schedule_email:
+    with (
+        patch("app.routers.post.queue_email_notification") as mock_queue_email,
+        patch("app.routers.post.schedule_email_notification") as mock_schedule_email,
+    ):
         response = authorized_client.post("/posts/", json=post_data)
 
     assert response.status_code == 201
 
-    mock_notification_manager.broadcast.assert_called_with(
-        "New post created: New Post"
-    )
+    mock_notification_manager.broadcast.assert_called_with("New post created: New Post")
 
     expected_kwargs = dict(
         to=test_user["email"],
@@ -71,11 +68,10 @@ def test_notification_on_new_comment(
 ):
     comment_data = {"content": "Test Comment", "post_id": test_posts[0].id}
 
-    with patch(
-        "app.routers.comment.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.comment.schedule_email_notification"
-    ) as mock_schedule_email:
+    with (
+        patch("app.routers.comment.queue_email_notification") as mock_queue_email,
+        patch("app.routers.comment.schedule_email_notification") as mock_schedule_email,
+    ):
         response = authorized_client.post("/comments/", json=comment_data)
 
     assert response.status_code == 201
@@ -104,11 +100,10 @@ def test_notification_on_new_vote(
 ):
     vote_data = {"post_id": test_posts[0].id, "reaction_type": "like"}
 
-    with patch(
-        "app.routers.vote.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.vote.schedule_email_notification"
-    ) as mock_schedule_email:
+    with (
+        patch("app.routers.vote.queue_email_notification") as mock_queue_email,
+        patch("app.routers.vote.schedule_email_notification") as mock_schedule_email,
+    ):
         response = authorized_client.post("/vote/", json=vote_data)
 
     assert response.status_code == 201
@@ -135,11 +130,10 @@ def test_notification_on_new_follow(
     mock_notification_manager,
     mock_send_email,
 ):
-    with patch(
-        "app.routers.follow.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.follow.schedule_email_notification"
-    ) as mock_schedule_email:
+    with (
+        patch("app.routers.follow.queue_email_notification") as mock_queue_email,
+        patch("app.routers.follow.schedule_email_notification") as mock_schedule_email,
+    ):
         response = authorized_client.post(f"/follow/{test_user2['id']}")
 
     assert response.status_code == 201
@@ -172,9 +166,7 @@ def test_email_notification_scheduled(authorized_client, test_user):
         "published": True,
     }
 
-    with patch(
-        "app.routers.post.schedule_email_notification"
-    ) as mock_schedule_email:
+    with patch("app.routers.post.schedule_email_notification") as mock_schedule_email:
         response = authorized_client.post("/posts/", json=post_data)
 
     assert response.status_code == 201
@@ -197,11 +189,10 @@ def test_notification_on_message(
 ):
     message_data = {"content": "Hello!", "recipient_id": test_user2["id"]}
 
-    with patch(
-        "app.routers.message.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.message.schedule_email_notification"
-    ) as mock_schedule_email:
+    with (
+        patch("app.routers.message.queue_email_notification") as mock_queue_email,
+        patch("app.routers.message.schedule_email_notification") as mock_schedule_email,
+    ):
         response = authorized_client.post("/message/", json=message_data)
 
     assert response.status_code == 201
@@ -249,12 +240,14 @@ def test_notification_on_community_join(
     token = login_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    with patch(
-        "app.routers.community.queue_email_notification"
-    ) as mock_queue_email, patch(
-        "app.routers.community.schedule_email_notification"
-    ) as mock_schedule_email, patch(
-        "app.routers.community.BackgroundTasks", return_value=mock_background_tasks
+    with (
+        patch("app.routers.community.queue_email_notification") as mock_queue_email,
+        patch(
+            "app.routers.community.schedule_email_notification"
+        ) as mock_schedule_email,
+        patch(
+            "app.routers.community.BackgroundTasks", return_value=mock_background_tasks
+        ),
     ):
         join_response = client.post(
             f"/communities/{community_id}/join", headers=headers
@@ -340,7 +333,6 @@ def test_notification_feed_marks_seen(authorized_client, session, test_user):
     assert payload["unseen_count"] == 1  # only the oldest notification remains unseen
     assert payload["unread_count"] == 3  # mark_seen does not mark as read by default
     assert payload["next_cursor"] is not None
-
 
 
 # Add more notification tests as needed, for example:

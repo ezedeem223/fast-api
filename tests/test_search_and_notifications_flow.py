@@ -1,11 +1,10 @@
 import json
 
-
 from app import models
 from app.core.config import settings
-from app.routers import search as search_router
 from app.modules.notifications import models as notification_models
 from app.modules.users.schemas import SortOption
+from app.routers import search as search_router
 
 
 class _StubRedis:

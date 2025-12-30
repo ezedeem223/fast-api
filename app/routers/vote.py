@@ -1,18 +1,17 @@
 """Vote router for post voting and side-effect hooks."""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Response, status, Request
+from sqlalchemy.orm import Session
 
-
-from .. import oauth2, schemas
+from app import notifications
 from app.core.database import get_db
+from app.core.middleware.rate_limit import limiter
 from app.modules.posts import VoteService
 from app.modules.users.models import User
-from sqlalchemy.orm import Session
-from ..notifications import queue_email_notification, schedule_email_notification
 from app.notifications import create_notification
-from app import notifications
-from app.core.middleware.rate_limit import limiter
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
+from .. import oauth2, schemas
+from ..notifications import queue_email_notification, schedule_email_notification
 
 router = APIRouter(prefix="/vote", tags=["Vote"])
 

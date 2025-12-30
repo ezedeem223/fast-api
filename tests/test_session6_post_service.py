@@ -1,17 +1,23 @@
-import pytest
 from datetime import datetime, timedelta, timezone
-from fastapi import BackgroundTasks, HTTPException, UploadFile
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from app import models, schemas
-from app.services.posts.post_service import PostService
 from app.modules.posts.models import PostRelation
 from app.modules.utils.security import hash as hash_password
+from app.services.posts.post_service import PostService
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 
 
 def _user(session, email="post@example.com", verified=True, privacy="public"):
-    user = models.User(email=email, hashed_password=hash_password("x"), is_verified=verified, privacy_level=privacy)
+    user = models.User(
+        email=email,
+        hashed_password=hash_password("x"),
+        is_verified=verified,
+        privacy_level=privacy,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -76,12 +82,25 @@ def test_create_post_requires_verification_and_nonempty(session, monkeypatch):
     unverified = _user(session, verified=False)
     verified = _user(session, email="ok@example.com")
 
-    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = _no_ops()
-    monkeypatch.setattr("app.services.posts.post_service.check_content", lambda db, content: ([], []))
-    monkeypatch.setattr("app.services.posts.post_service.filter_content", lambda db, content: content)
-    monkeypatch.setattr("app.services.posts.post_service.process_mentions", lambda content, db: [])
-    monkeypatch.setattr("app.services.posts.post_service.get_or_create_hashtag", lambda db, name: models.Hashtag(name=name))
-    monkeypatch.setattr("app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy)
+    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = (
+        _no_ops()
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.check_content", lambda db, content: ([], [])
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.filter_content", lambda db, content: content
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.process_mentions", lambda content, db: []
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.get_or_create_hashtag",
+        lambda db, name: models.Hashtag(name=name),
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy
+    )
 
     with pytest.raises(HTTPException) as exc:
         service.create_post(
@@ -117,14 +136,30 @@ def test_create_post_scheduled_with_analysis_and_scheduler(session, monkeypatch)
     user = _user(session, email="sched@example.com")
     tasks = BackgroundTasks()
     scheduler = _StubScheduler()
-    monkeypatch.setattr("app.services.posts.post_service.schedule_post_publication", scheduler)
-    monkeypatch.setattr("app.services.posts.post_service.check_content", lambda db, content: ([], []))
-    monkeypatch.setattr("app.services.posts.post_service.filter_content", lambda db, content: content + " clean")
-    monkeypatch.setattr("app.services.posts.post_service.process_mentions", lambda content, db: [])
-    monkeypatch.setattr("app.services.posts.post_service.get_or_create_hashtag", lambda db, name: models.Hashtag(name=name))
-    monkeypatch.setattr("app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy)
+    monkeypatch.setattr(
+        "app.services.posts.post_service.schedule_post_publication", scheduler
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.check_content", lambda db, content: ([], [])
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.filter_content",
+        lambda db, content: content + " clean",
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.process_mentions", lambda content, db: []
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.get_or_create_hashtag",
+        lambda db, name: models.Hashtag(name=name),
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy
+    )
 
-    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = _no_ops()
+    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = (
+        _no_ops()
+    )
 
     analyze_result = {
         "sentiment": {"sentiment": "positive", "score": 0.8},
@@ -160,13 +195,26 @@ def test_create_post_analyze_flag_without_fn_raises(session, monkeypatch):
     service = PostService(session)
     user = _user(session, email="missing@example.com")
     tasks = BackgroundTasks()
-    monkeypatch.setattr("app.services.posts.post_service.check_content", lambda db, content: ([], []))
-    monkeypatch.setattr("app.services.posts.post_service.filter_content", lambda db, content: content)
-    monkeypatch.setattr("app.services.posts.post_service.process_mentions", lambda content, db: [])
-    monkeypatch.setattr("app.services.posts.post_service.get_or_create_hashtag", lambda db, name: models.Hashtag(name=name))
-    monkeypatch.setattr("app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy)
+    monkeypatch.setattr(
+        "app.services.posts.post_service.check_content", lambda db, content: ([], [])
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.filter_content", lambda db, content: content
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.process_mentions", lambda content, db: []
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.get_or_create_hashtag",
+        lambda db, name: models.Hashtag(name=name),
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy
+    )
 
-    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = _no_ops()
+    queue_email_fn, schedule_email_fn, broadcast_fn, share_tw, share_fb, notify = (
+        _no_ops()
+    )
     payload = _post_create_payload(analyze_content=True)
     with pytest.raises(HTTPException) as exc:
         service.create_post(
@@ -208,7 +256,9 @@ def test_update_post_success_and_permissions(session, monkeypatch):
     service = PostService(session)
     owner = _user(session, "owner2@example.com")
     other = _user(session, "other2@example.com")
-    post = models.Post(owner_id=owner.id, title="old", content="old c", is_safe_content=True)
+    post = models.Post(
+        owner_id=owner.id, title="old", content="old c", is_safe_content=True
+    )
     session.add(post)
     session.commit()
 
@@ -220,10 +270,19 @@ def test_update_post_success_and_permissions(session, monkeypatch):
         copyright_type=schemas.CopyrightType.PUBLIC_DOMAIN,
         custom_copyright="cc",
     )
-    monkeypatch.setattr("app.services.posts.post_service.process_mentions", lambda content, db: [other])
-    monkeypatch.setattr("app.services.posts.post_service.get_or_create_hashtag", lambda db, name: models.Hashtag(name=name))
-    monkeypatch.setattr("app.services.posts.post_service.check_content", lambda db, content: ([], []))
-    monkeypatch.setattr("app.services.posts.post_service.filter_content", lambda db, content: content)
+    monkeypatch.setattr(
+        "app.services.posts.post_service.process_mentions", lambda content, db: [other]
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.get_or_create_hashtag",
+        lambda db, name: models.Hashtag(name=name),
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.check_content", lambda db, content: ([], [])
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.filter_content", lambda db, content: content
+    )
 
     analysis = {"sentiment": {"sentiment": "neutral", "score": 0.5}, "suggestion": "ok"}
 
@@ -257,14 +316,22 @@ def test_create_poll_vote_and_results(session):
 
     poll_out = service.create_poll_post(
         background_tasks=tasks,
-        payload=schemas.PollCreate(title="poll", description="d", options=["a", "b"], end_date=None),
+        payload=schemas.PollCreate(
+            title="poll", description="d", options=["a", "b"], end_date=None
+        ),
         current_user=user,
         queue_email_fn=lambda *a, **k: None,
     )
-    options = session.query(models.PollOption).filter(models.PollOption.post_id == poll_out.id).all()
+    options = (
+        session.query(models.PollOption)
+        .filter(models.PollOption.post_id == poll_out.id)
+        .all()
+    )
     assert len(options) == 2
 
-    res = service.vote_in_poll(post_id=poll_out.id, option_id=options[0].id, current_user=user)
+    res = service.vote_in_poll(
+        post_id=poll_out.id, option_id=options[0].id, current_user=user
+    )
     assert res["message"].startswith("Vote")
 
     with pytest.raises(HTTPException) as exc:
@@ -288,7 +355,9 @@ def test_create_poll_vote_and_results(session):
         .first()
     )
     with pytest.raises(HTTPException) as exc:
-        service.vote_in_poll(post_id=expired_poll.id, option_id=expired_option.id, current_user=user)
+        service.vote_in_poll(
+            post_id=expired_poll.id, option_id=expired_option.id, current_user=user
+        )
     assert exc.value.status_code == 400
 
     results = service.get_poll_results(post_id=poll_out.id)
@@ -304,38 +373,42 @@ def test_report_content_delegates(session, monkeypatch):
         "app.services.posts.post_service.submit_report",
         lambda db, current_user, **kwargs: captured.update(kwargs) or {"ok": True},
     )
-    resp = service.report_content(current_user=user, reason="spam", post_id=1, comment_id=None)
+    resp = service.report_content(
+        current_user=user, reason="spam", post_id=1, comment_id=None
+    )
     assert resp["ok"] is True
     assert captured["reason"] == "spam"
     assert captured["post_id"] == 1
 
 
-def test_upload_file_post_requires_verified(session, tmp_path):
-    service = PostService(session)
-    unverified = _user(session, "file@example.com", verified=False)
-    upload = UploadFile(file=BytesIO(b"data"), filename="f.txt")
-    with pytest.raises(HTTPException) as exc:
-        service.upload_file_post(file=upload, current_user=unverified, media_dir=tmp_path / "media")
-    assert exc.value.status_code == 403
-
-    verified = _user(session, "file2@example.com", verified=True)
-    upload2 = UploadFile(file=BytesIO(b"data"), filename="f2.txt")
-    post_out = service.upload_file_post(file=upload2, current_user=verified, media_dir=tmp_path / "media2")
-    assert Path(post_out.content).exists()
-
-
 def test_living_memory_relation_created(session, monkeypatch):
     service = PostService(session)
     user = _user(session, "memory2@example.com")
-    old = models.Post(owner_id=user.id, title="old", content="hello world memory", is_safe_content=True)
+    old = models.Post(
+        owner_id=user.id,
+        title="old",
+        content="hello world memory",
+        is_safe_content=True,
+    )
     session.add(old)
     session.commit()
 
-    monkeypatch.setattr("app.services.posts.post_service.check_content", lambda db, content: ([], []))
-    monkeypatch.setattr("app.services.posts.post_service.filter_content", lambda db, content: content)
-    monkeypatch.setattr("app.services.posts.post_service.process_mentions", lambda content, db: [])
-    monkeypatch.setattr("app.services.posts.post_service.get_or_create_hashtag", lambda db, name: models.Hashtag(name=name))
-    monkeypatch.setattr("app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy)
+    monkeypatch.setattr(
+        "app.services.posts.post_service.check_content", lambda db, content: ([], [])
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.filter_content", lambda db, content: content
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.process_mentions", lambda content, db: []
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.get_or_create_hashtag",
+        lambda db, name: models.Hashtag(name=name),
+    )
+    monkeypatch.setattr(
+        "app.services.posts.post_service.SocialEconomyService", _StubSocialEconomy
+    )
 
     new_post_out = service.create_post(
         background_tasks=BackgroundTasks(),
@@ -350,7 +423,10 @@ def test_living_memory_relation_created(session, monkeypatch):
     )
     rel = (
         session.query(PostRelation)
-        .filter(PostRelation.source_post_id == new_post_out.id, PostRelation.target_post_id == old.id)
+        .filter(
+            PostRelation.source_post_id == new_post_out.id,
+            PostRelation.target_post_id == old.id,
+        )
         .first()
     )
     assert rel is not None

@@ -2,8 +2,8 @@
 
 Heuristics:
 - Post scoring favors recency via power decay; retains higher prior scores to avoid regressions across recalculations.
-!- Call quality buffer keeps a small rolling window and cleans idle entries; thresholds are coarse by design.
-!- Sentiment/relevance is lightweight and only directionally useful; not intended for hard moderation gates.
+- Call quality buffer keeps a small rolling window and cleans idle entries; thresholds are coarse by design.
+- Sentiment/relevance is lightweight and only directionally useful; not intended for hard moderation gates.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from app.modules.posts.models import (
     Reaction,
     ReactionType,
 )
+
 from .content import sentiment_pipeline
 
 
@@ -35,7 +36,9 @@ def update_ban_statistics(db: Session, target: str, reason: str, score: float) -
         .first()
     )
     if not stats:
-        stats = models.BanStatistics(date=today, total_bans=0, ip_bans=0, word_bans=0, user_bans=0)
+        stats = models.BanStatistics(
+            date=today, total_bans=0, ip_bans=0, word_bans=0, user_bans=0
+        )
         db.add(stats)
         db.flush()
 
@@ -50,6 +53,7 @@ def update_ban_statistics(db: Session, target: str, reason: str, score: float) -
     stats.effectiveness_score = score
     stats.most_common_reason = reason
     db.commit()
+
 
 QUALITY_WINDOW_SIZE = 10
 MIN_QUALITY_THRESHOLD = 50
@@ -67,9 +71,7 @@ def create_default_categories(db: Session):
     ]
     for category in default_categories:
         db_category = (
-            db.query(PostCategory)
-            .filter(PostCategory.name == category["name"])
-            .first()
+            db.query(PostCategory).filter(PostCategory.name == category["name"]).first()
         )
         if not db_category:
             new_category = PostCategory(**category)
@@ -94,9 +96,7 @@ def create_default_categories(db: Session):
                 sub_categories = []
             for sub_cat in sub_categories:
                 exists = (
-                    db.query(PostCategory)
-                    .filter(PostCategory.name == sub_cat)
-                    .first()
+                    db.query(PostCategory).filter(PostCategory.name == sub_cat).first()
                 )
                 if not exists:
                     db.add(PostCategory(name=sub_cat, parent_id=new_category.id))
@@ -155,9 +155,7 @@ def calculate_post_score(
 
 def update_post_score(db: Session, post: Post):
     """Update a post's score using reactions, comment count, and age."""
-    reactions = (
-        db.query(Reaction).filter(Reaction.post_id == post.id).all()
-    )
+    reactions = db.query(Reaction).filter(Reaction.post_id == post.id).all()
 
     reaction_weights = {
         "like": 1,
@@ -193,9 +191,7 @@ def update_post_vote_statistics(db: Session, post_id: int):
 
     stats = post.vote_statistics or PostVoteStatistics(post_id=post_id)
 
-    reactions = (
-        db.query(Reaction).filter(Reaction.post_id == post_id).all()
-    )
+    reactions = db.query(Reaction).filter(Reaction.post_id == post_id).all()
     positive_types = {"like", "love", "haha", "wow"}
     negative_types = {"sad", "angry"}
 
@@ -209,9 +205,7 @@ def update_post_vote_statistics(db: Session, post_id: int):
 
     for reaction_type in ReactionType:
         count = sum(
-            1
-            for reaction in reactions
-            if reaction.reaction_type == reaction_type.value
+            1 for reaction in reactions if reaction.reaction_type == reaction_type.value
         )
         setattr(stats, f"{reaction_type.value}_count", count)
 

@@ -1,6 +1,7 @@
-import pytest
 from io import BytesIO
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture(autouse=True)

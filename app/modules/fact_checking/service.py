@@ -1,16 +1,18 @@
 # app/modules/fact_checking/service.py
 
-from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
 from app.modules.fact_checking.models import (
-    Fact,
-    FactVerification,
-    FactCorrection,
     CredibilityBadge,
+    Fact,
+    FactCheckStatus,
+    FactCorrection,
+    FactVerification,
     FactVote,
     MisinformationWarning,
-    FactCheckStatus,
 )
 
 
@@ -167,7 +169,9 @@ class FactCheckingService:
 
         fact.status = status
         fact.updated_at = datetime.now(timezone.utc)
-        fact.verification_score = 1.0 if status == FactCheckStatus.VERIFIED else fact.verification_score
+        fact.verification_score = (
+            1.0 if status == FactCheckStatus.VERIFIED else fact.verification_score
+        )
         if note:
             # store note in description history for traceability
             existing = fact.description or ""

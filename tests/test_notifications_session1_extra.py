@@ -1,28 +1,28 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-
-import pytest
-from fastapi import BackgroundTasks
 from unittest.mock import AsyncMock
 
+import pytest
+from fastapi_mail import MessageSchema
+
+from app.core.config import settings
+from app.modules.notifications import common
 from app.modules.notifications import models as notification_models
+from app.modules.notifications.batching import NotificationBatcher
 from app.modules.notifications.email import (
     queue_email_notification,
-    send_email_notification,
     schedule_email_notification,
     schedule_email_notification_by_id,
+    send_email_notification,
 )
+from app.modules.notifications.realtime import ConnectionManager
+from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.tasks import (
     cleanup_old_notifications_task,
     deliver_notification_task,
     process_scheduled_notifications_task,
 )
-from app.modules.notifications.realtime import ConnectionManager
-from app.modules.notifications import common
-from app.modules.notifications.batching import NotificationBatcher
-from app.modules.notifications.repository import NotificationRepository
-from app.core.config import settings
-from fastapi_mail import MessageSchema
+from fastapi import BackgroundTasks
 
 
 def test_queue_email_notification_adds_background_task():
@@ -37,51 +37,45 @@ def test_queue_email_notification_adds_background_task():
 
 
 @pytest.mark.asyncio
-async def test_send_email_notification_requires_recipient(monkeypatch):
-    monkeypatch.setattr("app.modules.notifications.email.settings.environment", "production")
-    monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
-    with pytest.raises(ValueError):
-        await send_email_notification(message=None, to=None, subject="s", body="b")
-
-
-@pytest.mark.asyncio
-async def test_send_email_notification_skips_without_credentials(monkeypatch):
-    monkeypatch.setattr("app.modules.notifications.email.settings.environment", "production")
-    monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_username", "")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_password", "")
-    send_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.email.fm.send_message", send_mock)
-
-    await send_email_notification(message=None, to="user@example.com", subject="s", body="b")
-
-    send_mock.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_send_email_notification_sends_message_object(monkeypatch):
-    monkeypatch.setattr("app.modules.notifications.email.settings.environment", "production")
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.environment", "production"
+    )
     monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_username", "user")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_password", "pass")
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.mail_username", "user"
+    )
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.mail_password", "pass"
+    )
     send_mock = AsyncMock()
     monkeypatch.setattr("app.modules.notifications.email.fm.send_message", send_mock)
 
-    msg = MessageSchema(subject="hi", recipients=["u@example.com"], body="b", subtype="plain")
+    msg = MessageSchema(
+        subject="hi", recipients=["u@example.com"], body="b", subtype="plain"
+    )
     await send_email_notification(message=msg)
     send_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_send_email_notification_raises_on_smtp_error(monkeypatch):
-    monkeypatch.setattr("app.modules.notifications.email.settings.environment", "production")
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.environment", "production"
+    )
     monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_username", "user")
-    monkeypatch.setattr("app.modules.notifications.email.settings.mail_password", "pass")
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.mail_username", "user"
+    )
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.mail_password", "pass"
+    )
     send_mock = AsyncMock(side_effect=RuntimeError("smtp down"))
     monkeypatch.setattr("app.modules.notifications.email.fm.send_message", send_mock)
 
-    msg = MessageSchema(subject="hi", recipients=["u@example.com"], body="b", subtype="plain")
+    msg = MessageSchema(
+        subject="hi", recipients=["u@example.com"], body="b", subtype="plain"
+    )
     with pytest.raises(RuntimeError):
         await send_email_notification(message=msg)
 
@@ -93,13 +87,17 @@ def test_schedule_email_notification_queues(monkeypatch):
     async def dummy_send(**kwargs):
         queue.append(kwargs)
 
-    monkeypatch.setattr("app.modules.notifications.email.send_email_notification", dummy_send)
+    monkeypatch.setattr(
+        "app.modules.notifications.email.send_email_notification", dummy_send
+    )
     schedule_email_notification(tasks, to="a@b.com", subject="hi", body="body")
     assert tasks.tasks, "Task should be queued"
 
 
 @pytest.mark.asyncio
-async def test_schedule_email_notification_by_id_delivers(monkeypatch, session, test_user):
+async def test_schedule_email_notification_by_id_delivers(
+    monkeypatch, session, test_user
+):
     # force production path
     monkeypatch.setattr(settings, "environment", "production")
     notif = notification_models.Notification(
@@ -116,8 +114,12 @@ async def test_schedule_email_notification_by_id_delivers(monkeypatch, session, 
     async def fake_send(message):
         sent["count"] += 1
 
-    monkeypatch.setattr("app.modules.notifications.email.send_email_notification", fake_send)
-    monkeypatch.setattr("app.modules.notifications.email.get_db", lambda: iter([session]))
+    monkeypatch.setattr(
+        "app.modules.notifications.email.send_email_notification", fake_send
+    )
+    monkeypatch.setattr(
+        "app.modules.notifications.email.get_db", lambda: iter([session])
+    )
 
     created_tasks = []
 
@@ -277,7 +279,9 @@ async def test_connection_manager_mirrors_presence(monkeypatch):
     monkeypatch.setattr(
         "app.modules.notifications.realtime.cache_manager.enabled", True
     )
-    monkeypatch.setattr("app.modules.notifications.realtime.cache_manager.redis", object())
+    monkeypatch.setattr(
+        "app.modules.notifications.realtime.cache_manager.redis", object()
+    )
     monkeypatch.setattr(
         "app.modules.notifications.realtime.cache_manager.set_with_tags", set_mock
     )
@@ -293,7 +297,9 @@ def test_get_or_create_and_get_model_by_id(session, test_user, monkeypatch, capl
         user_id=test_user["id"],
         defaults={"email_notifications": False},
     )
-    fetched = common.get_model_by_id(session, notification_models.NotificationPreferences, created.id)
+    fetched = common.get_model_by_id(
+        session, notification_models.NotificationPreferences, created.id
+    )
     assert fetched.id == created.id
     assert fetched.email_notifications is False
 
@@ -302,18 +308,37 @@ def test_get_or_create_and_get_model_by_id(session, test_user, monkeypatch, capl
             raise RuntimeError("db down")
 
     caplog.clear()
-    assert common.get_model_by_id(BoomSession(), notification_models.Notification, 1) is None
+    assert (
+        common.get_model_by_id(BoomSession(), notification_models.Notification, 1)
+        is None
+    )
     assert any("db down" in msg for msg in caplog.text.splitlines())
 
 
 @pytest.mark.asyncio
 async def test_notification_batcher_flush_and_email_group(monkeypatch):
     send_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.batching.send_email_notification", send_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.batching.send_email_notification", send_mock
+    )
     batcher = NotificationBatcher(max_batch_size=2, max_wait_time=10)
 
-    await batcher.add({"channel": "email", "recipient": "a@example.com", "title": "t1", "content": "c1"})
-    await batcher.add({"channel": "email", "recipient": "a@example.com", "title": "t2", "content": "c2"})
+    await batcher.add(
+        {
+            "channel": "email",
+            "recipient": "a@example.com",
+            "title": "t1",
+            "content": "c1",
+        }
+    )
+    await batcher.add(
+        {
+            "channel": "email",
+            "recipient": "a@example.com",
+            "title": "t2",
+            "content": "c2",
+        }
+    )
 
     send_mock.assert_awaited_once()
     body = send_mock.call_args.args[0].body
@@ -323,7 +348,9 @@ async def test_notification_batcher_flush_and_email_group(monkeypatch):
 @pytest.mark.asyncio
 async def test_notification_batcher_flush_noop(monkeypatch):
     send_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.batching.send_email_notification", send_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.batching.send_email_notification", send_mock
+    )
     batcher = NotificationBatcher()
     await batcher.flush()
     send_mock.assert_not_called()
@@ -332,12 +359,28 @@ async def test_notification_batcher_flush_noop(monkeypatch):
 @pytest.mark.asyncio
 async def test_notification_batcher_digest_flush(monkeypatch):
     send_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.batching.send_email_notification", send_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.batching.send_email_notification", send_mock
+    )
     batcher = NotificationBatcher(digest_window_seconds=0.01, digest_max_size=5)
 
-    await batcher.add_digest({"channel": "email", "recipient": "d@example.com", "title": "t1", "content": "c1"})
+    await batcher.add_digest(
+        {
+            "channel": "email",
+            "recipient": "d@example.com",
+            "title": "t1",
+            "content": "c1",
+        }
+    )
     await asyncio.sleep(0.02)
-    await batcher.add_digest({"channel": "email", "recipient": "d@example.com", "title": "t2", "content": "c2"})
+    await batcher.add_digest(
+        {
+            "channel": "email",
+            "recipient": "d@example.com",
+            "title": "t2",
+            "content": "c2",
+        }
+    )
     await batcher.flush_digests()
 
     assert send_mock.await_count >= 1

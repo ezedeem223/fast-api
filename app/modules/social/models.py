@@ -3,29 +3,18 @@
 from __future__ import annotations
 
 import enum
-
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    ForeignKey,
-    DateTime,
-    Float,
-    JSON,
-    Text,
-    Index,
-)
-from sqlalchemy.sql.sqltypes import TIMESTAMP
+from sqlalchemy import JSON, Boolean, Column, DateTime
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship, synonym
+from sqlalchemy.sql.sqltypes import TIMESTAMP
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
-from app.modules.users.associations import user_hashtag_follows
 from app.modules.posts import post_hashtags
+from app.modules.users.associations import user_hashtag_follows
 
 
 class ReportStatus(str, enum.Enum):
@@ -159,8 +148,6 @@ class Follow(Base):
     followed = relationship(
         "User", back_populates="followers", foreign_keys=[followed_id]
     )
-
-
 
 
 class ExpertiseBadge(Base):

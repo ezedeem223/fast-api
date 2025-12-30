@@ -52,18 +52,24 @@ def test_search_uses_typesense_results(monkeypatch, authorized_client, sample_po
     fake_client = FakeTypesenseClient(hits=hits)
     monkeypatch.setattr(search_router, "get_typesense_client", lambda: fake_client)
 
-    response = authorized_client.post("/search/", json={"query": "Hello", "sort_by": "relevance"})
+    response = authorized_client.post(
+        "/search/", json={"query": "Hello", "sort_by": "relevance"}
+    )
     assert response.status_code == 200
     data = response.json()
     ids = [post["id"] for post in data["results"]]
     assert ids == [sample_posts[1], sample_posts[0]]
 
 
-def test_search_falls_back_when_typesense_errors(monkeypatch, authorized_client, sample_posts):
+def test_search_falls_back_when_typesense_errors(
+    monkeypatch, authorized_client, sample_posts
+):
     fake_client = FakeTypesenseClient(should_raise=True)
     monkeypatch.setattr(search_router, "get_typesense_client", lambda: fake_client)
 
-    response = authorized_client.post("/search/", json={"query": "Hello", "sort_by": "relevance"})
+    response = authorized_client.post(
+        "/search/", json={"query": "Hello", "sort_by": "relevance"}
+    )
     assert response.status_code == 200
     data = response.json()
     ids = [post["id"] for post in data["results"]]

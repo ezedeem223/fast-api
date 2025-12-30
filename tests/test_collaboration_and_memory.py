@@ -5,8 +5,8 @@ from app.modules.collaboration.models import (
     ProjectContribution,
     ProjectStatus,
 )
-from app.modules.posts.models import Post, LivingTestimony
-from app.modules.social.models import ImpactCertificate, CulturalDictionaryEntry
+from app.modules.posts.models import LivingTestimony, Post
+from app.modules.social.models import CulturalDictionaryEntry, ImpactCertificate
 
 
 def test_collaborative_project_and_contributions(session, test_user, test_user2):

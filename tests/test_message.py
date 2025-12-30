@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from app import models
 from app.modules.messaging.models import Conversation
@@ -168,4 +169,6 @@ def test_get_messages_order(authorized_client, test_user, test_user2, session):
     messages = response.json()
     assert isinstance(messages, list)
     assert len(messages) == 3
-    assert messages[0]["timestamp"] > messages[1]["timestamp"] > messages[2]["timestamp"]
+    assert (
+        messages[0]["timestamp"] > messages[1]["timestamp"] > messages[2]["timestamp"]
+    )

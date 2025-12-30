@@ -1,31 +1,25 @@
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException, UploadFile
-from tests.testclient import TestClient
 from PIL import Image
-from starlette.datastructures import Headers
 from pydantic import BaseModel, ConfigDict
+from starlette.datastructures import Headers
 
-from app import models, schemas
+from app import models, oauth2, schemas
 from app.core.database import get_db
-from app import oauth2
 from app.modules.stickers import models as sticker_models
 from app.modules.support import models as support_models
-from app.routers import (
-    hashtag,
-    category_management,
-    statistics as statistics_router,
-    screen_share,
-    session as session_router,
-    social_auth,
-    sticker,
-    call as call_router,
-    support,
-)
+from app.routers import call as call_router
+from app.routers import category_management, hashtag, screen_share
+from app.routers import session as session_router
+from app.routers import social_auth
+from app.routers import statistics as statistics_router
+from app.routers import sticker, support
+from fastapi import FastAPI, HTTPException, UploadFile
+from tests.testclient import TestClient
 
 
 @contextmanager
@@ -82,8 +76,12 @@ def test_hashtag_happy_and_errors(session):
 
 
 def test_category_admin_required_and_happy(session, monkeypatch):
-    admin = models.User(email="admin@example.com", hashed_password="x", is_verified=True, is_admin=True)
-    user = models.User(email="user@example.com", hashed_password="x", is_verified=True, is_admin=False)
+    admin = models.User(
+        email="admin@example.com", hashed_password="x", is_verified=True, is_admin=True
+    )
+    user = models.User(
+        email="user@example.com", hashed_password="x", is_verified=True, is_admin=False
+    )
     session.add_all([admin, user])
     session.commit()
 
@@ -91,20 +89,30 @@ def test_category_admin_required_and_happy(session, monkeypatch):
     monkeypatch.setattr(
         schemas.PostCategoryCreate,
         "model_dump",
-        lambda self: {"name": self.name, "description": self.description, "parent_id": self.parent_id},
+        lambda self: {
+            "name": self.name,
+            "description": self.description,
+            "parent_id": self.parent_id,
+        },
     )
 
     # Non-admin forbidden
     with make_client(session, current_user=user) as client_user:
-        resp_forbidden = client_user.post("/categories/", json={"name": "tech", "description": "d"})
+        resp_forbidden = client_user.post(
+            "/categories/", json={"name": "tech", "description": "d"}
+        )
         assert resp_forbidden.status_code == 403
 
     with make_client(session, current_user=admin) as client_admin:
-        create_resp = client_admin.post("/categories/", json={"name": "tech", "description": "d"})
+        create_resp = client_admin.post(
+            "/categories/", json={"name": "tech", "description": "d"}
+        )
         assert create_resp.status_code == 201
         cat_id = create_resp.json()["id"]
 
-        update_resp = client_admin.put(f"/categories/{cat_id}", json={"name": "science", "description": "s"})
+        update_resp = client_admin.put(
+            f"/categories/{cat_id}", json={"name": "science", "description": "s"}
+        )
         assert update_resp.status_code == 200
 
         delete_resp = client_admin.delete(f"/categories/{cat_id}")
@@ -115,8 +123,12 @@ def test_category_admin_required_and_happy(session, monkeypatch):
 
 
 def test_statistics_vote_and_ban_overview(session, monkeypatch):
-    user = models.User(email="u@example.com", hashed_password="x", is_verified=True, is_admin=False)
-    admin = models.User(email="a@example.com", hashed_password="x", is_verified=True, is_admin=True)
+    user = models.User(
+        email="u@example.com", hashed_password="x", is_verified=True, is_admin=False
+    )
+    admin = models.User(
+        email="a@example.com", hashed_password="x", is_verified=True, is_admin=True
+    )
     session.add_all([user, admin])
     session.commit()
 
@@ -139,7 +151,12 @@ def test_statistics_vote_and_ban_overview(session, monkeypatch):
         assert resp_votes.json()["total_votes_received"] == 1
 
         stat = models.BanStatistics(
-            date=datetime.now().date(), total_bans=2, ip_bans=1, word_bans=1, user_bans=0, effectiveness_score=5.0
+            date=datetime.now().date(),
+            total_bans=2,
+            ip_bans=1,
+            word_bans=1,
+            user_bans=0,
+            effectiveness_score=5.0,
         )
         session.add(stat)
         session.commit()
@@ -152,7 +169,11 @@ def test_statistics_vote_and_ban_overview(session, monkeypatch):
     with make_client(
         session,
         current_user=user,
-        extra_overrides={oauth2.get_current_admin: lambda: (_ for _ in ()).throw(HTTPException(status_code=403))},
+        extra_overrides={
+            oauth2.get_current_admin: lambda: (_ for _ in ()).throw(
+                HTTPException(status_code=403)
+            )
+        },
     ) as client_forbidden:
         resp_forbidden = client_forbidden.get("/statistics/ban-overview")
         assert resp_forbidden.status_code == 403
@@ -196,11 +217,17 @@ def test_screen_share_start_end_and_unauthorized(session, monkeypatch):
         session_id = start_resp.json()["id"]
         assert dummy_manager.sent[-1][0]["type"] == "screen_share_started"
 
-        end_resp = client_user1.post("/screen-share/end", json={"session_id": session_id})
+        end_resp = client_user1.post(
+            "/screen-share/end", json={"session_id": session_id}
+        )
         assert end_resp.status_code == 200
 
-    with make_client(session, current_user=models.User(id=999, email="c@c.com")) as client_user3:
-        unauthorized = client_user3.post("/screen-share/start", json={"call_id": call.id})
+    with make_client(
+        session, current_user=models.User(id=999, email="c@c.com")
+    ) as client_user3:
+        unauthorized = client_user3.post(
+            "/screen-share/start", json={"call_id": call.id}
+        )
         assert unauthorized.status_code == 403
 
 
@@ -209,7 +236,9 @@ def test_screen_share_start_end_and_unauthorized(session, monkeypatch):
 
 def test_encrypted_session_create_and_update(session, monkeypatch):
     user = models.User(email="user@x.com", hashed_password="x", is_verified=True)
-    other = models.User(email="other@x.com", hashed_password="x", is_verified=True, public_key=b"pk")
+    other = models.User(
+        email="other@x.com", hashed_password="x", is_verified=True, public_key=b"pk"
+    )
     session.add_all([user, other])
     session.commit()
 
@@ -275,7 +304,9 @@ def test_social_auth_facebook_happy_and_invalid(monkeypatch, session):
     monkeypatch.setattr(social_auth.oauth, "facebook", dummy_facebook)
     monkeypatch.setattr(social_auth.oauth, "twitter", dummy_twitter)
 
-    existing = models.User(email="fb@example.com", hashed_password="x", is_verified=True)
+    existing = models.User(
+        email="fb@example.com", hashed_password="x", is_verified=True
+    )
     session.add(existing)
     session.commit()
 
@@ -299,35 +330,51 @@ def test_social_auth_facebook_happy_and_invalid(monkeypatch, session):
 
 
 @pytest.mark.asyncio
-async def test_create_sticker_success_and_invalid_format(session, monkeypatch, tmp_path):
+async def test_create_sticker_success_and_invalid_format(
+    session, monkeypatch, tmp_path
+):
     user = models.User(email="stick@example.com", hashed_password="x", is_verified=True)
     pack = sticker_models.StickerPack(name="pack1", creator_id=1)
     cat = sticker_models.StickerCategory(name="fun")
     session.add_all([user, pack, cat])
     session.commit()
     monkeypatch.setattr(sticker.models, "StickerPack", sticker_models.StickerPack)
-    monkeypatch.setattr(sticker.models, "StickerCategory", sticker_models.StickerCategory)
+    monkeypatch.setattr(
+        sticker.models, "StickerCategory", sticker_models.StickerCategory
+    )
     monkeypatch.setattr(sticker.models, "Sticker", sticker_models.Sticker)
 
     png_bytes_io = BytesIO()
     Image.new("RGB", (10, 10), color="red").save(png_bytes_io, format="PNG")
     png_bytes = png_bytes_io.getvalue()
 
-    upload = UploadFile(file=BytesIO(png_bytes), filename="s.png", headers=Headers({"content-type": "image/png"}))
+    upload = UploadFile(
+        file=BytesIO(png_bytes),
+        filename="s.png",
+        headers=Headers({"content-type": "image/png"}),
+    )
     monkeypatch.setattr(sticker, "UPLOAD_DIRECTORY", str(tmp_path))
 
     created = await sticker.create_sticker(
-        sticker=schemas.StickerCreate(name="s", image_url="", pack_id=pack.id, category_ids=[cat.id]),
+        sticker=schemas.StickerCreate(
+            name="s", image_url="", pack_id=pack.id, category_ids=[cat.id]
+        ),
         file=upload,
         db=session,
         current_user=user,
     )
     assert created.image_url.endswith("s.png")
 
-    bad_upload = UploadFile(file=BytesIO(b"gif89a"), filename="s.gif", headers=Headers({"content-type": "image/gif"}))
+    bad_upload = UploadFile(
+        file=BytesIO(b"gif89a"),
+        filename="s.gif",
+        headers=Headers({"content-type": "image/gif"}),
+    )
     with pytest.raises(HTTPException):
         await sticker.create_sticker(
-            sticker=schemas.StickerCreate(name="s2", image_url="", pack_id=pack.id, category_ids=[cat.id]),
+            sticker=schemas.StickerCreate(
+                name="s2", image_url="", pack_id=pack.id, category_ids=[cat.id]
+            ),
             file=bad_upload,
             db=session,
             current_user=user,
@@ -392,9 +439,13 @@ def test_call_router_happy_and_missing_token(monkeypatch, session):
     monkeypatch.setattr(call_router, "get_call_service", lambda: FakeService())
 
     with make_client(
-        session, current_user=caller, extra_overrides={call_router.get_call_service: lambda: FakeService()}
+        session,
+        current_user=caller,
+        extra_overrides={call_router.get_call_service: lambda: FakeService()},
     ) as client:
-        start_resp = client.post("/calls/", json={"receiver_id": 2, "call_type": "audio"})
+        start_resp = client.post(
+            "/calls/", json={"receiver_id": 2, "call_type": "audio"}
+        )
         assert start_resp.status_code == 201, start_resp.text
         update_resp = client.put("/calls/1", json={"status": "ended"})
         assert update_resp.status_code == 200
@@ -404,9 +455,15 @@ def test_call_router_happy_and_missing_token(monkeypatch, session):
 
     with make_client(
         session,
-        extra_overrides={oauth2.get_current_user: lambda: (_ for _ in ()).throw(HTTPException(status_code=401))},
+        extra_overrides={
+            oauth2.get_current_user: lambda: (_ for _ in ()).throw(
+                HTTPException(status_code=401)
+            )
+        },
     ) as client_no_token:
-        unauthorized = client_no_token.post("/calls/", json={"receiver_id": 2, "call_type": "audio"})
+        unauthorized = client_no_token.post(
+            "/calls/", json={"receiver_id": 2, "call_type": "audio"}
+        )
         assert unauthorized.status_code == 401
 
 
@@ -436,7 +493,9 @@ async def test_support_tickets_and_response(session):
     # Simplify request/response schema expectations and avoid deprecation warning
     support.schemas.TicketResponse = TicketResponseCreate
     support.schemas.Ticket = TicketOut
-    support.schemas.TicketCreate.dict = lambda self, *args, **kwargs: self.model_dump(*args, **kwargs)
+    support.schemas.TicketCreate.dict = lambda self, *args, **kwargs: self.model_dump(
+        *args, **kwargs
+    )
     support.models.TicketResponse = support_models.TicketResponse
 
     ticket_obj = await support.create_ticket(

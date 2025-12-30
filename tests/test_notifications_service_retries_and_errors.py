@@ -18,12 +18,19 @@ def _clear_caches():
 
 
 def _make_delivery_manager(session, *, with_tasks=False):
-    mgr = NotificationDeliveryManager(session, background_tasks=MagicMock() if with_tasks else None)
+    mgr = NotificationDeliveryManager(
+        session, background_tasks=MagicMock() if with_tasks else None
+    )
     mgr._process_language = AsyncMock(side_effect=lambda content, *_: content)  # type: ignore[attr-defined]
     return mgr
 
 
-def _notification(session, user_id, status=notification_models.NotificationStatus.PENDING, retry_count=0):
+def _notification(
+    session,
+    user_id,
+    status=notification_models.NotificationStatus.PENDING,
+    retry_count=0,
+):
     n = notification_models.Notification(
         user_id=user_id,
         content="payload",
@@ -49,7 +56,12 @@ async def test_max_retries_exhausted_sets_failed_and_reason(session, test_user):
         preferred_language="en",
     )
     mgr._get_user_preferences = lambda _: prefs
-    n = _notification(session, test_user["id"], status=notification_models.NotificationStatus.FAILED, retry_count=mgr.max_retries)
+    n = _notification(
+        session,
+        test_user["id"],
+        status=notification_models.NotificationStatus.FAILED,
+        retry_count=mgr.max_retries,
+    )
 
     # simulate error path to trigger _handle_final_failure via exception
     mgr._process_language = AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[attr-defined]
@@ -64,7 +76,9 @@ async def test_max_retries_exhausted_sets_failed_and_reason(session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_schedule_retry_not_added_when_background_tasks_absent(session, test_user, monkeypatch):
+async def test_schedule_retry_not_added_when_background_tasks_absent(
+    session, test_user, monkeypatch
+):
     mgr = _make_delivery_manager(session, with_tasks=False)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -74,7 +88,12 @@ async def test_schedule_retry_not_added_when_background_tasks_absent(session, te
         preferred_language="en",
     )
     mgr._get_user_preferences = lambda _: prefs
-    n = _notification(session, test_user["id"], status=notification_models.NotificationStatus.FAILED, retry_count=0)
+    n = _notification(
+        session,
+        test_user["id"],
+        status=notification_models.NotificationStatus.FAILED,
+        retry_count=0,
+    )
 
     # force exception before delivery tasks to enter retry path
     mgr._process_language = AsyncMock(side_effect=RuntimeError("fail"))  # type: ignore[attr-defined]
@@ -102,7 +121,12 @@ async def test_background_tasks_added_when_present(session, test_user, monkeypat
     )
     mgr._process_language = AsyncMock(side_effect=lambda content, *_: content)  # type: ignore[attr-defined]
     mgr._get_user_preferences = lambda _: prefs
-    n = _notification(session, test_user["id"], status=notification_models.NotificationStatus.FAILED, retry_count=0)
+    n = _notification(
+        session,
+        test_user["id"],
+        status=notification_models.NotificationStatus.FAILED,
+        retry_count=0,
+    )
 
     mgr._process_language = AsyncMock(side_effect=RuntimeError("fail"))  # type: ignore[attr-defined]
 
@@ -112,7 +136,9 @@ async def test_background_tasks_added_when_present(session, test_user, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_delivery_status_cache_cleared_on_failure(session, test_user, monkeypatch):
+async def test_delivery_status_cache_cleared_on_failure(
+    session, test_user, monkeypatch
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -143,7 +169,12 @@ async def test_no_channels_keeps_status_pending_and_no_retry(session, test_user)
         preferred_language="en",
     )
     mgr._get_user_preferences = lambda _: prefs
-    n = _notification(session, test_user["id"], status=notification_models.NotificationStatus.PENDING, retry_count=0)
+    n = _notification(
+        session,
+        test_user["id"],
+        status=notification_models.NotificationStatus.PENDING,
+        retry_count=0,
+    )
 
     success = await mgr.deliver_notification(n)
     assert success is False
@@ -182,7 +213,9 @@ async def test_no_new_retry_when_max_retries_reached(session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_update_delivery_status_exception_triggers_rollback(monkeypatch, session, test_user):
+async def test_update_delivery_status_exception_triggers_rollback(
+    monkeypatch, session, test_user
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,

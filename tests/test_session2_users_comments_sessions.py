@@ -1,16 +1,19 @@
 import asyncio
-import pytest
-from fastapi import HTTPException
 from types import SimpleNamespace
 
+import pytest
+
 from app import models, schemas
+from app.routers import session as session_router
 from app.services.comments.service import CommentService
 from app.services.users.service import UserService
-from app.routers import session as session_router
+from fastapi import HTTPException
 
 
 def _make_user(session, email: str, verified: bool = True) -> models.User:
-    user = models.User(email=email, hashed_password="x", is_verified=verified, preferred_language="en")
+    user = models.User(
+        email=email, hashed_password="x", is_verified=verified, preferred_language="en"
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -28,10 +31,15 @@ def test_comment_length_and_db_failure(session, monkeypatch):
     # overly long content check via profanity/validate URLs (simulate failure)
     def fake_check(content, rules):
         return False
+
     with pytest.raises(HTTPException):
         asyncio.run(
             service._validate_comment_content(
-                schemas.CommentCreate(content="bad http://bad", post_id=post.id, image_url="http://invalid"),
+                schemas.CommentCreate(
+                    content="bad http://bad",
+                    post_id=post.id,
+                    image_url="http://invalid",
+                ),
                 post,
             )
         )
@@ -55,7 +63,8 @@ def test_user_service_permissions_and_updates(session):
     updated = user_service.update_privacy_settings(
         user,
         schemas.UserPrivacyUpdate(
-            privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy={"allowed": [user.id]}
+            privacy_level=schemas.PrivacyLevel.CUSTOM,
+            custom_privacy={"allowed": [user.id]},
         ),
     )
     assert updated.privacy_level == schemas.PrivacyLevel.CUSTOM
@@ -71,7 +80,9 @@ def test_user_service_permissions_and_updates(session):
 
     # update_public_key: store bytes-like expected by model
     # public_key expects bytes; ensure assignment succeeds
-    updated_user = user_service.update_public_key(user, schemas.UserPublicKeyUpdate(public_key=b"pk"))
+    updated_user = user_service.update_public_key(
+        user, schemas.UserPublicKeyUpdate(public_key=b"pk")
+    )
     # SQLite returns bytes unchanged
     assert updated_user.public_key == b"pk"
 
@@ -91,7 +102,9 @@ def test_session_router_invalid_inputs(session):
         )
 
     # missing session update target
-    payload = SimpleNamespace(root_key=b"r", chain_key=b"c", next_header_key=b"n", ratchet_key=b"k")
+    payload = SimpleNamespace(
+        root_key=b"r", chain_key=b"c", next_header_key=b"n", ratchet_key=b"k"
+    )
     with pytest.raises(HTTPException):
         session_router.update_encrypted_session(
             session_id=1234,

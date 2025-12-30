@@ -1,17 +1,18 @@
 """Moderator router for handling reports review and block appeals."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List, Optional
 
-# Import project modules
-from .. import models, schemas, oauth2
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
 from app.modules.community import CommunityMember, CommunityRole
 from app.modules.community.schemas import CommunityMemberOut, CommunityMemberUpdate
-from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+
+# Import project modules
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/moderator", tags=["Moderator"])
-
 
 
 async def get_current_moderator(
@@ -21,8 +22,6 @@ async def get_current_moderator(
     if not current_user.is_moderator:
         raise HTTPException(status_code=403, detail="Not authorized")
     return current_user
-
-
 
 
 @router.get("/community/{community_id}/reports", response_model=List[schemas.ReportOut])
@@ -38,9 +37,7 @@ async def get_community_reports(
         .filter(
             CommunityMember.user_id == current_moderator.id,
             CommunityMember.community_id == community_id,
-            CommunityMember.role.in_(
-                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
-            ),
+            CommunityMember.role.in_([CommunityRole.MODERATOR, CommunityRole.ADMIN]),
         )
         .first()
     )
@@ -79,9 +76,7 @@ async def update_report(
         .filter(
             CommunityMember.user_id == current_moderator.id,
             CommunityMember.community_id == post.community_id,
-            CommunityMember.role.in_(
-                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
-            ),
+            CommunityMember.role.in_([CommunityRole.MODERATOR, CommunityRole.ADMIN]),
         )
         .first()
     )
@@ -98,8 +93,6 @@ async def update_report(
     return report
 
 
-
-
 @router.get(
     "/community/{community_id}/members", response_model=List[CommunityMemberOut]
 )
@@ -114,9 +107,7 @@ async def get_community_members(
         .filter(
             CommunityMember.user_id == current_moderator.id,
             CommunityMember.community_id == community_id,
-            CommunityMember.role.in_(
-                [CommunityRole.MODERATOR, CommunityRole.ADMIN]
-            ),
+            CommunityMember.role.in_([CommunityRole.MODERATOR, CommunityRole.ADMIN]),
         )
         .first()
     )

@@ -1,16 +1,19 @@
-"""Impact router for issuing impact certificates and managing cultural dictionary entries."""
+"""Impact router for issuing impact certificates and managing cultural dictionary entries.
+
+Auth required; routes issue certificates and manage dictionary entries via social models.
+Delegates persistence/validation to services/models; uses user context for ownership.
+"""
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.oauth2 import get_current_user
 from app import models
-from app.modules.social.models import ImpactCertificate, CulturalDictionaryEntry
-
-from pydantic import BaseModel, ConfigDict
+from app.core.database import get_db
+from app.modules.social.models import CulturalDictionaryEntry, ImpactCertificate
+from app.oauth2 import get_current_user
+from fastapi import APIRouter, Depends, Query
 
 
 class ImpactCertificateCreate(BaseModel):

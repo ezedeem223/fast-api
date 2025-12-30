@@ -1,7 +1,7 @@
 import pytest
 
-from app.routers import search as search_router
 from app import models
+from app.routers import search as search_router
 
 
 class FailingCache:

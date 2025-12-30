@@ -1,9 +1,4 @@
-from .models import (
-    ContentListing,
-    ContentPurchase,
-    ContentSubscription,
-    ContentReview,
-)
+from .models import ContentListing, ContentPurchase, ContentReview, ContentSubscription
 
 __all__ = [
     "ContentListing",

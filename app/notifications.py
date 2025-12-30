@@ -1,49 +1,48 @@
 """Compatibility facade for the modularised notifications domain.
 
-This module re-exports the new package structure so existing imports keep
-functioning while the refactor is rolled out incrementally.
+Purpose:
+- Preserve legacy import paths while the codebase uses `app.modules.notifications`.
+- Provide a single surface for realtime, email/push, and orchestration helpers.
 
 Layers:
-- Realtime: ConnectionManager manages WebSocket sessions and send_personal_message.
+- Realtime: `ConnectionManager` manages WebSocket sessions and `send_personal_message`.
 - Email/Push: email helpers queue/schedule/trigger notifications; retry logic in service layer.
-- Orchestration: NotificationService/DeliveryManager/RetryHandler handle persistence, batching, and multi-channel delivery.
+- Orchestration: `NotificationService`/`DeliveryManager`/`RetryHandler` handle persistence,
+  batching, and multi-channel delivery.
 """
 
 from typing import Union
 
+from app.modules.notifications.analytics import NotificationAnalyticsService
+from app.modules.notifications.batching import NotificationBatcher
 from app.modules.notifications.common import (
-    logger,
-    notification_cache,
     delivery_status_cache,
-    priority_notification_cache,
     get_model_by_id,
     get_or_create,
     handle_async_errors,
+    logger,
+    notification_cache,
+    priority_notification_cache,
 )
 from app.modules.notifications.email import (
     queue_email_notification,
     schedule_email_notification,
-    send_email_notification,
     schedule_email_notification_by_id,
-    send_mention_notification,
+    send_email_notification,
     send_login_notification,
+    send_mention_notification,
 )
-from app.modules.notifications.realtime import (
-    ConnectionManager,
-    manager,
-)
-from app.modules.notifications.batching import NotificationBatcher
-from app.modules.notifications.analytics import NotificationAnalyticsService
+from app.modules.notifications.realtime import ConnectionManager, manager
 from app.modules.notifications.service import (
-    NotificationService,
-    NotificationDeliveryManager,
-    NotificationRetryHandler,
     CommentNotificationHandler,
     MessageNotificationHandler,
+    NotificationDeliveryManager,
     NotificationManager,
+    NotificationRetryHandler,
+    NotificationService,
+    create_notification,
     deliver_scheduled_notification,
     send_bulk_notifications,
-    create_notification,
 )
 
 

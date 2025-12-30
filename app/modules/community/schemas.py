@@ -7,8 +7,8 @@ from enum import Enum
 from typing import Any, ForwardRef, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, constr
-from app.modules.users.schemas import UserOut
 
+from app.modules.users.schemas import UserOut
 
 CommunityOutRef = ForwardRef("CommunityOut")
 

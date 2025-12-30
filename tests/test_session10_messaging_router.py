@@ -2,12 +2,12 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException, UploadFile
 
 from app import models, schemas
 from app.analytics import update_conversation_statistics
 from app.routers import session as session_router
 from app.services.messaging.message_service import MessageService
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from tests.conftest import TestingSessionLocal
 
 
@@ -30,10 +30,19 @@ async def test_text_message_creates_stats(monkeypatch, session):
     async def _noop_translate(*args, **kwargs):
         return args[0]
 
-    monkeypatch.setattr("app.services.messaging.message_service.get_translated_content", _noop_translate)
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.manager.send_personal_message", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.send_real_time_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.get_translated_content", _noop_translate
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.notifications.manager.send_personal_message", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.notifications.send_real_time_notification", lambda *a, **k: None
+    )
 
     msg = await service.create_message(
         payload=schemas.MessageCreate(content="hello", receiver_id=recv.id),
@@ -69,7 +78,9 @@ async def test_unknown_sticker_rejected(session):
     service._get_valid_sticker = lambda *_: None  # force lookup miss
     with pytest.raises(HTTPException) as exc:
         await service.create_message(
-            payload=schemas.MessageCreate(content=None, receiver_id=recv.id, sticker_id=9999),
+            payload=schemas.MessageCreate(
+                content=None, receiver_id=recv.id, sticker_id=9999
+            ),
             current_user=sender,
             background_tasks=BackgroundTasks(),
         )
@@ -100,7 +111,9 @@ def _stub_signal_protocol(monkeypatch):
     monkeypatch.setattr(session_router.crypto, "SignalProtocol", StubSignal)
 
 
-def test_create_encrypted_session_stores_keys(monkeypatch, authorized_client, test_user2):
+def test_create_encrypted_session_stores_keys(
+    monkeypatch, authorized_client, test_user2
+):
     _stub_signal_protocol(monkeypatch)
     resp = authorized_client.post("/sessions", json={"other_user_id": test_user2["id"]})
     assert resp.status_code == 201
@@ -113,7 +126,9 @@ def test_create_encrypted_session_stores_keys(monkeypatch, authorized_client, te
 
 def test_update_session_persists_chain_key(monkeypatch, authorized_client, test_user2):
     _stub_signal_protocol(monkeypatch)
-    created = authorized_client.post("/sessions", json={"other_user_id": test_user2["id"]}).json()
+    created = authorized_client.post(
+        "/sessions", json={"other_user_id": test_user2["id"]}
+    ).json()
     update = authorized_client.put(
         f"/sessions/{created['id']}",
         json={
@@ -131,7 +146,9 @@ def test_update_session_persists_chain_key(monkeypatch, authorized_client, test_
 
 def test_update_session_missing_field(monkeypatch, authorized_client, test_user2):
     _stub_signal_protocol(monkeypatch)
-    created = authorized_client.post("/sessions", json={"other_user_id": test_user2["id"]}).json()
+    created = authorized_client.post(
+        "/sessions", json={"other_user_id": test_user2["id"]}
+    ).json()
     bad = authorized_client.put(
         f"/sessions/{created['id']}",
         json={
@@ -158,9 +175,7 @@ def test_conversation_stats_response_and_files(session):
     session.add(msg1)
     session.commit()
     session.add(
-        models.MessageAttachment(
-            message_id=msg1.id, file_url="file1", file_type="file"
-        )
+        models.MessageAttachment(message_id=msg1.id, file_url="file1", file_type="file")
     )
     session.commit()
 
@@ -178,14 +193,10 @@ def test_conversation_stats_response_and_files(session):
     session.add(msg2)
     session.commit()
     session.add(
-        models.MessageAttachment(
-            message_id=msg2.id, file_url="file2", file_type="file"
-        )
+        models.MessageAttachment(message_id=msg2.id, file_url="file2", file_type="file")
     )
     session.add(
-        models.MessageAttachment(
-            message_id=msg2.id, file_url="file3", file_type="file"
-        )
+        models.MessageAttachment(message_id=msg2.id, file_url="file3", file_type="file")
     )
     session.commit()
 

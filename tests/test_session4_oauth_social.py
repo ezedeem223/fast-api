@@ -1,11 +1,11 @@
 import types
 
 import pytest
-from fastapi.responses import JSONResponse
 
 from app import models
 from app.routers import oauth as oauth_router
 from app.routers import social_auth
+from fastapi.responses import JSONResponse
 
 
 class FakeOAuthProvider:
@@ -116,7 +116,9 @@ def test_facebook_social_auth_callback_creates_user(client, session, monkeypatch
     monkeypatch.setattr(
         social_auth.oauth2, "create_access_token", lambda data: "tok-fb"
     )
-    session.add(models.User(email="fb@test.com", hashed_password="x", facebook_id="fbid"))
+    session.add(
+        models.User(email="fb@test.com", hashed_password="x", facebook_id="fbid")
+    )
     session.commit()
 
     resp = client.get("/auth/facebook")

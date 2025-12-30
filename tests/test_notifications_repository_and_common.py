@@ -4,9 +4,8 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.modules.notifications import models as notification_models
-from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.common import get_model_by_id, handle_async_errors
-
+from app.modules.notifications.repository import NotificationRepository
 
 # ============== 21) repository.get_model_by_id ==============
 
@@ -58,7 +57,9 @@ def test_cleanup_archived_removes_read_before_cutoff(session):
 
 def test_cleanup_archived_no_data_is_noop(session):
     repo = NotificationRepository(session)
-    removed = repo.cleanup_archived(notification_models.Notification.created_at)  # arbitrary cutoff
+    removed = repo.cleanup_archived(
+        notification_models.Notification.created_at
+    )  # arbitrary cutoff
     assert removed == 0
 
 

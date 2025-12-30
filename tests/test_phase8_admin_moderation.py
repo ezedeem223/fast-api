@@ -10,7 +10,9 @@ from app.services.reels import ReelService
 
 
 def test_banned_word_regex_matching(session, test_user):
-    bw = models.BannedWord(word=r"foo\d+", severity="ban", is_regex=True, created_by=test_user["id"])
+    bw = models.BannedWord(
+        word=r"foo\d+", severity="ban", is_regex=True, created_by=test_user["id"]
+    )
     session.add(bw)
     session.commit()
 
@@ -23,7 +25,9 @@ def test_banned_word_regex_matching(session, test_user):
 
 def test_admin_audit_log_persisted(session, test_user):
     initial = session.query(models.AuditLog).count()
-    log_admin_action(session, admin_id=test_user["id"], action="manual_test", metadata={"foo": "bar"})
+    log_admin_action(
+        session, admin_id=test_user["id"], action="manual_test", metadata={"foo": "bar"}
+    )
     after = session.query(models.AuditLog).count()
     assert after == initial + 1
 

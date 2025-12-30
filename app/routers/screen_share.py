@@ -1,5 +1,14 @@
-"""Screen share router handling start/stop/update lifecycle and notifications."""
+"""Screen share router handling start/stop/update lifecycle and notifications.
 
+Validates call ownership/participation, prevents concurrent shares per call, and
+mirrors updates over WebSocket to the counterparty.
+"""
+
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
 from fastapi import (
     APIRouter,
     Depends,
@@ -8,10 +17,8 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from sqlalchemy.orm import Session
-from datetime import datetime
-from .. import models, schemas, oauth2
-from app.core.database import get_db
+
+from .. import models, oauth2, schemas
 from ..notifications import ConnectionManager
 
 router = APIRouter(prefix="/screen-share", tags=["Screen Share"])

@@ -28,6 +28,8 @@ def test_impact_certificates_and_cultural_entries(authorized_client):
     entry = entry_res.json()
     assert entry["term"] == "Majlis"
 
-    search_res = authorized_client.get("/impact/cultural-dictionary", params={"q": "Maj"})
+    search_res = authorized_client.get(
+        "/impact/cultural-dictionary", params={"q": "Maj"}
+    )
     assert search_res.status_code == 200
     assert any(e["id"] == entry["id"] for e in search_res.json())

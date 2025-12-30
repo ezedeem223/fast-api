@@ -1,17 +1,25 @@
 import pytest
 
-from app.core.scheduling import tasks
 import app.celery_worker as celery_worker
 from app import models
+from app.core.scheduling import tasks
 
 
 def _make_post(session, owner=None, published=False):
     if owner is None:
-        owner = models.User(email="p@example.com", hashed_password="x", is_verified=True)
+        owner = models.User(
+            email="p@example.com", hashed_password="x", is_verified=True
+        )
         session.add(owner)
         session.commit()
         session.refresh(owner)
-    post = models.Post(owner_id=owner.id, title="t", content="c", is_safe_content=True, is_published=published)
+    post = models.Post(
+        owner_id=owner.id,
+        title="t",
+        content="c",
+        is_safe_content=True,
+        is_published=published,
+    )
     session.add(post)
     session.commit()
     session.refresh(post)
@@ -83,7 +91,13 @@ def test_celery_schedule_post_publication(monkeypatch, session):
         assert user_obj.id == owner.id
 
     import app.routers.post as post_router
-    monkeypatch.setattr(post_router, "send_notifications_and_share", fake_send_notifications_and_share, raising=False)
+
+    monkeypatch.setattr(
+        post_router,
+        "send_notifications_and_share",
+        fake_send_notifications_and_share,
+        raising=False,
+    )
 
     celery_worker.schedule_post_publication(post.id)
     session.refresh(post)
@@ -98,17 +112,25 @@ def test_celery_cleanup_and_process_wrappers(monkeypatch, session):
     flags = {"cleanup": False, "process": False}
     monkeypatch.setattr(celery_worker, "SessionLocal", lambda: session)
     monkeypatch.setattr(session, "close", lambda: None, raising=False)
-    monkeypatch.setattr(celery_worker, "cleanup_old_notifications_task", lambda db: flags.__setitem__("cleanup", True))
+    monkeypatch.setattr(
+        celery_worker,
+        "cleanup_old_notifications_task",
+        lambda db: flags.__setitem__("cleanup", True),
+    )
 
     def fake_process(db, enqueue_delivery):
         flags["process"] = True
-    monkeypatch.setattr(celery_worker, "process_scheduled_notifications_task", fake_process)
+
+    monkeypatch.setattr(
+        celery_worker, "process_scheduled_notifications_task", fake_process
+    )
 
     # stub deliver_notification.delay used by process_scheduled_notifications
     class DummyDeliver:
         @staticmethod
         def delay(notification_id):
             return notification_id
+
     monkeypatch.setattr(celery_worker, "deliver_notification", DummyDeliver)
 
     celery_worker.cleanup_old_notifications()

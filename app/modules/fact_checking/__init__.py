@@ -1,9 +1,9 @@
 from .models import (
-    FactCheckStatus,
-    Fact,
-    FactVerification,
-    FactCorrection,
     CredibilityBadge,
+    Fact,
+    FactCheckStatus,
+    FactCorrection,
+    FactVerification,
     FactVote,
     MisinformationWarning,
 )

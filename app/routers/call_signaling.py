@@ -4,6 +4,10 @@ Lifecycle:
 - First joiner becomes owner and can mint join tokens for others; room expires after TTL (default 1h).
 - Authorization accepts owner or valid single-use join_token mapped to user_id; denies replays.
 - Registry state mirrored to Redis when available for multi-instance visibility (tagged by callroom:{room_id}).
+
+Notes:
+- Designed for multi-instance environments by pushing presence into Redis when available.
+- Enforces participant limits and token replay protection to reduce abuse.
 """
 
 import asyncio
@@ -12,6 +16,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Set
 
+from app.core.cache.redis_cache import cache_manager
+from app.notifications import manager as notifications_manager
+from app.oauth2 import get_current_user
 from fastapi import (
     APIRouter,
     Depends,
@@ -22,15 +29,13 @@ from fastapi import (
     status,
 )
 
-from app.oauth2 import get_current_user
-from app.notifications import manager as notifications_manager
-from app.core.cache.redis_cache import cache_manager
-
 router = APIRouter(prefix="/ws/call", tags=["Calls"])
 
 
 @dataclass
 class RoomState:
+    """State for a call room including owner, participants, expiry, and join tokens."""
+
     owner_id: int
     allowed_participants: Set[int] = field(default_factory=set)
     participants: Set[int] = field(default_factory=set)
@@ -62,7 +67,9 @@ class CallRoomRegistry:
             state = self.rooms.get(room_id)
             if state and not state.is_expired():
                 return state
-            expiry = datetime.now(timezone.utc) + timedelta(seconds=ttl or self.default_ttl)
+            expiry = datetime.now(timezone.utc) + timedelta(
+                seconds=ttl or self.default_ttl
+            )
             state = RoomState(
                 owner_id=owner_id,
                 allowed_participants=allowed_participants or set(),
@@ -180,12 +187,16 @@ async def signaling_ws(
         state = await room_registry.create_room(room_id, owner_id=current_user.id)
 
     if state.is_expired():
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="room expired")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION, reason="room expired"
+        )
         await room_registry.mark_expired(room_id)
         return
 
     if not await room_registry.authorize(room_id, current_user.id, join_token):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="join denied")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION, reason="join denied"
+        )
         return
 
     await room_registry.add_participant(room_id, current_user.id)

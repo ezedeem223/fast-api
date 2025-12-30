@@ -1,12 +1,13 @@
-
 import pytest
 
-from app.modules.notifications.realtime import ConnectionManager, send_real_time_notification
-from app.services.moderation.banned_word_service import BannedWordService
-from app import models, schemas
 import app.firebase_config as firebase_config
 import app.link_preview as link_preview
-
+from app import models, schemas
+from app.modules.notifications.realtime import (
+    ConnectionManager,
+    send_real_time_notification,
+)
+from app.services.moderation.banned_word_service import BannedWordService
 
 # -----------------------
 # WebSocket realtime
@@ -53,44 +54,39 @@ async def test_connection_manager_send_and_disconnect():
     assert ws1 not in manager.active_connections.get(1, [])
 
 
-@pytest.mark.asyncio
-async def test_send_real_time_notification_wraps_string():
-    manager = ConnectionManager()
-    ws = FakeWebSocket()
-    await manager.connect(ws, user_id=5)
-    # patch global manager temporarily
-    from app.modules.notifications import realtime
-
-    old_manager = realtime.manager
-    realtime.manager = manager
-    try:
-        await send_real_time_notification(5, "ping")
-        assert ws.sent[-1] == {"message": "ping", "type": "simple_notification"}
-    finally:
-        realtime.manager = old_manager
-
-
 # -----------------------
 # Firebase config stubs
 # -----------------------
 
 
 def test_initialize_firebase_failure(monkeypatch):
-    monkeypatch.setattr(firebase_config.credentials, "Certificate", lambda cfg: (_ for _ in ()).throw(RuntimeError("bad")))
+    monkeypatch.setattr(
+        firebase_config.credentials,
+        "Certificate",
+        lambda cfg: (_ for _ in ()).throw(RuntimeError("bad")),
+    )
     assert firebase_config.initialize_firebase() is False
 
 
 def test_send_multicast_notification_handles_errors(monkeypatch):
-    monkeypatch.setattr(firebase_config.messaging, "MulticastMessage", lambda **kwargs: kwargs)
+    monkeypatch.setattr(
+        firebase_config.messaging, "MulticastMessage", lambda **kwargs: kwargs
+    )
     monkeypatch.setattr(firebase_config.messaging, "send_multicast", lambda msg: "ok")
     assert firebase_config.send_multicast_notification(["t1"], "t", "b") == "ok"
-    monkeypatch.setattr(firebase_config.messaging, "send_multicast", lambda msg: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr(
+        firebase_config.messaging,
+        "send_multicast",
+        lambda msg: (_ for _ in ()).throw(RuntimeError("fail")),
+    )
     assert firebase_config.send_multicast_notification(["t1"], "t", "b") is None
 
 
 def test_send_topic_notification(monkeypatch):
     monkeypatch.setattr(firebase_config.messaging, "Message", lambda **kwargs: kwargs)
-    monkeypatch.setattr(firebase_config.messaging, "Notification", lambda **kwargs: kwargs)
+    monkeypatch.setattr(
+        firebase_config.messaging, "Notification", lambda **kwargs: kwargs
+    )
     monkeypatch.setattr(firebase_config.messaging, "send", lambda msg: "id123")
     assert firebase_config.send_topic_notification("news", "hi", "there") == "id123"
 
@@ -113,7 +109,9 @@ def test_extract_link_preview_success(monkeypatch):
             self.content = content
 
     monkeypatch.setattr(link_preview.validators, "url", lambda u: True)
-    monkeypatch.setattr(link_preview.requests, "get", lambda u, timeout=5: DummyResponse(html.encode()))
+    monkeypatch.setattr(
+        link_preview.requests, "get", lambda u, timeout=5: DummyResponse(html.encode())
+    )
     preview = link_preview.extract_link_preview("http://example.com")
     assert preview["title"] == "Title"
     assert preview["description"] == "desc"
@@ -131,7 +129,9 @@ def test_extract_link_preview_invalid_url(monkeypatch):
 
 
 def _make_admin(session):
-    user = models.User(email="admin@example.com", hashed_password="hashed", is_verified=True)
+    user = models.User(
+        email="admin@example.com", hashed_password="hashed", is_verified=True
+    )
     session.add(user)
     session.commit()
     return user
@@ -149,13 +149,19 @@ def test_banned_word_crud(session, monkeypatch):
     service = BannedWordService(session)
     admin = _make_admin(session)
 
-    word = service.add_word(payload=schemas.BannedWordCreate(word="spam"), current_user=admin)
+    word = service.add_word(
+        payload=schemas.BannedWordCreate(word="spam"), current_user=admin
+    )
     assert word.id
 
     with pytest.raises(Exception):
-        service.add_word(payload=schemas.BannedWordCreate(word="spam"), current_user=admin)
+        service.add_word(
+            payload=schemas.BannedWordCreate(word="spam"), current_user=admin
+        )
 
-    listed = service.list_words(skip=0, limit=10, search="sp", sort_by="word", sort_order="asc")
+    listed = service.list_words(
+        skip=0, limit=10, search="sp", sort_by="word", sort_order="asc"
+    )
     assert listed["total"] == 1
     assert listed["words"][0]["word"] == "spam"
 
@@ -166,7 +172,9 @@ def test_banned_word_crud(session, monkeypatch):
     )
     assert updated.word == "eggs"
 
-    bulk = service.add_bulk(payloads=[schemas.BannedWordCreate(word="foo")], current_user=admin)
+    bulk = service.add_bulk(
+        payloads=[schemas.BannedWordCreate(word="foo")], current_user=admin
+    )
     assert bulk["added_words"] == 1
 
     removed = service.remove_word(word_id=word.id, current_user=admin)

@@ -2,30 +2,22 @@
 
 from typing import List
 
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    Path,
-    Query,
-    status,
-    Request,
-)
 from sqlalchemy.orm import Session
 
-from .. import oauth2, schemas
+from app import notifications
+from app.core.cache.redis_cache import cache  # Task 5: Redis Caching Imports
+from app.core.cache.redis_cache import (
+    cache_manager,
+)
 from app.core.database import get_db
+from app.core.middleware.rate_limit import limiter
 from app.modules.social import FollowService
 from app.modules.users.models import User
-from ..notifications import queue_email_notification, schedule_email_notification
 from app.notifications import create_notification
-from app import notifications
-from app.core.middleware.rate_limit import limiter
-from app.core.cache.redis_cache import (
-    cache,
-    cache_manager,
-)  # Task 5: Redis Caching Imports
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Request, status
 
+from .. import oauth2, schemas
+from ..notifications import queue_email_notification, schedule_email_notification
 
 router = APIRouter(prefix="/follow", tags=["Follow"])
 

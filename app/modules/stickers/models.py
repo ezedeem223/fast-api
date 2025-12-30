@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Table,
-)
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
-
 
 sticker_category_association = Table(
     "sticker_category_association",

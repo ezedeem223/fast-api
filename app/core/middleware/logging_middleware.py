@@ -1,21 +1,23 @@
-"""
-Logging Middleware for FastAPI
-Logs all HTTP requests and responses with timing information.
+"""Logging middleware for FastAPI.
+
+Adds a per-request UUID, enriches log records with user/IP/contextvars, and measures
+latency. Optional OpenTelemetry span attributes are set when OTEL is present. Designed
+to run early in the stack so downstream middleware/routers inherit the request context.
 """
 
 import time
 import uuid
 from typing import Callable, Optional
 
-from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.core.logging_config import (
-    log_request,
     bind_request_context,
+    log_request,
     reset_request_context,
 )
+from fastapi import Request, Response
 
 try:  # Optional OpenTelemetry span enrichment
     from opentelemetry import trace
@@ -24,10 +26,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """
-    Middleware that logs all HTTP requests and responses.
-    Tracks request duration and adds request ID for tracing.
-    """
+    """Log HTTP requests/responses with timing and trace-friendly metadata."""
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)

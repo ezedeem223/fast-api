@@ -3,13 +3,13 @@ from io import BytesIO
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
 from app.core.cache.redis_cache import cache_manager
 from app.oauth2 import create_access_token
 from app.routers.post import share_on_twitter
 from app.services.posts.post_service import PostService
+from fastapi import HTTPException
 from tests.conftest import TestingSessionLocal
 
 
@@ -31,9 +31,7 @@ def test_create_post_invalidates_cache(monkeypatch, authorized_client):
 
 
 def test_update_post_invalidates_cache(monkeypatch, authorized_client):
-    create = authorized_client.post(
-        "/posts/", json={"title": "t1", "content": "c1"}
-    )
+    create = authorized_client.post("/posts/", json={"title": "t1", "content": "c1"})
     post_id = create.json()["id"]
     invalidate_mock = AsyncMock()
     monkeypatch.setattr(cache_manager, "invalidate", invalidate_mock)

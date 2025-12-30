@@ -87,6 +87,7 @@ def test_living_memory_api_integration(
     else:
         print("\n⚠️ API Warning: related_memories list is empty in response.")
 
+
 def test_living_memory_is_user_scoped(db_session, test_user, test_user2):
     """Ensure related memories are only created within the same user's history."""
     post_user1 = Post(
@@ -121,4 +122,6 @@ def test_living_memory_is_user_scoped(db_session, test_user, test_user2):
         .first()
     )
 
-    assert relation is None, "Living Memory should not link posts across different users"
+    assert (
+        relation is None
+    ), "Living Memory should not link posts across different users"

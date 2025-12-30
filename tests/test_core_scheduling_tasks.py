@@ -3,10 +3,10 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
 
-from app.core.scheduling import tasks
 from app.core.config import settings
+from app.core.scheduling import tasks
+from fastapi import FastAPI
 
 
 def _set_env(monkeypatch, value: str):
@@ -49,13 +49,21 @@ async def test_startup_handles_amenhotep(monkeypatch, caplog):
     monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_session)
     monkeypatch.setattr(tasks, "create_default_categories", lambda db: None)
     monkeypatch.setattr(tasks, "update_search_vector", lambda: None)
-    monkeypatch.setattr(tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={})))
+    monkeypatch.setattr(
+        tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={}))
+    )
     monkeypatch.setattr(tasks, "model", SimpleNamespace(eval=lambda: None))
     monkeypatch.setattr(tasks, "initialize_firebase", lambda: True)
-    monkeypatch.setattr(tasks, "spell", SimpleNamespace(word_frequency=SimpleNamespace(load_dictionary=lambda _: None)))
+    monkeypatch.setattr(
+        tasks,
+        "spell",
+        SimpleNamespace(word_frequency=SimpleNamespace(load_dictionary=lambda _: None)),
+    )
 
     monkeypatch.setattr(tasks, "AmenhotepAI", lambda: None)
-    monkeypatch.setattr(tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={})))
+    monkeypatch.setattr(
+        tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={}))
+    )
     startup = tasks._startup_event_factory(FastAPI())
     await startup()
 
@@ -69,8 +77,16 @@ async def test_startup_warns_on_firebase_failure(monkeypatch, caplog):
     monkeypatch.setattr(tasks, "create_default_categories", lambda db: None)
     monkeypatch.setattr(tasks, "update_search_vector", lambda: None)
     monkeypatch.setattr(tasks, "AmenhotepAI", lambda: None)
-    monkeypatch.setattr(tasks, "spell", SimpleNamespace(word_frequency=SimpleNamespace(load_dictionary=lambda path: path)))
-    monkeypatch.setattr(tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={})))
+    monkeypatch.setattr(
+        tasks,
+        "spell",
+        SimpleNamespace(
+            word_frequency=SimpleNamespace(load_dictionary=lambda path: path)
+        ),
+    )
+    monkeypatch.setattr(
+        tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={}))
+    )
     monkeypatch.setattr(tasks, "model", SimpleNamespace(eval=lambda: None))
     monkeypatch.setattr(tasks, "initialize_firebase", lambda: False)
 
@@ -88,7 +104,9 @@ async def test_startup_loads_spell_dictionary(monkeypatch):
     monkeypatch.setattr(tasks, "create_default_categories", lambda db: None)
     monkeypatch.setattr(tasks, "update_search_vector", lambda: None)
     monkeypatch.setattr(tasks, "AmenhotepAI", lambda: None)
-    monkeypatch.setattr(tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={})))
+    monkeypatch.setattr(
+        tasks, "celery_app", SimpleNamespace(conf=SimpleNamespace(beat_schedule={}))
+    )
     monkeypatch.setattr(tasks, "initialize_firebase", lambda: True)
     monkeypatch.setattr(tasks, "model", SimpleNamespace(eval=lambda: None))
 
@@ -141,7 +159,9 @@ async def test_update_search_suggestions_task_handles_no_redis(monkeypatch):
         yield FakeDB()
 
     monkeypatch.setattr(tasks, "get_db", fake_get_db)
-    monkeypatch.setattr(tasks, "update_search_suggestions", lambda db: called.__setitem__("flag", True))
+    monkeypatch.setattr(
+        tasks, "update_search_suggestions", lambda db: called.__setitem__("flag", True)
+    )
 
     await tasks.update_search_suggestions_task.__wrapped__()  # type: ignore[attr-defined]
     assert called["flag"] is True
@@ -198,7 +218,10 @@ def test_retry_failed_notifications_respects_retry_limit(monkeypatch):
         def filter(self, *predicates):
             # Only keep failed with retry_count < 3
             filtered = [
-                n for n in self._items if n.status == tasks.models.NotificationStatus.FAILED and n.retry_count < 3
+                n
+                for n in self._items
+                if n.status == tasks.models.NotificationStatus.FAILED
+                and n.retry_count < 3
             ]
             return FakeQuery(filtered)
 
@@ -209,8 +232,12 @@ def test_retry_failed_notifications_respects_retry_limit(monkeypatch):
         def __init__(self):
             self.q = FakeQuery(
                 [
-                    FakeNotif(status=tasks.models.NotificationStatus.FAILED, retry_count=0),
-                    FakeNotif(status=tasks.models.NotificationStatus.FAILED, retry_count=4),
+                    FakeNotif(
+                        status=tasks.models.NotificationStatus.FAILED, retry_count=0
+                    ),
+                    FakeNotif(
+                        status=tasks.models.NotificationStatus.FAILED, retry_count=4
+                    ),
                 ]
             )
 
@@ -396,11 +423,17 @@ def test_maybe_repeat_every_wait_first_and_max_repetitions(monkeypatch):
         calls["ran"] += 1
         return "ok"
 
-    wrapper = tasks._maybe_repeat_every(seconds=1, wait_first=True, max_repetitions=2)(fn)
+    wrapper = tasks._maybe_repeat_every(seconds=1, wait_first=True, max_repetitions=2)(
+        fn
+    )
     assert wrapper() == "ok"
     assert wrapper() == "ok"
     assert wrapper() is None  # exceeded max_repetitions
-    assert captured["kwargs"] == {"seconds": 1, "wait_first": True, "max_repetitions": 2}
+    assert captured["kwargs"] == {
+        "seconds": 1,
+        "wait_first": True,
+        "max_repetitions": 2,
+    }
     assert calls["ran"] == 2
 
 
@@ -416,9 +449,13 @@ async def test_update_search_suggestions_task_is_noop_in_test(monkeypatch):
         called["flag"] = True
 
     # ensure update function would run if not skipped
-    monkeypatch.setattr(tasks, "update_search_suggestions", lambda db: called.__setitem__("flag", True))
+    monkeypatch.setattr(
+        tasks, "update_search_suggestions", lambda db: called.__setitem__("flag", True)
+    )
+
     def fake_get_db():
         yield SimpleNamespace(close=lambda: called.__setitem__("closed", True))
+
     monkeypatch.setattr(tasks, "get_db", fake_get_db)
     assert await tasks.update_search_suggestions_task() is None
     assert called["flag"] is False
@@ -426,7 +463,9 @@ async def test_update_search_suggestions_task_is_noop_in_test(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_update_search_suggestions_task_logs_and_closes_on_error(monkeypatch, caplog):
+async def test_update_search_suggestions_task_logs_and_closes_on_error(
+    monkeypatch, caplog
+):
     _set_env(monkeypatch, "production")
     flags = {}
 
@@ -469,7 +508,11 @@ async def test_update_all_post_scores_empty_db(monkeypatch):
             flags["closed"] = True
 
     monkeypatch.setattr(tasks, "SessionLocal", lambda: FakeSession())
-    monkeypatch.setattr(tasks, "update_post_score", lambda db, post: (_ for _ in ()).throw(AssertionError("should not call")))
+    monkeypatch.setattr(
+        tasks,
+        "update_post_score",
+        lambda db, post: (_ for _ in ()).throw(AssertionError("should not call")),
+    )
     await tasks.update_all_post_scores.__wrapped__()  # type: ignore[attr-defined]
     assert flags["closed"] is True
 

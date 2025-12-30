@@ -5,7 +5,9 @@ import types
 dummy_tf = types.ModuleType("transformers")
 dummy_tf.pipeline = lambda *a, **k: (lambda text: [{"label": "POSITIVE", "score": 1.0}])
 dummy_tf.AutoTokenizer = types.SimpleNamespace(from_pretrained=lambda *a, **k: object())
-dummy_tf.AutoModelForSequenceClassification = types.SimpleNamespace(from_pretrained=lambda *a, **k: object())
+dummy_tf.AutoModelForSequenceClassification = types.SimpleNamespace(
+    from_pretrained=lambda *a, **k: object()
+)
 sys.modules.setdefault("transformers", dummy_tf)
 
 from app.modules.utils import content

@@ -1,10 +1,12 @@
-
 from app import models
 from app.modules.fact_checking.models import FactCheckStatus
-from app.modules.support.models import TicketStatus, TicketResponse as TicketResponseModel
+from app.modules.support.models import TicketResponse as TicketResponseModel
+from app.modules.support.models import TicketStatus
 
 
-def test_fact_checking_flow_with_votes_and_warnings(session, test_user, test_user2, test_post):
+def test_fact_checking_flow_with_votes_and_warnings(
+    session, test_user, test_user2, test_post
+):
     fact = models.Fact(
         claim="Coffee reduces stress",
         source_post_id=test_post["id"],

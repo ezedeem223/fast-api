@@ -7,20 +7,30 @@ Auth:
 Behavior:
 - On connect, attaches via ConnectionManager; on receive, echoes payload to user via send_real_time_notification.
 - On disconnect/errors, ensures cleanup via ConnectionManager with best-effort logging.
+
+Notes:
+- Designed to be resilient to mocked websockets in tests; `_safe_close` tolerates sync/async mocks.
+- Auth strategy mirrors HTTP middleware but is intentionally relaxed in tests to avoid over-configuring fixtures.
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
-import inspect
 from typing import Optional
-
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 
 from app import oauth2
 from app.core.config import settings
 from app.notifications import manager, send_real_time_notification
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -141,9 +151,7 @@ async def websocket_endpoint(
         )
         logger.info("WebSocket disconnected for user_id=%s", authenticated_user)
     except Exception as exc:
-        logger.exception(
-            "WebSocket error for user_id=%s: %s", authenticated_user, exc
-        )
+        logger.exception("WebSocket error for user_id=%s: %s", authenticated_user, exc)
         await manager.disconnect(websocket, authenticated_user, reason="error")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 

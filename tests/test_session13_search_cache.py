@@ -1,9 +1,9 @@
 import pytest
 
+from app import models
 from app.modules.search import cache as search_cache
 from app.modules.search import service as search_service
 from app.modules.search import typesense_client
-from app import models
 
 
 class DummyClient:
@@ -30,7 +30,12 @@ class DummyClient:
 
 def test_search_cache_hit_miss_invalid_json(monkeypatch):
     dummy = DummyClient()
-    monkeypatch.setattr(search_cache, "settings", type("Obj", (), {"redis_client": dummy}), raising=False)
+    monkeypatch.setattr(
+        search_cache,
+        "settings",
+        type("Obj", (), {"redis_client": dummy}),
+        raising=False,
+    )
 
     assert search_cache.get_cached_json("missing") is None
     search_cache.set_cached_json("key", {"a": 1}, ttl_seconds=1)
@@ -47,7 +52,12 @@ def test_search_cache_hit_miss_invalid_json(monkeypatch):
 def test_search_cache_delete_pattern(monkeypatch):
     dummy = DummyClient()
     dummy.store = {"a:1": "v", "a:2": "v2", "b": "v3"}
-    monkeypatch.setattr(search_cache, "settings", type("Obj", (), {"redis_client": dummy}), raising=False)
+    monkeypatch.setattr(
+        search_cache,
+        "settings",
+        type("Obj", (), {"redis_client": dummy}),
+        raising=False,
+    )
     search_cache.delete_pattern("a:*")
     assert "a:1" not in dummy.store and "a:2" not in dummy.store
     assert "b" in dummy.store
@@ -56,7 +66,11 @@ def test_search_cache_delete_pattern(monkeypatch):
 def test_search_service_update_and_suggestions(session):
     search_service.update_search_statistics(session, user_id=1, query="hello")
     search_service.update_search_statistics(session, user_id=1, query="hello")
-    stat = session.query(models.SearchStatistics).filter_by(user_id=1, term="hello").first()
+    stat = (
+        session.query(models.SearchStatistics)
+        .filter_by(user_id=1, term="hello")
+        .first()
+    )
     assert stat.searches == 2
 
     suggestion = models.SearchSuggestion(term="world", usage_count=5)
@@ -67,22 +81,43 @@ def test_search_service_update_and_suggestions(session):
 
 
 def test_typesense_client_retry_and_disabled(monkeypatch):
-    monkeypatch.setattr(typesense_client, "settings", type("Obj", (), {
-        "typesense_enabled": False,
-        "typesense_host": "localhost",
-        "typesense_port": "8108",
-        "typesense_protocol": "http",
-        "typesense_api_key": "key",
-        "typesense_collection": "posts",
-    })(), raising=False)
+    monkeypatch.setattr(
+        typesense_client,
+        "settings",
+        type(
+            "Obj",
+            (),
+            {
+                "typesense_enabled": False,
+                "typesense_host": "localhost",
+                "typesense_port": "8108",
+                "typesense_protocol": "http",
+                "typesense_api_key": "key",
+                "typesense_collection": "posts",
+            },
+        )(),
+        raising=False,
+    )
     assert typesense_client.get_typesense_client() is None
 
-    monkeypatch.setattr(typesense_client.settings, "typesense_enabled", True, raising=False)
-    monkeypatch.setattr(typesense_client.settings, "typesense_host", "localhost", raising=False)
-    monkeypatch.setattr(typesense_client.settings, "typesense_port", "8108", raising=False)
-    monkeypatch.setattr(typesense_client.settings, "typesense_protocol", "http", raising=False)
-    monkeypatch.setattr(typesense_client.settings, "typesense_api_key", "key", raising=False)
-    monkeypatch.setattr(typesense_client.settings, "typesense_collection", "posts", raising=False)
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_enabled", True, raising=False
+    )
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_host", "localhost", raising=False
+    )
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_port", "8108", raising=False
+    )
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_protocol", "http", raising=False
+    )
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_api_key", "key", raising=False
+    )
+    monkeypatch.setattr(
+        typesense_client.settings, "typesense_collection", "posts", raising=False
+    )
 
     class DummyResponse:
         def raise_for_status(self):

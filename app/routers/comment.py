@@ -5,24 +5,23 @@ Auth: All endpoints require authenticated users.
 Side effects: rate limits on writes; emails for mentions; cache busting on create/update/delete.
 """
 
-from fastapi import APIRouter, status, Depends, BackgroundTasks, Query, Request
-from sqlalchemy.orm import Session
-from typing import List, Optional
 from datetime import timedelta
-from ..models import User
-from .. import schemas, oauth2
-from app.core.database import get_db
-from app.services.comments import CommentService
-from app.notifications import (
-    queue_email_notification,
-    schedule_email_notification,
-)
-from app.core.middleware.rate_limit import limiter
-from app.core.cache.redis_cache import (
-    cache,
-    cache_manager,
-)  # Task 5: Redis Caching Imports
+from typing import List, Optional
 
+from sqlalchemy.orm import Session
+
+from app.core.cache.redis_cache import cache  # Task 5: Redis Caching Imports
+from app.core.cache.redis_cache import (
+    cache_manager,
+)
+from app.core.database import get_db
+from app.core.middleware.rate_limit import limiter
+from app.notifications import queue_email_notification, schedule_email_notification
+from app.services.comments import CommentService
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+
+from .. import oauth2, schemas
+from ..models import User
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 

@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from app import models, oauth2
 from app.main import app
-from app import oauth2, models
 from app.modules.messaging.models import CallStatus, ScreenShareStatus
 
 

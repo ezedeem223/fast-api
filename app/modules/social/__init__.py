@@ -1,15 +1,15 @@
 """Social interactions package exports."""
 
 from .models import (
-    ReportStatus,
-    Hashtag,
     BusinessTransaction,
-    Vote,
-    Report,
-    Follow,
-    ExpertiseBadge,
-    ImpactCertificate,
     CulturalDictionaryEntry,
+    ExpertiseBadge,
+    Follow,
+    Hashtag,
+    ImpactCertificate,
+    Report,
+    ReportStatus,
+    Vote,
 )
 from .service import FollowService
 

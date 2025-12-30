@@ -1,4 +1,8 @@
-"""Core database access helpers with optimized connection pooling."""
+"""Core database access helpers with optimized connection pooling.
+
+Provides a pooled engine + SessionLocal for app use, plus a `get_db` dependency that
+guarantees cleanup. Kept for compatibility alongside `app.core.database.session`.
+"""
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,10 +13,7 @@ from app.models.base import Base
 
 
 def build_engine(database_url: str):
-    """
-    Construct a SQLAlchemy engine with the same defaults used by the app.
-    Tests and utility scripts rely on this for lightweight engines (e.g., SQLite).
-    """
+    """Construct a SQLAlchemy engine with pooling tuned per backend."""
     connect_args = {}
     if "postgresql" in database_url:
         connect_args = {
@@ -53,8 +54,9 @@ engine = build_engine(SQLALCHEMY_DATABASE_URL)
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_db():
-    """Provide a database session."""
+    """Provide a database session with guaranteed close."""
     db = SessionLocal()
     try:
         yield db
@@ -64,12 +66,12 @@ def get_db():
 
 try:
     from .query_helpers import (
+        optimize_comment_query,
+        optimize_post_query,
+        optimize_user_query,
+        paginate_query,
         with_joined_loads,
         with_select_loads,
-        paginate_query,
-        optimize_post_query,
-        optimize_comment_query,
-        optimize_user_query,
     )
 
     __all__ = [

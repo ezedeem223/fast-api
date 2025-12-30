@@ -1,12 +1,18 @@
-"""Support router for ticket creation, responses, and status updates."""
+"""Support router for ticket creation, responses, and status updates.
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+Auth required; models map to support tickets/responses stored via services. Minimal
+logic here—delegates to services for validations and notifications.
+"""
+
 from typing import List
 
-# Import project modules
-from .. import models, schemas, oauth2
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+
+# Import project modules
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/support", tags=["Support"])
 

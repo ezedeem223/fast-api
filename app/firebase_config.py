@@ -6,10 +6,12 @@ Integration details:
 - Falls back to no-op on initialization failures so the app can start without FCM.
 """
 
-from firebase_admin import credentials, messaging, initialize_app, storage
-from app.core.config import settings
-from typing import List
 import logging
+from typing import List
+
+from firebase_admin import credentials, initialize_app, messaging, storage
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -174,25 +176,34 @@ def send_push_notification(token: str, title: str, body: str, data: dict = None)
 
 # ----------------------- Storage utilities ----------------------- #
 
-def upload_file_to_bucket(bucket_name: str, source_file: str, destination_blob: str) -> bool:
+
+def upload_file_to_bucket(
+    bucket_name: str, source_file: str, destination_blob: str
+) -> bool:
     """Upload a local file to Firebase Storage; returns True on success, False on failure."""
     try:
         bucket = storage.bucket(bucket_name)
         blob = bucket.blob(destination_blob)
         blob.upload_from_filename(source_file)
         return True
-    except Exception as exc:  # pragma: no cover - exercised via tests with dummy storage
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - exercised via tests with dummy storage
         logger.error("Failed to upload file to bucket %s: %s", bucket_name, exc)
         return False
 
 
-def generate_signed_url(bucket_name: str, blob_name: str, expires_in_seconds: int = 3600) -> str | None:
+def generate_signed_url(
+    bucket_name: str, blob_name: str, expires_in_seconds: int = 3600
+) -> str | None:
     """Generate a signed URL for a blob; returns None on failure."""
     try:
         bucket = storage.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         return blob.generate_signed_url(expires_in_seconds)
-    except Exception as exc:  # pragma: no cover - exercised via tests with dummy storage
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - exercised via tests with dummy storage
         logger.error("Failed to generate signed URL for %s: %s", blob_name, exc)
         return None
 
@@ -204,6 +215,8 @@ def delete_file_from_bucket(bucket_name: str, blob_name: str) -> bool:
         blob = bucket.blob(blob_name)
         blob.delete()
         return True
-    except Exception as exc:  # pragma: no cover - exercised via tests with dummy storage
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - exercised via tests with dummy storage
         logger.error("Failed to delete blob %s: %s", blob_name, exc)
         return False

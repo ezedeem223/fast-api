@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.modules.community.models import CommunityMember
+from fastapi import HTTPException, status
 
 
 class ReelService:
@@ -55,16 +55,14 @@ class ReelService:
             query = query.filter(models.Reel.community_id == community_id)
         if not include_expired:
             query = query.filter(models.Reel.expires_at > now)
-        return (
-            query.order_by(models.Reel.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        return query.order_by(models.Reel.created_at.desc()).limit(limit).all()
 
     def record_view(self, *, reel_id: int) -> models.Reel:
         reel = self._get_reel_or_404(reel_id)
         if not self._is_reel_active(reel):
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Reel has expired")
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE, detail="Reel has expired"
+            )
         reel.view_count += 1
         self.db.commit()
         self.db.refresh(reel)
@@ -73,7 +71,10 @@ class ReelService:
     def deactivate_reel(self, *, reel_id: int, current_user: models.User) -> None:
         reel = self._get_reel_or_404(reel_id)
         if reel.owner_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorised to delete this reel")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorised to delete this reel",
+            )
         reel.is_active = False
         self.db.commit()
 

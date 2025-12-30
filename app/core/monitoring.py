@@ -1,7 +1,12 @@
-"""Prometheus monitoring configuration with duplicate-registration guard."""
+"""Prometheus monitoring configuration with duplicate-registration guard.
+
+Instrumentation is optional and guarded to avoid duplicate registry errors when multiple
+app instances are created in tests or interactive sessions.
+"""
+
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from fastapi import FastAPI
-from prometheus_fastapi_instrumentator import Instrumentator
 
 # Global guard to avoid double-registration when multiple app instances are created in tests.
 _metrics_configured = False

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from cachetools import TTLCache
 
 from .common import logger

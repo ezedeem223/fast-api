@@ -1,14 +1,9 @@
 import pytest
-from fastapi import HTTPException
 
-from app.services.users.service import UserService
 from app.modules.users.models import User
-from app.schemas import (
-    UserCreate,
-    UserProfileUpdate,
-    UserPrivacyUpdate,
-    PrivacyLevel,
-)
+from app.schemas import PrivacyLevel, UserCreate, UserPrivacyUpdate, UserProfileUpdate
+from app.services.users.service import UserService
+from fastapi import HTTPException
 
 
 def _service(session):

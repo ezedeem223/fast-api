@@ -1,9 +1,9 @@
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
+from app.modules.community.models import Community, CommunityRole
 from app.services.community.service import CommunityService
-from app.modules.community.models import CommunityRole, Community
+from fastapi import HTTPException
 
 
 def _make_user(session, email="u@example.com", verified=True):

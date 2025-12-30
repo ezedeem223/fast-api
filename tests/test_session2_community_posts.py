@@ -1,25 +1,26 @@
 import asyncio
-import pytest
-from fastapi import BackgroundTasks, HTTPException
-from sqlalchemy.orm import Session
-from unittest.mock import MagicMock
+import warnings
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.core.config import settings
 from app.modules.posts.schemas import PostCreate
-from app.services.community.service import CommunityService
-from app.services.posts.post_service import PostService
-from app.services.comments.service import CommentService
-from app.services.business.service import BusinessService
-from app.services.users.service import UserService
 from app.modules.search.service import (
     update_search_statistics,
     update_search_suggestions,
 )
-from app.routers import session as session_router
-from app.core.config import settings
 from app.modules.utils import content as utils_content
-import warnings
+from app.routers import session as session_router
+from app.services.business.service import BusinessService
+from app.services.comments.service import CommentService
+from app.services.community.service import CommunityService
+from app.services.posts.post_service import PostService
+from app.services.users.service import UserService
+from fastapi import BackgroundTasks, HTTPException
 
 # Silence noisy bcrypt packaging warning from passlib during user creation hashing.
 warnings.filterwarnings(
@@ -102,7 +103,9 @@ def test_invite_and_accept_flow(session):
     )
     session.add(invitation)
     session.commit()
-    response = service.respond_to_invitation(invitation_id=invitation.id, current_user=member, accept=True)
+    response = service.respond_to_invitation(
+        invitation_id=invitation.id, current_user=member, accept=True
+    )
     assert response["message"].startswith("Invitation accepted")
 
     # owner cannot leave own community
@@ -122,13 +125,22 @@ def test_invite_quota_exceeded(session, monkeypatch):
     new_invitee = _make_user(session, "invitee-new@example.com")
     monkeypatch.setattr(settings, "MAX_PENDING_INVITATIONS", 1)
     existing = models.CommunityInvitation(
-        community_id=community.id, inviter_id=owner.id, invitee_id=invitee.id, status="pending"
+        community_id=community.id,
+        inviter_id=owner.id,
+        invitee_id=invitee.id,
+        status="pending",
     )
     session.add(existing)
     session.commit()
-    new_invite = [MagicMock(community_id=community.id, invitee_id=new_invitee.id, user_id=owner.id)]
+    new_invite = [
+        MagicMock(
+            community_id=community.id, invitee_id=new_invitee.id, user_id=owner.id
+        )
+    ]
     with pytest.raises(HTTPException) as exc:
-        service.invite_members(community_id=community.id, invitations=new_invite, current_user=owner)
+        service.invite_members(
+            community_id=community.id, invitations=new_invite, current_user=owner
+        )
     assert exc.value.status_code == 400
 
 
@@ -151,7 +163,9 @@ def test_community_post_rule_violation(session, monkeypatch):
     rule = models.CommunityRule(community_id=community.id, rule="forbid")
     session.add(rule)
     session.commit()
-    monkeypatch.setattr(utils_content, "check_content_against_rules", lambda content, rules: False)
+    monkeypatch.setattr(
+        utils_content, "check_content_against_rules", lambda content, rules: False
+    )
     with pytest.raises(HTTPException):
         service.create_community_post(
             community_id=community.id,
@@ -167,7 +181,9 @@ def test_community_vip_upgrade(session, monkeypatch):
     monkeypatch.setattr("app.services.community.service.ACTIVITY_THRESHOLD_VIP", 0)
     member_user = _make_user(session, "member-vip@example.com")
     member = models.CommunityMember(
-        community_id=community.id, user_id=member_user.id, role=models.CommunityRole.MEMBER
+        community_id=community.id,
+        user_id=member_user.id,
+        role=models.CommunityRole.MEMBER,
     )
     session.add(member)
     session.commit()
@@ -232,7 +248,9 @@ def test_post_service_validation_and_analysis(session):
         )
     assert exc3.value.status_code == 500
 
-    poll_payload = schemas.PollCreate(title="P", description="D", options=["a", "b"], end_date=None)
+    poll_payload = schemas.PollCreate(
+        title="P", description="D", options=["a", "b"], end_date=None
+    )
     poll_post = service.create_poll_post(
         background_tasks=tasks,
         payload=poll_payload,
@@ -242,28 +260,40 @@ def test_post_service_validation_and_analysis(session):
     assert poll_post.is_poll is True
 
     # toggle archive/repost permissions
-    archived = service.toggle_archive_post(post_id=poll_post.id, current_user=verified_user)
+    archived = service.toggle_archive_post(
+        post_id=poll_post.id, current_user=verified_user
+    )
     assert archived.is_archived is True
-    repost_toggled = service.toggle_allow_reposts(post_id=poll_post.id, current_user=verified_user)
+    repost_toggled = service.toggle_allow_reposts(
+        post_id=poll_post.id, current_user=verified_user
+    )
     assert repost_toggled.allow_reposts is False
 
     # unauthorized delete
     with pytest.raises(HTTPException):
-        service.delete_post(post_id=poll_post.id, current_user=_make_user(session, "other@example.com"))
+        service.delete_post(
+            post_id=poll_post.id, current_user=_make_user(session, "other@example.com")
+        )
 
     # analyze_existing_post unauthorized
     with pytest.raises(HTTPException):
         service.analyze_existing_post(
             post_id=poll_post.id,
             current_user=_make_user(session, "other2@example.com"),
-            analyze_content_fn=lambda c: {"sentiment": {"sentiment": "pos", "score": 1}, "suggestion": "ok"},
+            analyze_content_fn=lambda c: {
+                "sentiment": {"sentiment": "pos", "score": 1},
+                "suggestion": "ok",
+            },
         )
 
     # analyze_existing_post happy path
     analyzed = service.analyze_existing_post(
         post_id=poll_post.id,
         current_user=verified_user,
-        analyze_content_fn=lambda c: {"sentiment": {"sentiment": "pos", "score": 1}, "suggestion": "ok"},
+        analyze_content_fn=lambda c: {
+            "sentiment": {"sentiment": "pos", "score": 1},
+            "suggestion": "ok",
+        },
     )
     assert analyzed.sentiment == "pos"
 
@@ -276,7 +306,9 @@ def test_post_service_validation_and_analysis(session):
         )
 
     # report_content happy path
-    report_result = service.report_content(current_user=verified_user, reason="spam", post_id=poll_post.id, comment_id=None)
+    report_result = service.report_content(
+        current_user=verified_user, reason="spam", post_id=poll_post.id, comment_id=None
+    )
     assert report_result
 
 
@@ -350,13 +382,19 @@ def test_business_registration_and_transaction(session):
     biz_service = BusinessService(session)
     biz_user = _make_user(session, "biz@example.com")
     info = schemas.BusinessRegistration(
-        business_name="Biz", business_registration_number="123", bank_account_info="bank"
+        business_name="Biz",
+        business_registration_number="123",
+        bank_account_info="bank",
     )
-    registered = biz_service.register_business(current_user=biz_user, business_info=info)
+    registered = biz_service.register_business(
+        current_user=biz_user, business_info=info
+    )
     assert registered.user_type == models.UserType.BUSINESS
 
     # transaction should fail until verified_business flag set
-    tx_payload = schemas.BusinessTransactionCreate(client_user_id=biz_user.id, amount=100)
+    tx_payload = schemas.BusinessTransactionCreate(
+        client_user_id=biz_user.id, amount=100
+    )
     with pytest.raises(HTTPException):
         biz_service.create_transaction(current_user=biz_user, payload=tx_payload)
 
@@ -375,7 +413,10 @@ def test_business_registration_and_transaction(session):
         biz_service.verify_business(
             current_user=biz_user,
             files=schemas.BusinessVerificationUpdate(
-                id_document=MagicMock(), passport=MagicMock(), business_document=MagicMock(), selfie=MagicMock()
+                id_document=MagicMock(),
+                passport=MagicMock(),
+                business_document=MagicMock(),
+                selfie=MagicMock(),
             ),
             save_upload_fn=fake_save,
         )
@@ -389,7 +430,10 @@ def test_business_registration_and_transaction(session):
             biz_service.verify_business(
                 current_user=regular,
                 files=schemas.BusinessVerificationUpdate(
-                    id_document=MagicMock(), passport=MagicMock(), business_document=MagicMock(), selfie=MagicMock()
+                    id_document=MagicMock(),
+                    passport=MagicMock(),
+                    business_document=MagicMock(),
+                    selfie=MagicMock(),
                 ),
                 save_upload_fn=fake_save,
             )
@@ -408,13 +452,16 @@ def test_user_service_language_and_duplicates(session):
 
     with pytest.raises(HTTPException):
         user_service.update_language_preferences(
-            new_user, schemas.UserLanguageUpdate(preferred_language="xx", auto_translate=False)
+            new_user,
+            schemas.UserLanguageUpdate(preferred_language="xx", auto_translate=False),
         )
 
     with pytest.raises(HTTPException):
         user_service.update_privacy_settings(
             new_user,
-            schemas.UserPrivacyUpdate(privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=None),
+            schemas.UserPrivacyUpdate(
+                privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=None
+            ),
         )
 
     # followers visibility private blocks others
@@ -438,7 +485,10 @@ def test_search_statistics_and_suggestions(session):
     update_search_statistics(session, user.id, "hello")
     stat = (
         session.query(models.SearchStatistics)
-        .filter(models.SearchStatistics.user_id == user.id, models.SearchStatistics.term == "hello")
+        .filter(
+            models.SearchStatistics.user_id == user.id,
+            models.SearchStatistics.term == "hello",
+        )
         .first()
     )
     assert stat.searches == 2
@@ -493,7 +543,9 @@ def test_encrypted_session_routes(session):
         )
 
     # update session keys
-    update_payload = SimpleNamespace(root_key=b"r2", chain_key=b"c2", next_header_key=b"n2", ratchet_key=b"rk2")
+    update_payload = SimpleNamespace(
+        root_key=b"r2", chain_key=b"c2", next_header_key=b"n2", ratchet_key=b"rk2"
+    )
     updated = session_router.update_encrypted_session(
         session_id=created.id,
         session_update=update_payload,

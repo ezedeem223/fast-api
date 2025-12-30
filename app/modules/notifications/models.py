@@ -10,24 +10,15 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    Enum as SAEnum,
-    ForeignKey,
-    Float,
-    JSON,
-    Index,
-    Time,
-)
-from sqlalchemy.orm import relationship
+from sqlalchemy import JSON, Boolean, Column, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Time
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
+
 
 def _jsonb_type():
     """
@@ -199,7 +190,7 @@ class Notification(Base):
     def get_next_retry_delay(self) -> int:
         """Compute delay until next retry attempt."""
         if self.retry_strategy == "exponential":
-            return 300 * (2 ** self.current_retry_count)
+            return 300 * (2**self.current_retry_count)
         return 300
 
 
@@ -239,8 +230,12 @@ class NotificationAnalytics(Base):
         Integer, ForeignKey("notifications.id", ondelete="CASCADE")
     )
     delivery_attempts = Column(Integer, default=0)
-    first_delivery_attempt = Column(DateTime(timezone=True), server_default=timestamp_default())
-    last_delivery_attempt = Column(DateTime(timezone=True), onupdate=timestamp_default())
+    first_delivery_attempt = Column(
+        DateTime(timezone=True), server_default=timestamp_default()
+    )
+    last_delivery_attempt = Column(
+        DateTime(timezone=True), onupdate=timestamp_default()
+    )
     successful_delivery = Column(Boolean, default=False)
     delivery_channel = Column(String)
     device_info = Column(_jsonb_type(), default={})

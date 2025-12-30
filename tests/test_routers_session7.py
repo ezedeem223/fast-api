@@ -4,15 +4,15 @@ from types import SimpleNamespace
 
 import pyotp
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
 from app.ai_chat import amenhotep as amenhotep_module
 from app.core.config import settings
 from app.modules.search import typesense_client as ts_client
 from app.modules.utils.security import hash as hash_password
-from app.services.messaging import MessageService
 from app.routers import oauth as oauth_router
+from app.services.messaging import MessageService
+from fastapi import HTTPException
 
 
 def test_auth_login_lockout_triggers_after_failures(session, client):
@@ -65,10 +65,14 @@ def test_two_factor_enable_verify_and_login_flow(authorized_client, session, tes
     assert login_resp.status_code == 200
     user_id = test_user["id"]
 
-    bad_2fa = authorized_client.post("/login/2fa", params={"user_id": user_id}, json={"otp": wrong_code})
+    bad_2fa = authorized_client.post(
+        "/login/2fa", params={"user_id": user_id}, json={"otp": wrong_code}
+    )
     assert bad_2fa.status_code in (400, 401)
 
-    good_2fa = authorized_client.post("/login/2fa", params={"user_id": user_id}, json={"otp": totp.now()})
+    good_2fa = authorized_client.post(
+        "/login/2fa", params={"user_id": user_id}, json={"otp": totp.now()}
+    )
     assert good_2fa.status_code == 200
     assert good_2fa.json()["access_token"]
 
@@ -78,7 +82,10 @@ def test_social_auth_expired_token_returns_401(client, monkeypatch):
         raise HTTPException(status_code=401, detail="token expired")
 
     monkeypatch.setattr(
-        oauth_router.oauth.twitter, "authorize_access_token", expired_token, raising=True
+        oauth_router.oauth.twitter,
+        "authorize_access_token",
+        expired_token,
+        raising=True,
     )
     resp = client.get("/twitter/callback")
     assert resp.status_code == 401
@@ -105,7 +112,9 @@ def test_notifications_invalid_filter_returns_422(authorized_client):
 def test_search_uses_sqlite_when_typesense_disabled(monkeypatch, authorized_client):
     monkeypatch.setattr(settings, "typesense_enabled", False)
     monkeypatch.setattr(ts_client, "_cached_client", None, raising=False)
-    resp = authorized_client.post("/search/", json={"query": "hello", "sort_by": "relevance"})
+    resp = authorized_client.post(
+        "/search/", json={"query": "hello", "sort_by": "relevance"}
+    )
     assert resp.status_code == 200
     assert "results" in resp.json()
 
@@ -117,14 +126,20 @@ def test_search_fallback_on_typesense_failure(monkeypatch, authorized_client):
 
     monkeypatch.setattr(settings, "typesense_enabled", True)
     monkeypatch.setattr(ts_client, "_cached_client", FailingClient(), raising=False)
-    resp = authorized_client.post("/search/", json={"query": "fallback", "sort_by": "relevance"})
+    resp = authorized_client.post(
+        "/search/", json={"query": "fallback", "sort_by": "relevance"}
+    )
     assert resp.status_code == 200
     assert "results" in resp.json()
 
 
 def test_blocked_user_cannot_send_message(session):
-    sender = models.User(email="sender@example.com", hashed_password="x", is_verified=True)
-    receiver = models.User(email="receiver@example.com", hashed_password="x", is_verified=True)
+    sender = models.User(
+        email="sender@example.com", hashed_password="x", is_verified=True
+    )
+    receiver = models.User(
+        email="receiver@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([sender, receiver])
     session.commit()
     session.refresh(sender)
@@ -145,7 +160,9 @@ def test_blocked_user_cannot_send_message(session):
         asyncio.run(
             svc.create_message(
                 payload=schemas.MessageCreate(
-                    content="hi", receiver_id=receiver.id, message_type=schemas.MessageType.TEXT
+                    content="hi",
+                    receiver_id=receiver.id,
+                    message_type=schemas.MessageType.TEXT,
                 ),
                 current_user=sender,
                 background_tasks=SimpleNamespace(add_task=lambda *_, **__: None),

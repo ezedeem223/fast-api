@@ -35,9 +35,13 @@ def session():
     """Reset tables between tests using fast TRUNCATE for Postgres or DELETE for SQLite."""
     with engine.begin() as connection:
         if engine.dialect.name == "postgresql":
-            table_names = ", ".join([f'"{tbl.name}"' for tbl in Base.metadata.sorted_tables])
+            table_names = ", ".join(
+                [f'"{tbl.name}"' for tbl in Base.metadata.sorted_tables]
+            )
             if table_names:
-                connection.execute(text(f"TRUNCATE {table_names} RESTART IDENTITY CASCADE"))
+                connection.execute(
+                    text(f"TRUNCATE {table_names} RESTART IDENTITY CASCADE")
+                )
         else:
             for table in reversed(Base.metadata.sorted_tables):
                 connection.execute(table.delete())

@@ -1,11 +1,14 @@
 """Hashtag router for CRUD, analytics, and popularity calculations."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from typing import List
-from .. import models, schemas, oauth2
-from app.core.database import get_db
+
 from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/hashtags", tags=["Hashtags"])
 

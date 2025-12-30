@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.services.reels import ReelService
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/reels", tags=["Reels"])
 
@@ -36,7 +37,10 @@ async def list_reels(
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
     if include_expired and not current_user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin rights required to inspect expired reels")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin rights required to inspect expired reels",
+        )
     return service.list_reels(
         community_id=community_id,
         limit=limit,

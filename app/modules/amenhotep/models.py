@@ -2,16 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Float,
-    ForeignKey,
-    Text,
-    JSON,
-)
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import relationship
 
@@ -28,7 +19,7 @@ def _array_type(item_type):
 
 
 class AmenhotepMessage(Base):
-    """Persisted Amenhotep chat exchange."""
+    """Persisted Amenhotep chat exchange (user prompt and model response)."""
 
     __tablename__ = "amenhotep_messages"
 
@@ -42,7 +33,7 @@ class AmenhotepMessage(Base):
 
 
 class AmenhotepChatAnalytics(Base):
-    """Aggregated analytics for Amenhotep chat sessions."""
+    """Aggregated analytics for Amenhotep chat sessions (topics, duration, satisfaction)."""
 
     __tablename__ = "amenhotep_chat_analytics"
 

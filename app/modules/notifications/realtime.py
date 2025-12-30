@@ -6,19 +6,18 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
+from app.core.cache.redis_cache import cache_manager
 from fastapi import WebSocket, status
 
-from app.core.cache.redis_cache import cache_manager
 from .common import logger
 
 
 class ConnectionManager:
-    """Tracks active WebSocket connections per user and broadcast helpers.
+    """Track active WebSocket connections per user and broadcast helpers.
 
-    The manager keeps a local registry *and* mirrors lightweight presence data
-    into Redis when available so multi-instance deployments can reason about
-    active socket counts. A small per-user connection limit prevents runaway
-    socket creation from a single client.
+    Keeps a local registry and mirrors presence into Redis when available so
+    multi-instance deployments can reason about active socket counts. Enforces a
+    per-user connection cap to prevent runaway socket creation from a single client.
     """
 
     def __init__(
@@ -143,9 +142,8 @@ class ConnectionManager:
             payload = {
                 "count": self.connection_counts.get(user_id, 0),
                 "connections": sorted(self._connection_ids.get(user_id, set())),
-                "last_disconnect_reason": reason or self.last_disconnect_reason.get(
-                    user_id
-                ),
+                "last_disconnect_reason": reason
+                or self.last_disconnect_reason.get(user_id),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
             await cache_manager.set_with_tags(
@@ -155,7 +153,9 @@ class ConnectionManager:
                 ttl=self.registry_ttl,
             )
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Failed to mirror socket registry for user %s: %s", user_id, exc)
+            logger.error(
+                "Failed to mirror socket registry for user %s: %s", user_id, exc
+            )
 
     def metrics(self) -> dict:
         """Return a snapshot suitable for logging/metrics exporters."""

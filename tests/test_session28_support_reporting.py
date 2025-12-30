@@ -4,12 +4,12 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import HTTPException
 
 from app import models
-from app.services.support_service import SupportService
-from app.services.reporting import submit_report
 from app.modules.utils.moderation import log_admin_action
+from app.services.reporting import submit_report
+from app.services.support_service import SupportService
+from fastapi import HTTPException
 
 
 def test_support_ticket_create_and_update(session):
@@ -33,7 +33,9 @@ def test_support_ticket_create_and_update(session):
 
 
 def test_report_submission(session):
-    reporter = models.User(email="rep28@example.com", hashed_password="x", is_verified=True)
+    reporter = models.User(
+        email="rep28@example.com", hashed_password="x", is_verified=True
+    )
     session.add(reporter)
     session.commit()
     session.refresh(reporter)
@@ -52,7 +54,9 @@ def test_report_submission(session):
 
 
 def test_report_duplicate_blocked_and_invalid_target(session):
-    user = models.User(email="rep28b@example.com", hashed_password="x", is_verified=True)
+    user = models.User(
+        email="rep28b@example.com", hashed_password="x", is_verified=True
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -84,7 +88,9 @@ def test_audit_logging_record_filter_and_export(session):
     assert len(logs) >= 2
 
     # filter by admin_id
-    admin1_logs = session.query(models.AuditLog).filter(models.AuditLog.admin_id == 1).all()
+    admin1_logs = (
+        session.query(models.AuditLog).filter(models.AuditLog.admin_id == 1).all()
+    )
     assert all(log.admin_id == 1 for log in admin1_logs)
 
     # filter by date window
@@ -104,6 +110,8 @@ def test_audit_logging_record_filter_and_export(session):
     csv_val = csv_buf.getvalue()
     assert "admin_id" in csv_val and "action" in csv_val
 
-    json_payload = json.dumps([{"admin_id": log.admin_id, "action": log.action} for log in logs])
+    json_payload = json.dumps(
+        [{"admin_id": log.admin_id, "action": log.action} for log in logs]
+    )
     parsed = json.loads(json_payload)
     assert parsed[0]["action"]

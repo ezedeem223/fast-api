@@ -8,34 +8,35 @@ Design notes:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import datetime, timezone
 from typing import List, Tuple
 
 import joblib
+import nltk
 import validators
 from better_profanity import profanity
-from langdetect import detect, LangDetectException
+from langdetect import LangDetectException, detect
+from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sqlalchemy.orm import Session
 from transformers import pipeline
 
-import nltk
-from nltk.corpus import stopwords
-import logging
-
 from app import models
 from app.core.config import settings
+
 from .common import get_user_display_name
 
 nltk.download("stopwords", quiet=True)
 profanity.load_censor_words()
 
-USE_LIGHTWEIGHT_NLP = getattr(settings, "environment", "").lower() == "test" or os.getenv(
-    "LIGHTWEIGHT_NLP", "0"
-) == "1"
+USE_LIGHTWEIGHT_NLP = (
+    getattr(settings, "environment", "").lower() == "test"
+    or os.getenv("LIGHTWEIGHT_NLP", "0") == "1"
+)
 
 _offensive_classifier = None
 _sentiment_pipeline = None
@@ -51,9 +52,9 @@ def _get_offensive_classifier():
         # Fast stub keeps tests lightweight when full transformer weights are unavailable.
         def _stub(text: str):
             return [{"label": "LABEL_0", "score": 0.0}]
+
         _offensive_classifier = _stub
         return _offensive_classifier
-
 
     model_name = "cardiffnlp/twitter-roberta-base-offensive"
     _offensive_classifier = pipeline(
@@ -70,8 +71,10 @@ def _get_sentiment_pipeline():
         return _sentiment_pipeline
 
     if USE_LIGHTWEIGHT_NLP:
+
         def _stub(text: str):
             return [{"label": "POSITIVE", "score": 0.99}]
+
         _sentiment_pipeline = _stub
         return _sentiment_pipeline
 
@@ -193,7 +196,9 @@ def sanitize_text(text: str) -> str:
     """Remove basic HTML/script tags and collapse whitespace."""
     if not text:
         return ""
-    cleaned = re.sub(r"<script.*?>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(
+        r"<script.*?>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL
+    )
     cleaned = re.sub(r"<.*?>", "", cleaned)
     return " ".join(cleaned.split())
 

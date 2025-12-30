@@ -1,4 +1,7 @@
-"""Compatibility shim for moderation services."""
+"""Compatibility shim for moderation services.
+
+Provides a stable import surface during the migration to `app.modules.moderation`.
+"""
 
 from app.modules.moderation.service import (
     ban_user,

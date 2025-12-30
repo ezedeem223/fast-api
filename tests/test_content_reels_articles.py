@@ -78,8 +78,6 @@ def test_article_and_archive_with_museum_items(session, test_user, test_user2):
     session.delete(archive)
     session.commit()
     assert (
-        session.query(community_models.DigitalMuseumItem)
-        .filter_by(id=item.id)
-        .first()
+        session.query(community_models.DigitalMuseumItem).filter_by(id=item.id).first()
         is None
     )

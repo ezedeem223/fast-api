@@ -1,12 +1,11 @@
-
 import pytest
-from fastapi import BackgroundTasks, HTTPException
 
 from app import models
-from app.services.comments.service import CommentService
-from app.services.users.service import UserService
-from app.services.social.follow_service import FollowService
 from app.services import reporting
+from app.services.comments.service import CommentService
+from app.services.social.follow_service import FollowService
+from app.services.users.service import UserService
+from fastapi import BackgroundTasks, HTTPException
 
 
 @pytest.mark.asyncio
@@ -51,9 +50,7 @@ async def test_comments_list_pagination_and_ordering(monkeypatch, session):
 
 
 def _make_user(session, **kwargs):
-    email = kwargs.pop(
-        "email", f"u{session.query(models.User).count()}@ex.com"
-    )
+    email = kwargs.pop("email", f"u{session.query(models.User).count()}@ex.com")
     user = models.User(email=email, hashed_password="x", **kwargs)
     session.add(user)
     session.commit()
@@ -135,7 +132,9 @@ def test_reporting_missing_data_and_limits(session):
 
     # missing data -> 400
     with pytest.raises(HTTPException) as exc:
-        reporting.submit_report(session, reporter, reason="r", post_id=None, comment_id=None)
+        reporting.submit_report(
+            session, reporter, reason="r", post_id=None, comment_id=None
+        )
     assert exc.value.status_code == 400
 
     # first report OK

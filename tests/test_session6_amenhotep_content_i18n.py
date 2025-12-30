@@ -1,16 +1,15 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
-from tests.testclient import TestClient
 
-from app import models
-from app.core.config import settings
-from app.routers import amenhotep as amenhotep_router
-from app.ai_chat.amenhotep import AmenhotepAI
 import app.content_filter as content_filter
 import app.i18n as i18n
-
+from app import models
+from app.ai_chat.amenhotep import AmenhotepAI
+from app.core.config import settings
+from app.routers import amenhotep as amenhotep_router
+from fastapi import FastAPI
+from tests.testclient import TestClient
 
 # ----------------------------
 # Amenhotep AI core behaviour
@@ -51,7 +50,9 @@ def _stub_hf(monkeypatch):
 def test_amenhotep_init_without_token(monkeypatch):
     """Model/token load is stubbed and should succeed even if token missing."""
     dummy_tok = _stub_hf(monkeypatch)
-    monkeypatch.setattr(settings.__class__, "HUGGINGFACE_API_TOKEN", None, raising=False)
+    monkeypatch.setattr(
+        settings.__class__, "HUGGINGFACE_API_TOKEN", None, raising=False
+    )
     monkeypatch.setattr("os.path.exists", lambda path: False)
     monkeypatch.setattr("os.makedirs", lambda path, exist_ok=True: None)
 
@@ -180,13 +181,19 @@ def test_content_filter_word_boundary_sensitive(session):
 
 def test_get_locale_supported(monkeypatch):
     monkeypatch.setattr(i18n, "ALL_LANGUAGES", {"ar": "Arabic", "en": "English"})
-    request = SimpleNamespace(headers={"Accept-Language": "ar"}, app=SimpleNamespace(state=SimpleNamespace(default_language="en")))
+    request = SimpleNamespace(
+        headers={"Accept-Language": "ar"},
+        app=SimpleNamespace(state=SimpleNamespace(default_language="en")),
+    )
     assert i18n.get_locale(request) == "ar"
 
 
 def test_get_locale_unsupported(monkeypatch):
     monkeypatch.setattr(i18n, "ALL_LANGUAGES", {"ar": "Arabic"})
-    request = SimpleNamespace(headers={"Accept-Language": "fr"}, app=SimpleNamespace(state=SimpleNamespace(default_language="en")))
+    request = SimpleNamespace(
+        headers={"Accept-Language": "fr"},
+        app=SimpleNamespace(state=SimpleNamespace(default_language="en")),
+    )
     assert i18n.get_locale(request) == "en"
 
 
@@ -218,7 +225,12 @@ async def test_list_posts_translate_flag(session, monkeypatch):
     from app.services.posts.post_service import PostService
 
     service = PostService(session)
-    user = models.User(email="p1@example.com", hashed_password="x", is_verified=True, preferred_language="es")
+    user = models.User(
+        email="p1@example.com",
+        hashed_password="x",
+        is_verified=True,
+        preferred_language="es",
+    )
     session.add(user)
     session.commit()
 
@@ -239,7 +251,12 @@ async def test_list_posts_translate_flag(session, monkeypatch):
         return f"{text}-translated-{lang}"
 
     results = await service.list_posts(
-        current_user=user, limit=10, skip=0, search="", translate=True, translator_fn=translator
+        current_user=user,
+        limit=10,
+        skip=0,
+        search="",
+        translate=True,
+        translator_fn=translator,
     )
     assert results[0].content.endswith("-translated-en")
     assert results[0].title.endswith("-translated-en")
@@ -247,7 +264,12 @@ async def test_list_posts_translate_flag(session, monkeypatch):
     session.expire_all()
 
     results_no_translate = await service.list_posts(
-        current_user=user, limit=10, skip=0, search="", translate=False, translator_fn=translator
+        current_user=user,
+        limit=10,
+        skip=0,
+        search="",
+        translate=False,
+        translator_fn=translator,
     )
     assert results_no_translate[0].content == "World"
     assert results_no_translate[0].title == "Hello"

@@ -1,5 +1,5 @@
-from app.oauth2 import create_access_token
 import app.models as models
+from app.oauth2 import create_access_token
 from tests.conftest import TestingSessionLocal
 
 

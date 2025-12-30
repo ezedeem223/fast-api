@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 
 from app import models
-from app.routers import search as search_router
 from app.modules.search.typesense_client import TypesenseClient
+from app.routers import search as search_router
 from tests.conftest import TestingSessionLocal
 
 
@@ -17,7 +17,9 @@ class _StubCache:
         self.store[key] = value
 
 
-def _make_post(owner_id: int, title: str, content: str, created_at: datetime | None = None) -> int:
+def _make_post(
+    owner_id: int, title: str, content: str, created_at: datetime | None = None
+) -> int:
     with TestingSessionLocal() as db:
         owner = db.get(models.User, owner_id)
         post = models.Post(
@@ -69,7 +71,10 @@ def test_typesense_ordering(monkeypatch, authorized_client, test_user):
             pass
 
         def search_posts(self, query: str, limit: int = 10):
-            return [{"document": {"post_id": second_id}}, {"document": {"post_id": first_id}}]
+            return [
+                {"document": {"post_id": second_id}},
+                {"document": {"post_id": first_id}},
+            ]
 
     monkeypatch.setattr(search_router, "get_typesense_client", lambda: FakeTypesense())
 
@@ -81,7 +86,9 @@ def test_typesense_ordering(monkeypatch, authorized_client, test_user):
     assert ids[:2] == [second_id, first_id]
 
 
-def test_advanced_search_filters_by_author_and_date(authorized_client, test_user, test_user2):
+def test_advanced_search_filters_by_author_and_date(
+    authorized_client, test_user, test_user2
+):
     # make posts for two users, only one should match
     matched_id = _make_post(test_user2["id"], "Match", "recent")
     _make_post(

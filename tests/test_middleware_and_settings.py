@@ -1,15 +1,20 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.middleware import ip_ban, language, headers, rate_limit, logging_middleware
 from app.core.config import settings
 from app.core.config.settings import Settings
-
+from app.core.middleware import (
+    headers,
+    ip_ban,
+    language,
+    logging_middleware,
+    rate_limit,
+)
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
 # ---------------- Middleware: IP ban / language / rate limit -----------------
 
@@ -18,21 +23,26 @@ def _make_app(with_middlewares):
     app = FastAPI()
     for mw in with_middlewares:
         app.add_middleware(BaseHTTPMiddleware, dispatch=mw)
+
     @app.get("/ok")
     async def ok():
         return {"msg": "ok"}
+
     return app
 
 
 def test_ip_ban_blocks(monkeypatch):
     monkeypatch.setattr(ip_ban, "get_client_ip", lambda req: "1.2.3.4")
     monkeypatch.setattr(ip_ban, "is_ip_banned", lambda db, ip: True)
+
     def fake_get_db():
         yield SimpleNamespace()
+
     monkeypatch.setattr(ip_ban, "get_db", fake_get_db)
     object.__setattr__(settings, "environment", "production")
     app = _make_app([ip_ban.ip_ban_middleware])
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/ok")
         assert resp.status_code == 403
@@ -49,11 +59,16 @@ def test_language_header_and_fallback(monkeypatch):
 
     @app.get("/greet")
     async def greet(request: Request):
-        request.state.user = SimpleNamespace(auto_translate=False, preferred_language="xx")
+        request.state.user = SimpleNamespace(
+            auto_translate=False, preferred_language="xx"
+        )
         from fastapi.responses import PlainTextResponse
+
         # non-JSON response should skip translation and still set header
         return PlainTextResponse("hello")
+
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/greet")
         assert resp.headers["Content-Language"] == "fr"
@@ -66,14 +81,19 @@ def test_rate_limit_disabled(monkeypatch):
         def limit(self, *a, **k):
             def deco(fn):
                 return fn
+
             return deco
+
     monkeypatch.setattr(rate_limit, "limiter", NoOp())
     app = FastAPI()
+
     @app.get("/limited")
     @rate_limit.limiter.limit("1/minute")
     def limited():
         return {"ok": True}
+
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/limited")
         assert resp.status_code == 200
@@ -82,7 +102,12 @@ def test_rate_limit_disabled(monkeypatch):
 def test_rate_limit_enabled_handles_exception(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     app = FastAPI()
-    app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse({"error": "rate_limit_exceeded"}, status_code=429))
+    app.add_exception_handler(
+        RateLimitExceeded,
+        lambda req, exc: JSONResponse(
+            {"error": "rate_limit_exceeded"}, status_code=429
+        ),
+    )
 
     class DummyLimit:
         error_message = "too many"
@@ -92,6 +117,7 @@ def test_rate_limit_enabled_handles_exception(monkeypatch):
         raise RateLimitExceeded(DummyLimit())
 
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/limited")
         assert resp.status_code == 429
@@ -106,10 +132,13 @@ def test_logging_middleware_success_logs(monkeypatch):
     monkeypatch.setattr(logging_middleware, "log_request", lambda **k: calls.append(k))
     app = FastAPI()
     app.add_middleware(logging_middleware.LoggingMiddleware)
+
     @app.get("/ping")
     def ping():
         return {"pong": True}
+
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/ping")
         assert resp.status_code == 200
@@ -123,10 +152,13 @@ def test_logging_middleware_exception_logs(monkeypatch):
     monkeypatch.setattr(logging_middleware, "log_request", lambda **k: calls.append(k))
     app = FastAPI()
     app.add_middleware(logging_middleware.LoggingMiddleware)
+
     @app.get("/err")
     def err():
         raise HTTPException(status_code=418)
+
     from tests.testclient import TestClient
+
     with TestClient(app) as client:
         resp = client.get("/err")
         assert resp.status_code == 418
@@ -194,9 +226,11 @@ def test_get_database_url_fallback_sqlite():
 
 def test_get_database_url_rejects_non_test_db_name(monkeypatch):
     s = _make_dummy_settings(test_database_url="postgresql://x/y")
+
     # simulate non *_test name by overriding resolver
     def bad_resolve():
         return "postgresql://prod_db"
+
     s._resolve_test_database_url = bad_resolve
     with pytest.raises(ValueError):
         s.get_database_url(use_test=True)

@@ -1,10 +1,14 @@
 import pytest
-from fastapi import HTTPException
 
-from app.services.community.service import CommunityService, ACTIVITY_THRESHOLD_VIP
-from app.modules.community.models import CommunityRole, CommunityMember, CommunityInvitation
+from app.modules.community.models import (
+    CommunityInvitation,
+    CommunityMember,
+    CommunityRole,
+)
 from app.modules.users.models import User
-from app.schemas import CommunityCreate, CommunityUpdate, CommunityMemberUpdate
+from app.schemas import CommunityCreate, CommunityMemberUpdate, CommunityUpdate
+from app.services.community.service import ACTIVITY_THRESHOLD_VIP, CommunityService
+from fastapi import HTTPException
 
 
 def _make_user(session, email="owner@example.com", verified=True):
@@ -40,7 +44,9 @@ def test_create_community_limits_and_category_tags(session, monkeypatch):
     assert len(comm.members) == 1 and comm.members[0].role == CommunityRole.OWNER
 
     # exceed quota
-    monkeypatch.setattr("app.services.community.service.settings.MAX_OWNED_COMMUNITIES", 1)
+    monkeypatch.setattr(
+        "app.services.community.service.settings.MAX_OWNED_COMMUNITIES", 1
+    )
     with pytest.raises(HTTPException) as exc:
         _make_community(service, owner)
     assert exc.value.status_code == 400
@@ -69,14 +75,18 @@ def test_update_community_rules_tags_and_permissions(session):
         description="new",
         tags=[],
     )
-    updated = service.update_community(community_id=comm.id, payload=update, current_user=owner)
+    updated = service.update_community(
+        community_id=comm.id, payload=update, current_user=owner
+    )
     assert updated.name == "Updated"
     session.refresh(comm)
     assert comm.description == "new"
 
     stranger = _make_user(session, email="stranger@example.com")
     with pytest.raises(HTTPException):
-        service.update_community(community_id=comm.id, payload=update, current_user=stranger)
+        service.update_community(
+            community_id=comm.id, payload=update, current_user=stranger
+        )
 
 
 def test_invite_members_duplicates_and_quota(session, monkeypatch):
@@ -103,13 +113,19 @@ def test_invite_members_duplicates_and_quota(session, monkeypatch):
     assert len(created) == 1
 
     # duplicate invitation should be skipped
-    dup = service.invite_members(community_id=comm.id, invitations=payloads, current_user=owner)
+    dup = service.invite_members(
+        community_id=comm.id, invitations=payloads, current_user=owner
+    )
     assert dup == []
 
     # quota exceeded
-    monkeypatch.setattr("app.services.community.service.settings.MAX_PENDING_INVITATIONS", 0)
+    monkeypatch.setattr(
+        "app.services.community.service.settings.MAX_PENDING_INVITATIONS", 0
+    )
     with pytest.raises(HTTPException):
-        service.invite_members(community_id=comm.id, invitations=payloads, current_user=owner)
+        service.invite_members(
+            community_id=comm.id, invitations=payloads, current_user=owner
+        )
 
 
 def test_respond_to_invitation_and_join_private(session):
@@ -126,7 +142,9 @@ def test_respond_to_invitation_and_join_private(session):
     session.add(invite)
     session.commit()
 
-    accepted = service.respond_to_invitation(invitation_id=invite.id, current_user=invitee, accept=True)
+    accepted = service.respond_to_invitation(
+        invitation_id=invite.id, current_user=invitee, accept=True
+    )
     assert accepted["message"].startswith("Invitation accepted")
     assert any(m.user_id == invitee.id for m in comm.members)
 
@@ -149,9 +167,14 @@ def test_join_leave_and_roles(session):
     )
     assert member is not None and member.role == CommunityRole.MEMBER
 
-    update_payload = CommunityMemberUpdate(role=CommunityRole.MODERATOR, activity_score=0)
+    update_payload = CommunityMemberUpdate(
+        role=CommunityRole.MODERATOR, activity_score=0
+    )
     updated_member = service.update_member_role(
-        community_id=comm.id, user_id=member_user.id, payload=update_payload, current_user=owner
+        community_id=comm.id,
+        user_id=member_user.id,
+        payload=update_payload,
+        current_user=owner,
     )
     assert updated_member.role == CommunityRole.MODERATOR
 

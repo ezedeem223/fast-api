@@ -1,42 +1,41 @@
-"""Message router for direct/group messaging including media and legacy shims."""
+"""Message router for direct/group messaging including media and legacy shims.
+
+Auth required for all endpoints; integrates translation (Amenhotep AI), virus scanning
+for uploads, and optional email notifications. Rate limits applied via limiter where
+configured in middleware stack.
+"""
 
 from datetime import datetime
 from typing import List, Optional
 
-
-from fastapi import (
-    APIRouter,
-    Depends,
-    status,
-    UploadFile,
-    File,
-    BackgroundTasks,
-    Form,
-    Query,
-    Response,
-    WebSocket,
-    WebSocketDisconnect,
-    Request,
-)
 from sqlalchemy.orm import Session
 
-
-# Project modules
-from .. import (
-    models,
-    schemas,
-    oauth2,
-)
 from app.core.database import get_db
-from ..ai_chat.amenhotep import AmenhotepAI
+from app.core.middleware.rate_limit import limiter
 from app.media_processing import scan_file_for_viruses as _scan_file_for_viruses
+from app.notifications import queue_email_notification as _queue_email_notification
 from app.notifications import (
-    queue_email_notification as _queue_email_notification,
     schedule_email_notification as _schedule_email_notification,
 )
 from app.services.messaging import MessageService
-from app.core.middleware.rate_limit import limiter
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
+# Project modules
+from .. import models, oauth2, schemas
+from ..ai_chat.amenhotep import AmenhotepAI
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 

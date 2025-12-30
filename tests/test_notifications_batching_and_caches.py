@@ -1,10 +1,9 @@
-
 import pytest
 
 from app.modules.notifications.batching import NotificationBatcher
 from app.modules.notifications.common import (
-    notification_cache,
     delivery_status_cache,
+    notification_cache,
     priority_notification_cache,
 )
 

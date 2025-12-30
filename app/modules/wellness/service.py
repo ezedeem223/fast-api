@@ -1,17 +1,19 @@
 # app/modules/wellness/service.py
 
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
-from typing import Optional
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
 from app.modules.wellness.models import (
     DigitalWellnessMetrics,
-    WellnessAlert,
-    WellnessSession,
-    WellnessGoal,
-    WellnessMode,
-    WellnessLevel,
     UsagePattern,
+    WellnessAlert,
+    WellnessGoal,
+    WellnessLevel,
+    WellnessMode,
+    WellnessSession,
 )
 
 
@@ -170,7 +172,10 @@ class WellnessService:
         )
 
         db.commit()
-        if mode.mental_health_mode_until and mode.mental_health_mode_until.tzinfo is None:
+        if (
+            mode.mental_health_mode_until
+            and mode.mental_health_mode_until.tzinfo is None
+        ):
             mode.mental_health_mode_until = mode.mental_health_mode_until.replace(
                 tzinfo=timezone.utc
             )

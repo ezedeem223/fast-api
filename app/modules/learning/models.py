@@ -45,7 +45,9 @@ class LearningModule(Base):
     __tablename__ = "learning_modules"
 
     id = Column(Integer, primary_key=True)
-    path_id = Column(Integer, ForeignKey("learning_paths.id"), nullable=False, index=True)
+    path_id = Column(
+        Integer, ForeignKey("learning_paths.id"), nullable=False, index=True
+    )
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     order = Column(Integer, nullable=False)
@@ -53,6 +55,8 @@ class LearningModule(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
 
     path = relationship("LearningPath", back_populates="modules")
+
+
 class LearningEnrollment(Base):
     """Enrollment progress for a learning path."""
 
@@ -60,7 +64,9 @@ class LearningEnrollment(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    path_id = Column(Integer, ForeignKey("learning_paths.id"), nullable=False, index=True)
+    path_id = Column(
+        Integer, ForeignKey("learning_paths.id"), nullable=False, index=True
+    )
 
     progress_percentage = Column(Float, default=0.0)
     is_completed = Column(Boolean, default=False)
@@ -79,7 +85,9 @@ class Certificate(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    path_id = Column(Integer, ForeignKey("learning_paths.id"), nullable=False, index=True)
+    path_id = Column(
+        Integer, ForeignKey("learning_paths.id"), nullable=False, index=True
+    )
 
     certificate_number = Column(String, unique=True, nullable=False)
     issued_by = Column(String, nullable=False)

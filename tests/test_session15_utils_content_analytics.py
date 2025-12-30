@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import models
-from app.modules.utils import content, analytics
+from app.modules.utils import analytics, content
 
 
 def test_offensive_content_stub_and_safe_analyze(monkeypatch):
@@ -25,7 +25,12 @@ def test_sanitize_and_antivirus_scan():
 
     assert content.antivirus_scan(b"ok", scanner=lambda d: True) is True
     assert content.antivirus_scan(b"bad", scanner=lambda d: False) is False
-    assert content.antivirus_scan(b"err", scanner=lambda d: (_ for _ in ()).throw(ValueError("x"))) is False
+    assert (
+        content.antivirus_scan(
+            b"err", scanner=lambda d: (_ for _ in ()).throw(ValueError("x"))
+        )
+        is False
+    )
 
 
 def test_content_classifier_flags_offensive(monkeypatch, tmp_path):

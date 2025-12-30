@@ -5,7 +5,6 @@ import pytest
 from app.celery_worker import celery_app, cleanup_old_notifications
 from app.modules.notifications.tasks import send_push_notification_task
 
-
 # ============== 30) send_push_notification_task ==============
 
 
@@ -175,14 +174,18 @@ def test_send_push_notification_logs_on_error(monkeypatch, caplog):
             self.committed = True
 
     def fail_send(*_, **__):
-        raise RuntimeError("send fail")  # simulate push transport error to exercise logging path
+        raise RuntimeError(
+            "send fail"
+        )  # simulate push transport error to exercise logging path
 
     monkeypatch.setattr("app.modules.notifications.tasks.messaging.send", fail_send)
     monkeypatch.setattr("app.modules.notifications.tasks.legacy_models", FakeLegacy)
     fake_session = FakeSession()
     caplog.set_level("ERROR")
     send_push_notification_task(fake_session, 1)
-    assert any("Error sending push notification" in rec.message for rec in caplog.records)
+    assert any(
+        "Error sending push notification" in rec.message for rec in caplog.records
+    )
     assert fake_session.committed is True
 
 

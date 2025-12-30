@@ -1,11 +1,17 @@
-"""Category management router for CRUD on community/post categories."""
+"""Category management router for CRUD on community/post categories.
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+Restricted to admin/moderator contexts; uses PostCategory model from posts domain.
+"""
+
 from typing import List
-from .. import models, schemas, oauth2
-from app.modules.posts import PostCategory
+
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
+from app.modules.posts import PostCategory
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
@@ -67,11 +73,7 @@ def update_category(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can update categories")
 
-    db_category = (
-        db.query(PostCategory)
-        .filter(PostCategory.id == category_id)
-        .first()
-    )
+    db_category = db.query(PostCategory).filter(PostCategory.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
 
@@ -106,11 +108,7 @@ def delete_category(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can delete categories")
 
-    db_category = (
-        db.query(PostCategory)
-        .filter(PostCategory.id == category_id)
-        .first()
-    )
+    db_category = db.query(PostCategory).filter(PostCategory.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
 
@@ -130,9 +128,5 @@ def get_categories(db: Session = Depends(get_db)):
     Returns:
         List[schemas.PostCategory]: A list of all main categories.
     """
-    categories = (
-        db.query(PostCategory)
-        .filter(PostCategory.parent_id.is_(None))
-        .all()
-    )
+    categories = db.query(PostCategory).filter(PostCategory.parent_id.is_(None)).all()
     return categories

@@ -1,24 +1,33 @@
-"""Core notification services, delivery management, and handlers."""
+"""Core notification services, delivery management, and handlers.
+
+Responsibilities:
+- Persist and deliver notifications across email/push/realtime channels.
+- Enforce user preferences, retries, metadata limits, and caching/idempotency guards.
+- Bridge to external WS gateway via optional Redis pub/sub fan-out.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks, HTTPException
 from fastapi_mail import MessageSchema
 from sqlalchemy.orm import Session
 
-from app import models as legacy_models, schemas
-from app.modules.notifications import models as notification_models
+from app import models as legacy_models
+from app import schemas
+from app.core.config import settings
 from app.core.database import get_db
 from app.firebase_config import send_multicast_notification
-from app.i18n import translate_text, detect_language
+from app.i18n import detect_language, translate_text
+from app.modules.notifications import models as notification_models
 from app.modules.utils.translation import get_translated_content
-from app.core.config import settings
+from fastapi import BackgroundTasks, HTTPException
+
 from .batching import NotificationBatcher
 from .common import (
     delivery_status_cache,
@@ -31,7 +40,6 @@ from .common import (
 from .email import send_email_notification
 from .realtime import manager
 from .repository import NotificationRepository
-import os
 
 try:
     import redis  # type: ignore
@@ -65,7 +73,7 @@ MAX_METADATA_BYTES = 2048
 
 
 class NotificationDeliveryManager:
-    """Manages delivery of notifications with retry support."""
+    """Manage delivery of notifications with retries, caching, and fan-out helpers."""
 
     def __init__(self, db: Session, background_tasks: Optional[BackgroundTasks] = None):
         self.db = db
@@ -75,7 +83,9 @@ class NotificationDeliveryManager:
         self.error_tracking: Dict[int, Dict[str, Any]] = {}
         self.batcher = NotificationBatcher()
 
-    async def deliver_notification(self, notification: notification_models.Notification) -> bool:
+    async def deliver_notification(
+        self, notification: notification_models.Notification
+    ) -> bool:
         """Deliver a notification with retry tracking and caching (idempotent per notification id)."""
         previous_metadata = {}
         if hasattr(notification, "notification_metadata") and isinstance(
@@ -166,7 +176,10 @@ class NotificationDeliveryManager:
         return content
 
     async def _update_delivery_status(
-        self, notification: notification_models.Notification, success: bool, results: List[Any]
+        self,
+        notification: notification_models.Notification,
+        success: bool,
+        results: List[Any],
     ) -> None:
         """Persist delivery status in the database."""
         status_val = (
@@ -188,7 +201,9 @@ class NotificationDeliveryManager:
             self.db.rollback()
             raise
 
-    def _get_user_preferences(self, user_id: int) -> notification_models.NotificationPreferences:
+    def _get_user_preferences(
+        self, user_id: int
+    ) -> notification_models.NotificationPreferences:
         """Return cached or freshly fetched notification preferences."""
         cache_key = f"user_prefs_{user_id}"
         if cache_key in notification_cache:
@@ -290,7 +305,9 @@ class NotificationDeliveryManager:
         except Exception as exc:
             logger.error("Error sending realtime notification: %s", exc)
 
-    async def _schedule_retry(self, notification: notification_models.Notification) -> None:
+    async def _schedule_retry(
+        self, notification: notification_models.Notification
+    ) -> None:
         """Queue a retry for a failed notification."""
         retry_delay = self.retry_delays[notification.retry_count]
         notification.retry_count += 1
@@ -307,7 +324,9 @@ class NotificationDeliveryManager:
     async def retry_delivery(self, notification_id: int, delay: int) -> None:
         """Retry delivering a notification after the specified delay."""
         await asyncio.sleep(delay)
-        notification = get_model_by_id(self.db, notification_models.Notification, notification_id)
+        notification = get_model_by_id(
+            self.db, notification_models.Notification, notification_id
+        )
         if (
             not notification
             or notification.status != notification_models.NotificationStatus.RETRYING
@@ -322,7 +341,9 @@ class NotificationDeliveryManager:
         self.db.commit()
 
     async def _handle_final_failure(
-        self, notification: notification_models.Notification, error_details: Dict[str, Any]
+        self,
+        notification: notification_models.Notification,
+        error_details: Dict[str, Any],
     ) -> None:
         """Persist failure information when retries are exhausted."""
         notification.status = notification_models.NotificationStatus.FAILED
@@ -338,7 +359,9 @@ class NotificationDeliveryManager:
             # Refresh may fail on SQLite with expired objects; the commit above is sufficient.
             pass
 
-    def _create_email_template(self, notification: notification_models.Notification) -> str:
+    def _create_email_template(
+        self, notification: notification_models.Notification
+    ) -> str:
         """Return formatted HTML email template for a notification."""
         return f"""
         <html>
@@ -417,8 +440,14 @@ class NotificationService:
                 # Clear any stale cached delivery result for this notification id before delivering.
                 delivery_status_cache.pop(f"delivery_{new_notification.id}", None)
                 delivered = await self.deliver_notification(new_notification)
-                if delivered is False and new_notification.status == notification_models.NotificationStatus.PENDING:
-                    new_notification.status = notification_models.NotificationStatus.FAILED
+                if (
+                    delivered is False
+                    and new_notification.status
+                    == notification_models.NotificationStatus.PENDING
+                ):
+                    new_notification.status = (
+                        notification_models.NotificationStatus.FAILED
+                    )
                     self.db.commit()
             logger.info("Notification created for user %s", user_id)
             return new_notification
@@ -434,13 +463,17 @@ class NotificationService:
         try:
             encoded = json.dumps(metadata).encode("utf-8")
         except (TypeError, ValueError):
-            logger.warning("Invalid notification metadata provided; defaulting to empty metadata.")
+            logger.warning(
+                "Invalid notification metadata provided; defaulting to empty metadata."
+            )
             return {}
         if len(encoded) > MAX_METADATA_BYTES:
             raise ValueError("metadata too large")
         return metadata.copy()
 
-    async def deliver_notification(self, notification: notification_models.Notification) -> bool:
+    async def deliver_notification(
+        self, notification: notification_models.Notification
+    ) -> bool:
         """Deliver notification respecting user preferences."""
         return await self.delivery_manager.deliver_notification(notification)
 
@@ -463,7 +496,9 @@ class NotificationService:
                 return translated
         return content
 
-    def _get_user_preferences(self, user_id: int) -> notification_models.NotificationPreferences:
+    def _get_user_preferences(
+        self, user_id: int
+    ) -> notification_models.NotificationPreferences:
         """Retrieve or create notification preferences."""
         cache_key = f"user_prefs_{user_id}"
         if cache_key in notification_cache:
@@ -477,12 +512,19 @@ class NotificationService:
         prefs: notification_models.NotificationPreferences,
         category: notification_models.NotificationCategory,
     ) -> bool:
-        """Determine if the notification should be emitted based on quiet hours/category."""
+        """Determine if the notification should be emitted based on quiet hours/category/channel toggles."""
         current_time = datetime.now().time()
         if (
             prefs.quiet_hours_start
             and prefs.quiet_hours_end
             and prefs.quiet_hours_start <= current_time <= prefs.quiet_hours_end
+        ):
+            return False
+        # Require at least one channel enabled (email, push, or in-app) before filtering by category.
+        if not (
+            prefs.email_notifications
+            or prefs.push_notifications
+            or prefs.in_app_notifications
         ):
             return False
         cache_key = f"category_pref_{prefs.user_id}_{category.value}"
@@ -500,7 +542,8 @@ class NotificationService:
             existing_group = (
                 self.db.query(notification_models.NotificationGroup)
                 .filter(
-                    notification_models.NotificationGroup.group_type == notification_type,
+                    notification_models.NotificationGroup.group_type
+                    == notification_type,
                     notification_models.NotificationGroup.user_id == user_id,
                     notification_models.NotificationGroup.related_id == related_id,
                 )
@@ -526,7 +569,9 @@ class NotificationService:
             self.db.rollback()
             return None
 
-    def _schedule_delivery(self, notification: notification_models.Notification) -> None:
+    def _schedule_delivery(
+        self, notification: notification_models.Notification
+    ) -> None:
         """Register a background task to deliver scheduled notifications."""
         if self.background_tasks and notification.scheduled_for:
             self.background_tasks.add_task(
@@ -596,7 +641,9 @@ class NotificationService:
         notifications = records[:limit]
         next_cursor = notifications[-1].id if has_more else None
         seen_timestamp = (
-            self._mark_notifications_seen(notifications, mark_read) if mark_seen else None
+            self._mark_notifications_seen(notifications, mark_read)
+            if mark_seen
+            else None
         )
         unread_count = self.repository.unread_count(user_id)
         unseen_count = self.repository.unseen_count(user_id)
@@ -620,7 +667,9 @@ class NotificationService:
 
     async def mark_as_read(self, notification_id: int, user_id: int):
         """Mark a single notification as read."""
-        notification = self.repository.mark_notification_as_read(notification_id, user_id)
+        notification = self.repository.mark_notification_as_read(
+            notification_id, user_id
+        )
         if not notification:
             raise HTTPException(status_code=404, detail="Notification not found")
         return notification
@@ -639,7 +688,9 @@ class NotificationService:
 
     async def delete_notification(self, notification_id: int, user_id: int):
         """Soft-delete a notification."""
-        notification = self.repository.soft_delete_notification(notification_id, user_id)
+        notification = self.repository.soft_delete_notification(
+            notification_id, user_id
+        )
         if not notification:
             raise HTTPException(status_code=404, detail="Notification not found")
         return {"deleted": True}
@@ -714,12 +765,16 @@ class NotificationService:
             for payload in notifications:
                 priority = (
                     payload.priority
-                    if isinstance(payload.priority, notification_models.NotificationPriority)
+                    if isinstance(
+                        payload.priority, notification_models.NotificationPriority
+                    )
                     else notification_models.NotificationPriority(payload.priority)
                 )
                 category = (
                     payload.category
-                    if isinstance(payload.category, notification_models.NotificationCategory)
+                    if isinstance(
+                        payload.category, notification_models.NotificationCategory
+                    )
                     else notification_models.NotificationCategory(payload.category)
                 )
                 metadata = self._normalize_metadata(payload.metadata)
@@ -781,7 +836,9 @@ class NotificationService:
 
     async def retry_failed_notification(self, notification_id: int) -> bool:
         """Retry a failed notification immediately."""
-        notification = get_model_by_id(self.db, notification_models.Notification, notification_id)
+        notification = get_model_by_id(
+            self.db, notification_models.Notification, notification_id
+        )
         if not notification:
             raise HTTPException(status_code=404, detail="Notification not found")
         if notification.status != notification_models.NotificationStatus.FAILED:
@@ -826,7 +883,9 @@ class NotificationRetryHandler:
 
     async def handle_failed_notification(self, notification_id: int) -> None:
         """Process a failed notification and queue retry if allowed."""
-        notification = get_model_by_id(self.db, notification_models.Notification, notification_id)
+        notification = get_model_by_id(
+            self.db, notification_models.Notification, notification_id
+        )
         if not notification:
             return
         if notification.retry_count >= self.max_retries:
@@ -846,7 +905,9 @@ class NotificationRetryHandler:
     async def retry_notification(self, notification_id: int, delay: int) -> None:
         """Retry sending the notification after a specified delay."""
         await asyncio.sleep(delay)
-        notification = get_model_by_id(self.db, notification_models.Notification, notification_id)
+        notification = get_model_by_id(
+            self.db, notification_models.Notification, notification_id
+        )
         if not notification or notification.status != "retrying":
             return
         notification_service = NotificationService(self.db)
@@ -863,7 +924,9 @@ class CommentNotificationHandler:
         self.background_tasks = background_tasks
         self.notification_service = NotificationService(db, background_tasks)
 
-    async def handle_new_comment(self, comment: legacy_models.Comment, post: legacy_models.Post):
+    async def handle_new_comment(
+        self, comment: legacy_models.Comment, post: legacy_models.Post
+    ):
         """Send notifications for new comments and replies."""
         if comment.owner_id != post.owner_id:
             await self.notification_service.create_notification(
@@ -875,7 +938,9 @@ class CommentNotificationHandler:
                 link=f"/post/{post.id}#comment-{comment.id}",
             )
         if comment.parent_id:
-            parent_comment = get_model_by_id(self.db, legacy_models.Comment, comment.parent_id)
+            parent_comment = get_model_by_id(
+                self.db, legacy_models.Comment, comment.parent_id
+            )
             if parent_comment and parent_comment.owner_id != comment.owner_id:
                 await self.notification_service.create_notification(
                     user_id=parent_comment.owner_id,
@@ -899,7 +964,10 @@ class MessageNotificationHandler:
         """Send notification when new message arrives."""
         user_prefs = (
             self.db.query(notification_models.NotificationPreferences)
-            .filter(notification_models.NotificationPreferences.user_id == message.receiver_id)
+            .filter(
+                notification_models.NotificationPreferences.user_id
+                == message.receiver_id
+            )
             .first()
         )
         if not user_prefs or user_prefs.message_notifications:
@@ -953,7 +1021,9 @@ async def deliver_scheduled_notification(
     try:
         db = next(get_db())
         notification_service = NotificationService(db)
-        notification = get_model_by_id(db, notification_models.Notification, notification_id)
+        notification = get_model_by_id(
+            db, notification_models.Notification, notification_id
+        )
         if not notification:
             logger.error("Scheduled notification %s not found", notification_id)
             return

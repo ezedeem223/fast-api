@@ -4,7 +4,6 @@ import os
 from datetime import datetime, timedelta
 
 import pytest
-from fastapi import HTTPException
 from starlette.datastructures import UploadFile
 
 from app import analytics, models
@@ -14,6 +13,7 @@ from app.core.database import get_db
 from app.core.database.query_helpers import cursor_paginate, paginate_query
 from app.modules.community.models import SearchStatistics
 from app.services.messaging import MessageService
+from fastapi import HTTPException
 
 
 def test_analytics_lazy_pipeline_cached(monkeypatch):
@@ -25,8 +25,16 @@ def test_analytics_lazy_pipeline_cached(monkeypatch):
 
     monkeypatch.setattr(analytics, "_sentiment_pipeline", None)
     monkeypatch.setattr(analytics, "pipeline", lambda *_, **__: DummyPipeline())
-    monkeypatch.setattr(analytics, "AutoTokenizer", type("Tok", (), {"from_pretrained": lambda *_: None}))
-    monkeypatch.setattr(analytics, "AutoModelForSequenceClassification", type("Mod", (), {"from_pretrained": lambda *_: created}))
+    monkeypatch.setattr(
+        analytics,
+        "AutoTokenizer",
+        type("Tok", (), {"from_pretrained": lambda *_: None}),
+    )
+    monkeypatch.setattr(
+        analytics,
+        "AutoModelForSequenceClassification",
+        type("Mod", (), {"from_pretrained": lambda *_: created}),
+    )
 
     first = analytics._get_sentiment_pipeline()
     second = analytics._get_sentiment_pipeline()
@@ -34,7 +42,9 @@ def test_analytics_lazy_pipeline_cached(monkeypatch):
 
 
 def test_suggest_improvements_short_text():
-    suggestion = analytics.suggest_improvements("too short", {"sentiment": "POSITIVE", "score": 0.1})
+    suggestion = analytics.suggest_improvements(
+        "too short", {"sentiment": "POSITIVE", "score": 0.1}
+    )
     assert "short" in suggestion.lower()
 
 
@@ -135,6 +145,7 @@ def test_health_smoke_and_readyz_fail_then_ok(monkeypatch, client, session):
 
     def failing_db():
         try:
+
             class Dummy:
                 def execute(self, _):
                     raise RuntimeError("db down")
@@ -159,11 +170,13 @@ def test_health_smoke_and_readyz_fail_then_ok(monkeypatch, client, session):
     if original_override:
         app.dependency_overrides[get_db] = original_override
     else:
+
         def _test_db():
             try:
                 yield session
             finally:
                 pass
+
         app.dependency_overrides[get_db] = _test_db
     good = client.get("/readyz")
     assert good.status_code == 200

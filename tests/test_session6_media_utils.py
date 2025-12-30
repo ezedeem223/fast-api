@@ -5,20 +5,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import UploadFile
-from fastapi import HTTPException
 
 import app.firebase_config as firebase_config
 import app.link_preview as link_preview
 from app.modules.media import processing
 from app.modules.utils import files as file_utils
 from app.modules.utils import security as security_utils
+from fastapi import HTTPException, UploadFile
 
 
 def test_firebase_push_and_topic_fallback(monkeypatch):
     """Exercise happy/error paths without hitting real Firebase."""
     monkeypatch.setattr(firebase_config.messaging, "Message", lambda **kwargs: kwargs)
-    monkeypatch.setattr(firebase_config.messaging, "Notification", lambda **kwargs: kwargs)
+    monkeypatch.setattr(
+        firebase_config.messaging, "Notification", lambda **kwargs: kwargs
+    )
     # send_push_notification should swallow errors and return None
     monkeypatch.setattr(
         firebase_config.messaging,
@@ -56,6 +57,7 @@ def test_extract_link_preview_network_error(monkeypatch):
 def test_process_media_file_branches(monkeypatch):
     """Video path should be converted then transcribed; unsupported types return empty."""
     calls = {}
+
     def fake_extract(path):
         calls["video"] = path
         return "audio.wav"
@@ -130,6 +132,7 @@ async def test_save_upload_file(tmp_path):
 @pytest.mark.asyncio
 async def test_admin_required_allows_admin(monkeypatch):
     """admin_required should allow admins and block non-admins."""
+
     async def fake_admin():
         return SimpleNamespace(is_admin=True)
 

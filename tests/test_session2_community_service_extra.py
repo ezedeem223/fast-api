@@ -1,5 +1,6 @@
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from app import models, schemas
 from app.services.community.service import CommunityService
@@ -50,7 +51,9 @@ def test_update_community_requires_owner(session):
     community = _make_community(session, owner)
     payload = schemas.CommunityUpdate(name="new-name")
     with pytest.raises(Exception):
-        service.update_community(community_id=community.id, payload=payload, current_user=other)
+        service.update_community(
+            community_id=community.id, payload=payload, current_user=other
+        )
 
 
 def test_get_communities_filters_and_sort(session):
@@ -90,7 +93,13 @@ def test_update_community_statistics_and_rankings(session):
         )
     )
     session.commit()
-    post = models.Post(owner_id=owner.id, community_id=community.id, title="t", content="c", is_safe_content=True)
+    post = models.Post(
+        owner_id=owner.id,
+        community_id=community.id,
+        title="t",
+        content="c",
+        is_safe_content=True,
+    )
     session.add(post)
     session.commit()
     comment = models.Comment(owner_id=member.id, post_id=post.id, content="hi")
@@ -102,10 +111,12 @@ def test_update_community_statistics_and_rankings(session):
     for comm in session.query(models.Community).all():
         comm.created_at = datetime.now(timezone.utc)
     session.commit()
+
     def safe_rankings():
         for comm in session.query(models.Community).all():
             comm.ranking = 0.0
         session.commit()
+
     service.update_community_rankings = safe_rankings
 
     stats = service.update_community_statistics(community_id=community.id)

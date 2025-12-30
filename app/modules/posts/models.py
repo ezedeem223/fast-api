@@ -9,26 +9,24 @@ from __future__ import annotations
 import enum
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
+    JSON,
     Boolean,
+    Column,
     DateTime,
     Enum,
     Float,
     ForeignKey,
-    Text,
     Index,
-    JSON,
+    Integer,
+    String,
     Table,
+    Text,
 )
-from sqlalchemy.dialects.postgresql import (
-    ARRAY as PG_ARRAY,
-    JSONB as PG_JSONB,
-    TSVECTOR as PG_TSVECTOR,
-)
-from sqlalchemy.sql.sqltypes import TIMESTAMP
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+from sqlalchemy.dialects.postgresql import TSVECTOR as PG_TSVECTOR
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql.sqltypes import TIMESTAMP
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default

@@ -1,9 +1,9 @@
 import logging
 
-from app.core.logging_config import setup_logging, JSONFormatter
-from app.core.database import get_db
-from app.main import app
 from app import notifications
+from app.core.database import get_db
+from app.core.logging_config import JSONFormatter, setup_logging
+from app.main import app
 
 
 def test_health_endpoints_and_ready_failure(client):

@@ -1,19 +1,22 @@
+import importlib
 import json
 import logging
-import importlib
 
 import pytest
-from fastapi import Request
-from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
 
 from app.core import logging_config
-from app.core.middleware import ip_ban, language as lang_mw
+from app.core.middleware import ip_ban
+from app.core.middleware import language as lang_mw
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 
 def test_setup_logging_creates_dir_and_sets_level(tmp_path):
     log_dir = tmp_path / "logs"
-    logging_config.setup_logging(log_level="WARNING", log_dir=str(log_dir), use_json=False, use_colors=False)
+    logging_config.setup_logging(
+        log_level="WARNING", log_dir=str(log_dir), use_json=False, use_colors=False
+    )
     assert log_dir.exists()
     # ensure root level set
     assert logging.getLogger().level == logging.WARNING
@@ -90,6 +93,7 @@ async def test_language_middleware_translates(monkeypatch):
 
     async def fake_translate(text, src, tgt):
         return f"{text}-{tgt}"
+
     monkeypatch.setattr(lang_mw, "translate_text", fake_translate)
 
     translated = await lang_mw.language_middleware(request, call_next)
@@ -111,7 +115,9 @@ async def test_language_middleware_translates(monkeypatch):
 
 def test_rate_limit_noop_and_handler(monkeypatch):
     monkeypatch.setenv("APP_ENV", "test")
-    rl_module = importlib.reload(importlib.import_module("app.core.middleware.rate_limit"))
+    rl_module = importlib.reload(
+        importlib.import_module("app.core.middleware.rate_limit")
+    )
     assert hasattr(rl_module.limiter, "limit")
 
     @rl_module.limiter.limit("1/minute")

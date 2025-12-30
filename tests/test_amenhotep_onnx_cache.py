@@ -1,7 +1,7 @@
 import types
-import pytest
 
 import numpy as np
+import pytest
 import torch
 
 
@@ -18,8 +18,14 @@ def _build_module(monkeypatch, use_onnx: bool):
         def __call__(self, text, return_tensors=None, **kwargs):
             self.calls += 1
             if return_tensors == "np":
-                return {"input_ids": np.array([[1, 2, 3]]), "attention_mask": np.array([[1, 1, 1]])}
-            return {"input_ids": torch.tensor([[1, 2, 3]]), "attention_mask": torch.tensor([[1, 1, 1]])}
+                return {
+                    "input_ids": np.array([[1, 2, 3]]),
+                    "attention_mask": np.array([[1, 1, 1]]),
+                }
+            return {
+                "input_ids": torch.tensor([[1, 2, 3]]),
+                "attention_mask": torch.tensor([[1, 1, 1]]),
+            }
 
         @property
         def eos_token_id(self):
@@ -43,9 +49,19 @@ def _build_module(monkeypatch, use_onnx: bool):
             self.run_calls += 1
             return [np.array([[0.1, 0.2, 0.3]])]
 
-    monkeypatch.setattr(amenhotep_module, "AutoTokenizer", types.SimpleNamespace(from_pretrained=lambda *a, **k: DummyTokenizer()))
-    monkeypatch.setattr(amenhotep_module, "AutoModelForCausalLM", types.SimpleNamespace(from_pretrained=lambda *a, **k: DummyModel()))
-    monkeypatch.setattr(amenhotep_module, "pipeline", lambda *a, **k: lambda *_, **__: {})
+    monkeypatch.setattr(
+        amenhotep_module,
+        "AutoTokenizer",
+        types.SimpleNamespace(from_pretrained=lambda *a, **k: DummyTokenizer()),
+    )
+    monkeypatch.setattr(
+        amenhotep_module,
+        "AutoModelForCausalLM",
+        types.SimpleNamespace(from_pretrained=lambda *a, **k: DummyModel()),
+    )
+    monkeypatch.setattr(
+        amenhotep_module, "pipeline", lambda *a, **k: lambda *_, **__: {}
+    )
     monkeypatch.setattr(
         amenhotep_module,
         "os",
@@ -54,9 +70,15 @@ def _build_module(monkeypatch, use_onnx: bool):
             makedirs=lambda *_, **__: None,
         ),
     )
-    monkeypatch.setattr(amenhotep_module, "settings", types.SimpleNamespace(HUGGINGFACE_API_TOKEN=None))
+    monkeypatch.setattr(
+        amenhotep_module, "settings", types.SimpleNamespace(HUGGINGFACE_API_TOKEN=None)
+    )
     if use_onnx:
-        monkeypatch.setattr(amenhotep_module, "ort", types.SimpleNamespace(InferenceSession=lambda *_, **__: DummySession()))
+        monkeypatch.setattr(
+            amenhotep_module,
+            "ort",
+            types.SimpleNamespace(InferenceSession=lambda *_, **__: DummySession()),
+        )
     else:
         monkeypatch.setattr(amenhotep_module, "ort", None)
     return amenhotep_module, DummySession, DummyModel, DummyTokenizer

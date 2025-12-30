@@ -1,55 +1,57 @@
 """Posts router.
 
-Scope: CRUD for posts/comments, reposts, polls, media uploads, audio, recommendations, translations, and PDF export.
+Scope: CRUD for posts/comments, reposts, polls, media uploads, audio, recommendations,
+translations, and PDF export.
 Auth: All endpoints require authenticated users (oauth2.get_current_user).
-Side effects: Rate limits on create/update/poll endpoints; cache invalidation on writes; notifications/sharing on create; translation opt-in via query param; email/WS broadcasts on certain flows.
+Side effects: Rate limits on create/update/poll endpoints; cache invalidation on writes;
+notifications/sharing on create; translation opt-in via query param; email/WS broadcasts
+on certain flows.
 """
 
 # =====================================================
 # ================  Imports Section  ==================
 # =====================================================
 
-from fastapi import (
-    Response,
-    status,
-    HTTPException,
-    Depends,
-    APIRouter,
-    BackgroundTasks,
-    UploadFile,
-    File,
-    Query,
-    Form,
-    Request,
-)
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from typing import List, Optional
-import os
 import logging
-from pathlib import Path
-import requests
-import aiofiles
+import os
 import uuid
 from io import BytesIO
+from pathlib import Path
+from typing import List, Optional
+
+import aiofiles
+import requests
 from cachetools import TTLCache
+from sqlalchemy.orm import Session
 
-# Import local modules
-from .. import models, schemas, oauth2, notifications
-
-from app.modules.posts import schemas as post_module_schemas
-
+from app.core.cache.redis_cache import cache  # Task 5: Redis Caching Imports
+from app.core.cache.redis_cache import (
+    cache_manager,
+)
 from app.core.config import settings
 from app.core.database import get_db
-from ..analytics import analyze_content
+from app.core.middleware.rate_limit import limiter
+from app.modules.posts import schemas as post_module_schemas
 from app.notifications import queue_email_notification, schedule_email_notification
 from app.services.posts import PostService
-from app.core.middleware.rate_limit import limiter
-from app.core.cache.redis_cache import (
-    cache,
-    cache_manager,
-)  # Task 5: Redis Caching Imports
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import StreamingResponse
 
+# Import local modules
+from .. import models, notifications, oauth2, schemas
+from ..analytics import analyze_content
 
 # =====================================================
 # ==============  Global Constants  ===================
@@ -150,9 +152,9 @@ def share_on_facebook(content: str):
 
 async def save_audio_file(file: UploadFile) -> str:
     """Endpoint: save_audio_file."""
-    from pydub import (
+    from pydub import (  # Local import avoids import-time warnings during tests
         AudioSegment,
-    )  # Local import avoids import-time warnings during tests
+    )
 
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     file_extension = os.path.splitext(file.filename)[1]
@@ -180,9 +182,9 @@ async def save_audio_file(file: UploadFile) -> str:
 
 def create_pdf(post: models.Post):
     """Endpoint: create_pdf."""
-    from xhtml2pdf import (
+    from xhtml2pdf import (  # Local import defers reportlab side effects during tests
         pisa,
-    )  # Local import defers reportlab side effects during tests
+    )
 
     html = f"""
     <html>

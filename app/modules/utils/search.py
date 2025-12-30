@@ -8,15 +8,13 @@ Integration notes:
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
-import logging
-
 from cachetools import TTLCache
-from sqlalchemy import asc, desc, func, or_, text
-from sqlalchemy.orm import Query, Session
 from spellchecker import SpellChecker
-from sqlalchemy import create_engine
+from sqlalchemy import asc, create_engine, desc, func, or_, text
+from sqlalchemy.orm import Query, Session
 
 from app import models
 from app.core.config import settings

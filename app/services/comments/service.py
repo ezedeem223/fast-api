@@ -5,37 +5,37 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import emoji
-from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session, joinedload
 
 from app import notifications
+from app.modules.amenhotep.models import CommentEditHistory
+from app.modules.posts.models import Comment, Post
+from app.modules.social.economy_service import SocialEconomyService
+from app.modules.social.models import Report
+from app.modules.users.models import User
+from app.modules.utils.analytics import update_post_score
+from app.modules.utils.common import get_user_display_name
+from app.modules.utils.content import (
+    analyze_sentiment,
+    check_content_against_rules,
+    check_for_profanity,
+    detect_language,
+    is_valid_image_url,
+    is_valid_video_url,
+    validate_urls,
+)
+from app.modules.utils.events import log_user_event
+from app.modules.utils.translation import get_translated_content
 from app.notifications import (
     create_notification,
     queue_email_notification,
     schedule_email_notification,
 )
-from app.modules.posts.models import Comment, Post
-from app.modules.amenhotep.models import CommentEditHistory
-from app.modules.social.models import Report
-from app.modules.users.models import User
-from app.modules.utils.content import (
-    check_content_against_rules,
-    check_for_profanity,
-    validate_urls,
-    analyze_sentiment,
-    is_valid_image_url,
-    is_valid_video_url,
-    detect_language,
-)
-from app.modules.utils.events import log_user_event
-from app.modules.utils.common import get_user_display_name
-from app.modules.utils.translation import get_translated_content
-from app.modules.utils.analytics import update_post_score
-from app.modules.social.economy_service import SocialEconomyService
+from fastapi import BackgroundTasks, HTTPException, status
 
 if TYPE_CHECKING:
     from app import schemas

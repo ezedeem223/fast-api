@@ -1,14 +1,14 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from datetime import datetime, timezone, timedelta
 
 import pytest
-from fastapi import HTTPException
 
 from app import models
-from app.services.local_economy_service import LocalEconomyService, ALLOWED_CATEGORIES
-from app.services.support_service import SupportService
-from app.services import reporting
 from app.modules.moderation import service as moderation_service
+from app.services import reporting
+from app.services.local_economy_service import ALLOWED_CATEGORIES, LocalEconomyService
+from app.services.support_service import SupportService
+from fastapi import HTTPException
 
 
 def _user(session, email="u@example.com", verified=True):
@@ -58,7 +58,9 @@ def test_support_happy_and_invalid(session):
     svc = SupportService(session)
     user = _user(session)
 
-    ticket = svc.create_ticket(current_user=user, subject="help", description="need support")
+    ticket = svc.create_ticket(
+        current_user=user, subject="help", description="need support"
+    )
     assert ticket.id and ticket.status == models.TicketStatus.OPEN
 
     resp = svc.add_response(current_user=user, ticket_id=ticket.id, content="got it")
@@ -77,7 +79,9 @@ def test_reporting_invalid_and_duplicate(session):
 
     # invalid type -> both ids none raises 400
     with pytest.raises(HTTPException) as exc:
-        reporting.submit_report(session, reporter, reason="r", post_id=None, comment_id=None)
+        reporting.submit_report(
+            session, reporter, reason="r", post_id=None, comment_id=None
+        )
     assert exc.value.status_code == 400
 
     reporting.submit_report(session, reporter, reason="valid", post_id=post.id)
@@ -99,8 +103,12 @@ def test_block_appeal_flow(session):
     session.commit()
     session.refresh(block)
 
-    appeal = moderation_service.submit_block_appeal(session, block_id=block.id, user_id=blocked.id, reason="please")
+    appeal = moderation_service.submit_block_appeal(
+        session, block_id=block.id, user_id=blocked.id, reason="please"
+    )
     assert appeal.status == models.AppealStatus.PENDING
 
-    reviewed = moderation_service.review_block_appeal(session, appeal_id=appeal.id, approve=True, reviewer_id=blocker.id)
+    reviewed = moderation_service.review_block_appeal(
+        session, appeal_id=appeal.id, approve=True, reviewer_id=blocker.id
+    )
     assert reviewed.status == models.AppealStatus.APPROVED

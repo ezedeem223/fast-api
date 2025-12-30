@@ -14,6 +14,7 @@ from typing import Optional
 
 import aiofiles
 import qrcode
+
 from fastapi import UploadFile
 
 from .common import logger
@@ -32,9 +33,11 @@ def generate_qr_code(data: str) -> str:
     return base64.b64encode(buffered.getvalue()).decode()
 
 
-async def save_upload_file(upload_file: UploadFile, *, folder: Optional[Path] = None) -> str:
+async def save_upload_file(
+    upload_file: UploadFile, *, folder: Optional[Path] = None
+) -> str:
     """Persist an uploaded file asynchronously and return its storage path."""
-    target_dir = (folder or UPLOAD_ROOT)
+    target_dir = folder or UPLOAD_ROOT
     target_dir.mkdir(parents=True, exist_ok=True)
     file_location = target_dir / upload_file.filename
     async with aiofiles.open(file_location, "wb") as out_file:

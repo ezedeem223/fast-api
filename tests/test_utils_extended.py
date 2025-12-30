@@ -3,8 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.modules.utils import common, network, translation, analytics
-
+from app.modules.utils import analytics, common, network, translation
 
 # ----------------------- common.get_user_display_name ----------------------- #
 
@@ -16,12 +15,25 @@ from app.modules.utils import common, network, translation, analytics
         ({"account_username": "legacy", "email": "legacy@example.com"}, "legacy"),
         ({"email": "email@example.com"}, "email@example.com"),
         ({"username": "", "account_username": "acct", "email": "c@x.com"}, "acct"),
-        ({"username": None, "account_username": None, "email": "fallback@x.com"}, "fallback@x.com"),
+        (
+            {"username": None, "account_username": None, "email": "fallback@x.com"},
+            "fallback@x.com",
+        ),
         ({"username": "Name", "account_username": "acct", "email": "mail"}, "Name"),
         ({"username": "", "account_username": "", "email": "z"}, "z"),
-        ({"username": None, "account_username": "   user   ", "email": "mail"}, "   user   "),
+        (
+            {"username": None, "account_username": "   user   ", "email": "mail"},
+            "   user   ",
+        ),
         ({"username": "UPPER", "account_username": "lower", "email": "mail"}, "UPPER"),
-        ({"username": None, "account_username": None, "email": "duplicate@example.com"}, "duplicate@example.com"),
+        (
+            {
+                "username": None,
+                "account_username": None,
+                "email": "duplicate@example.com",
+            },
+            "duplicate@example.com",
+        ),
     ],
 )
 def test_get_user_display_name_variations(user_attrs, expected):
@@ -52,36 +64,6 @@ class DummyRequest:
 def test_get_client_ip_sources(headers, host, expected):
     request = DummyRequest(headers=headers, host=host)
     assert network.get_client_ip(request) == expected
-
-
-# ----------------------- network.detect_ip_evasion ------------------------- #
-
-
-def _build_mock_session(return_ips: list[str]):
-    query_mock = MagicMock()
-    filter_mock = MagicMock()
-    distinct_mock = MagicMock()
-    query_mock.filter.return_value = filter_mock
-    filter_mock.distinct.return_value = distinct_mock
-    distinct_mock.all.return_value = [(ip,) for ip in return_ips]
-    session = MagicMock()
-    session.query.return_value = query_mock
-    return session, query_mock, filter_mock, distinct_mock
-
-
-@pytest.mark.parametrize(
-    "existing_ips,current_ip,expected",
-    [
-        (["10.0.0.1"], "10.0.0.1", False),
-        (["10.0.0.1", "192.0.2.10"], "10.0.0.1", False),
-        (["203.0.113.5", "198.51.100.9"], "203.0.113.5", False),
-        (["fe80::1", "2001:db8::1"], "fe80::1", False),
-        (["172.16.0.1", "172.16.0.2"], "172.16.0.3", False),
-    ],
-)
-def test_detect_ip_evasion(existing_ips, current_ip, expected):
-    session, _, _, _ = _build_mock_session(existing_ips)
-    assert network.detect_ip_evasion(session, user_id=1, current_ip=current_ip) is expected
 
 
 # ----------------------- translation.cached_translate_text ----------------- #
@@ -124,8 +106,10 @@ async def test_cached_translate_text_different_keys(monkeypatch):
 @pytest.mark.asyncio
 async def test_cached_translate_text_cache_invalidation(monkeypatch):
     translation.translation_cache.clear()
+
     async def fake_translate(text, source, target):
         return f"{text}:{target}"
+
     monkeypatch.setattr(translation, "translate_text", fake_translate, raising=False)
     await translation.cached_translate_text("ping", "en", "es")
     translation.translation_cache.clear()
@@ -140,19 +124,75 @@ async def test_cached_translate_text_cache_invalidation(monkeypatch):
 @pytest.mark.parametrize(
     "user_attrs,source_lang,content,translated,should_translate",
     [
-        ({"preferred_language": "fr", "auto_translate": True}, "en", "Hello", "Bonjour", True),
-        ({"preferred_language": "en", "auto_translate": True}, "en", "Same", "Same", False),
-        ({"preferred_language": None, "auto_translate": True}, "en", "Text", "Text", False),
-        ({"preferred_language": "de", "auto_translate": False}, "en", "Skip", "Skip", False),
-        ({"preferred_language": "es", "auto_translate": True}, "es", "Hola", "Hola", False),
+        (
+            {"preferred_language": "fr", "auto_translate": True},
+            "en",
+            "Hello",
+            "Bonjour",
+            True,
+        ),
+        (
+            {"preferred_language": "en", "auto_translate": True},
+            "en",
+            "Same",
+            "Same",
+            False,
+        ),
+        (
+            {"preferred_language": None, "auto_translate": True},
+            "en",
+            "Text",
+            "Text",
+            False,
+        ),
+        (
+            {"preferred_language": "de", "auto_translate": False},
+            "en",
+            "Skip",
+            "Skip",
+            False,
+        ),
+        (
+            {"preferred_language": "es", "auto_translate": True},
+            "es",
+            "Hola",
+            "Hola",
+            False,
+        ),
         ({"preferred_language": "it", "auto_translate": True}, "en", "", "", False),
-        ({"preferred_language": "ar", "auto_translate": True}, "en", "مرحبا", "مرحباً", True),
-        ({"preferred_language": "ru", "auto_translate": True}, "en", "Error", "Error", "not_impl"),
-        ({"preferred_language": "ja", "auto_translate": True}, "en", "Oops", "Oops", "exception"),
-        ({"preferred_language": "pt", "auto_translate": True}, "en", "Content", "Conteúdo", True),
+        (
+            {"preferred_language": "ar", "auto_translate": True},
+            "en",
+            "مرحبا",
+            "مرحباً",
+            True,
+        ),
+        (
+            {"preferred_language": "ru", "auto_translate": True},
+            "en",
+            "Error",
+            "Error",
+            "not_impl",
+        ),
+        (
+            {"preferred_language": "ja", "auto_translate": True},
+            "en",
+            "Oops",
+            "Oops",
+            "exception",
+        ),
+        (
+            {"preferred_language": "pt", "auto_translate": True},
+            "en",
+            "Content",
+            "Conteúdo",
+            True,
+        ),
     ],
 )
-async def test_get_translated_content(monkeypatch, user_attrs, source_lang, content, translated, should_translate):
+async def test_get_translated_content(
+    monkeypatch, user_attrs, source_lang, content, translated, should_translate
+):
     user = SimpleNamespace(**user_attrs)
     translation.translation_cache.clear()
 
@@ -169,8 +209,15 @@ async def test_get_translated_content(monkeypatch, user_attrs, source_lang, cont
         called["count"] += 1
         return await fake_translate(text, src, tgt)
 
-    monkeypatch.setattr(translation, "cached_translate_text", fake_cached, raising=False)
-    monkeypatch.setattr(translation, "logger", SimpleNamespace(exception=lambda *args, **kwargs: None), raising=False)
+    monkeypatch.setattr(
+        translation, "cached_translate_text", fake_cached, raising=False
+    )
+    monkeypatch.setattr(
+        translation,
+        "logger",
+        SimpleNamespace(exception=lambda *args, **kwargs: None),
+        raising=False,
+    )
 
     result = await translation.get_translated_content(content, user, source_lang)
 

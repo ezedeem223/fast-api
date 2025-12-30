@@ -3,13 +3,15 @@
 Integration details:
 - Validates URLs before making outbound requests; uses a short timeout (5s) to avoid blocking workers.
 - Parses OpenGraph/description tags only; does not follow redirects or load scripts for safety.
+- Filters blocked domains/keywords to avoid previewing obviously unsafe content.
 - Returns None on any network/parse error so callers can silently skip previews.
 """
 
-import requests
-from bs4 import BeautifulSoup
-import validators
 from urllib.parse import urlparse
+
+import requests
+import validators
+from bs4 import BeautifulSoup
 
 # Basic domain/content guards to avoid previewing clearly unsafe content.
 BLOCKED_DOMAINS = {"malware.test", "phishing.test"}
@@ -62,29 +64,6 @@ def extract_link_preview(url: str) -> dict | None:
         return None
 
 
-
-
-
-
-
-
-
-
-# C:\Users\kglou\Desktop\fastapi\app\notifications.py:
-
-# from fastapi import BackgroundTasks, WebSocket, HTTPException
-# from fastapi_mail import MessageSchema
-# from pydantic import EmailStr
-# from typing import List, Union, Optional, Dict, Any
-# from datetime import datetime, timezone, timedelta
-# from sqlalchemy.orm import Session
-# from sqlalchemy import and_, or_, func
-# import json
-# import logging
-# from .database import get_db
-# from . import models, schemas
-# from .config import settings, fm
-# from .firebase_config import send_multicast_notification
 # from .utils import get_translated_content
 # import asyncio
 # from cachetools import TTLCache
@@ -820,8 +799,6 @@ def extract_link_preview(url: str) -> dict | None:
 #             logger.info(
 #                 f"Scheduled notification {notification.id} for delivery at {notification.scheduled_for}"
 #             )
-
-
 
 
 # async def send_real_time_notification(user_id: int, message: Union[str, dict]):

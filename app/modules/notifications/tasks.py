@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import models as legacy_models
 from app.modules.notifications import models as notification_models
+
 from .common import logger
 
 
@@ -62,7 +63,9 @@ def process_scheduled_notifications_task(
             enqueue_delivery(notification.id)
             notification.status = notification_models.NotificationStatus.DELIVERED
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Failed to enqueue scheduled notification %s: %s", notification.id, exc)
+            logger.error(
+                "Failed to enqueue scheduled notification %s: %s", notification.id, exc
+            )
     db.commit()
 
 
@@ -79,7 +82,9 @@ def deliver_notification_task(
 
     user_prefs = (
         db.query(notification_models.NotificationPreferences)
-        .filter(notification_models.NotificationPreferences.user_id == notification.user_id)
+        .filter(
+            notification_models.NotificationPreferences.user_id == notification.user_id
+        )
         .first()
     )
     if not user_prefs:
@@ -89,12 +94,16 @@ def deliver_notification_task(
         try:
             email_sender(notification)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Failed to queue email notification %s: %s", notification.id, exc)
+            logger.error(
+                "Failed to queue email notification %s: %s", notification.id, exc
+            )
     if user_prefs.push_notifications:
         try:
             push_sender(notification.id)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Failed to queue push notification %s: %s", notification.id, exc)
+            logger.error(
+                "Failed to queue push notification %s: %s", notification.id, exc
+            )
 
 
 def send_push_notification_task(db: Session, notification_id: int) -> None:

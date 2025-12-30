@@ -70,7 +70,9 @@ def test_user_cache_invalidation(monkeypatch):
 
 
 def test_fail_open_without_redis(monkeypatch):
-    monkeypatch.setattr(search_cache, "settings", type("Obj", (), {"redis_client": None}), raising=False)
+    monkeypatch.setattr(
+        search_cache, "settings", type("Obj", (), {"redis_client": None}), raising=False
+    )
     # get returns None and set/delete do not raise
     assert search_cache.get_cached_json("k") is None
     search_cache.set_cached_json("k", {"v": 1}, ttl_seconds=1)

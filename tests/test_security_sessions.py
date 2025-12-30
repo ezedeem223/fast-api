@@ -26,7 +26,9 @@ def test_list_and_revoke_sessions(session, test_user):
     result = service.revoke_session(current_user, "sess-1")
     assert "revoked" in result["message"]
 
-    remaining = session.query(models.UserSession).filter_by(user_id=test_user["id"]).all()
+    remaining = (
+        session.query(models.UserSession).filter_by(user_id=test_user["id"]).all()
+    )
     assert len(remaining) == 1
     assert remaining[0].session_id == "sess-2"
 

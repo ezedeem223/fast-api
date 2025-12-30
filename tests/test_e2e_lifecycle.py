@@ -1,6 +1,6 @@
+import app.models as models
 from app.oauth2 import create_access_token
 from tests.conftest import TestingSessionLocal
-import app.models as models
 
 
 def _auth_headers(token: str) -> dict:
@@ -47,7 +47,10 @@ def test_e2e_lifecycle_flow(client, test_user, test_user2):
     with TestingSessionLocal() as db:
         comment_obj = (
             db.query(models.Comment)
-            .filter(models.Comment.post_id == post_id, models.Comment.owner_id == test_user2["id"])
+            .filter(
+                models.Comment.post_id == post_id,
+                models.Comment.owner_id == test_user2["id"],
+            )
             .order_by(models.Comment.id.desc())
             .first()
         )

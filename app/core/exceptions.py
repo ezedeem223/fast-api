@@ -4,6 +4,7 @@ Provides a unified error handling system with proper HTTP status codes and messa
 """
 
 from typing import Any, Dict, Optional
+
 from fastapi import HTTPException, status
 
 UNPROCESSABLE_STATUS = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)

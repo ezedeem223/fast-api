@@ -22,18 +22,23 @@ from pydantic import EmailStr
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import models as legacy_models
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app import models as legacy_models
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.tasks import (
     cleanup_old_notifications_task,
-    process_scheduled_notifications_task,
+)
+from app.modules.notifications.tasks import (
     deliver_notification_task as notification_delivery_handler,
+)
+from app.modules.notifications.tasks import (
+    process_scheduled_notifications_task,
+)
+from app.modules.notifications.tasks import (
     send_push_notification_task as notification_push_handler,
 )
 from app.modules.utils.content import is_content_offensive
-
 
 # from .routers.post import send_notifications_and_share
 
@@ -47,6 +52,7 @@ celery_app = Celery(
 
 
 def _is_test_env() -> bool:
+    """Return True when running under test markers (APP_ENV=test or pytest context)."""
     return (
         settings.environment.lower() == "test"
         or os.getenv("APP_ENV", "").lower() == "test"
@@ -123,9 +129,12 @@ celery_app.conf.beat_schedule = {
     },
     "reset-report-counters": {
         "task": "app.celery_worker.reset_report_counters",
-        "schedule": crontab(day_of_month=1, hour=0, minute=0),  # Run monthly on day 1 at 00:00
+        "schedule": crontab(
+            day_of_month=1, hour=0, minute=0
+        ),  # Run monthly on day 1 at 00:00
     },
 }
+
 
 def calculate_user_notification_analytics(db: Session, user_id: int) -> dict:
     """
@@ -146,10 +155,12 @@ def calculate_user_notification_analytics(db: Session, user_id: int) -> dict:
         for notification in notifications
         if notification.created_at and notification.read_at
     ]
-    avg_response = (
-        sum(response_times) / len(response_times) if response_times else 0.0
-    )
-    hours = [notification.created_at.hour for notification in notifications if notification.created_at]
+    avg_response = sum(response_times) / len(response_times) if response_times else 0.0
+    hours = [
+        notification.created_at.hour
+        for notification in notifications
+        if notification.created_at
+    ]
     peak_hours = [hour for hour, _ in Counter(hours).most_common(3)]
 
     return {
@@ -178,7 +189,10 @@ def process_scheduled_notifications():
     db: Session = SessionLocal()
     try:
         process_scheduled_notifications_task(
-            db, enqueue_delivery=lambda notification_id: deliver_notification.delay(notification_id)
+            db,
+            enqueue_delivery=lambda notification_id: deliver_notification.delay(
+                notification_id
+            ),
         )
     finally:
         db.close()
@@ -225,7 +239,9 @@ def update_notification_analytics():
                 .first()
             )
             if not user_analytics:
-                user_analytics = notification_models.NotificationAnalytics(user_id=user.id)
+                user_analytics = notification_models.NotificationAnalytics(
+                    user_id=user.id
+                )
                 db.add(user_analytics)
             user_analytics.engagement_rate = analytics["engagement_rate"]
             user_analytics.response_time = analytics["response_time"]
@@ -293,8 +309,16 @@ def unblock_user(blocker_id: int, blocked_id: int):
             db.delete(block)
             db.commit()
 
-            blocker = db.query(legacy_models.User).filter(legacy_models.User.id == blocker_id).first()
-            blocked = db.query(legacy_models.User).filter(legacy_models.User.id == blocked_id).first()
+            blocker = (
+                db.query(legacy_models.User)
+                .filter(legacy_models.User.id == blocker_id)
+                .first()
+            )
+            blocked = (
+                db.query(legacy_models.User)
+                .filter(legacy_models.User.id == blocked_id)
+                .first()
+            )
             if blocker and blocked:
                 send_email_task.delay(
                     [blocked.email],
@@ -311,15 +335,21 @@ def clean_expired_blocks():
     db: Session = SessionLocal()
     try:
         expired_blocks = (
-            db.query(legacy_models.Block).filter(legacy_models.Block.ends_at < datetime.now()).all()
+            db.query(legacy_models.Block)
+            .filter(legacy_models.Block.ends_at < datetime.now())
+            .all()
         )
         for block in expired_blocks:
             db.delete(block)
             blocker = (
-                db.query(legacy_models.User).filter(legacy_models.User.id == block.blocker_id).first()
+                db.query(legacy_models.User)
+                .filter(legacy_models.User.id == block.blocker_id)
+                .first()
             )
             blocked = (
-                db.query(legacy_models.User).filter(legacy_models.User.id == block.blocked_id).first()
+                db.query(legacy_models.User)
+                .filter(legacy_models.User.id == block.blocked_id)
+                .first()
             )
             if blocker and blocked:
                 send_email_task.delay(
@@ -404,11 +434,19 @@ def schedule_post_publication(post_id: int):
     """Publish a scheduled post if pending, then trigger notifications/sharing."""
     db: Session = SessionLocal()
     try:
-        post = db.query(legacy_models.Post).filter(legacy_models.Post.id == post_id).first()
+        post = (
+            db.query(legacy_models.Post)
+            .filter(legacy_models.Post.id == post_id)
+            .first()
+        )
         if post and not post.is_published:
             post.is_published = True
             db.commit()
-            user = db.query(legacy_models.User).filter(legacy_models.User.id == post.owner_id).first()
+            user = (
+                db.query(legacy_models.User)
+                .filter(legacy_models.User.id == post.owner_id)
+                .first()
+            )
             from app.routers.post import send_notifications_and_share
 
             send_notifications_and_share(None, post, user)

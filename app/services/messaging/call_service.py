@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import notifications, schemas
@@ -16,6 +15,7 @@ from app.modules.messaging.models import (
 )
 from app.modules.users.models import User
 from app.modules.utils.security import generate_encryption_key
+from fastapi import HTTPException, status
 
 
 class CallService:

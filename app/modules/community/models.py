@@ -7,25 +7,15 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    Date,
-    Float,
-    ForeignKey,
-    Text,
-    UniqueConstraint,
-    Index,
-)
+from sqlalchemy import Boolean, Column, Date, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.sqltypes import TIMESTAMP
-from sqlalchemy import Enum as SAEnum
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
+
 from .associations import community_tags
 
 
@@ -304,8 +294,12 @@ class ArchivedReel(Base):
     title = Column(String, nullable=False)
     video_url = Column(String, nullable=False)
     description = Column(String)
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    community_id = Column(Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True)
+    owner_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    community_id = Column(
+        Integer, ForeignKey("communities.id", ondelete="SET NULL"), nullable=True
+    )
     expires_at = Column(DateTime(timezone=True), nullable=True)
     view_count = Column(Integer, default=0)
     archived_at = Column(DateTime(timezone=True), server_default=timestamp_default())

@@ -4,10 +4,9 @@ from unittest.mock import MagicMock
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.tasks import (
     cleanup_old_notifications_task,
-    process_scheduled_notifications_task,
     deliver_notification_task,
+    process_scheduled_notifications_task,
 )
-
 
 # ============== 27) cleanup_old_notifications_task ==============
 
@@ -75,7 +74,9 @@ def test_cleanup_old_notifications_commits(monkeypatch, session):
 # ============== 28) process_scheduled_notifications_task ==============
 
 
-def test_process_scheduled_notifications_enqueues_and_sets_delivered(session, test_user):
+def test_process_scheduled_notifications_enqueues_and_sets_delivered(
+    session, test_user
+):
     due = datetime.now(timezone.utc) - timedelta(minutes=1)
     n = notification_models.Notification(
         user_id=test_user["id"],
@@ -119,7 +120,9 @@ def test_process_scheduled_notifications_non_due_noop(session, test_user):
     assert n.status == notification_models.NotificationStatus.PENDING
 
 
-def test_process_scheduled_notifications_enqueue_exception_logged(monkeypatch, caplog, session, test_user):
+def test_process_scheduled_notifications_enqueue_exception_logged(
+    monkeypatch, caplog, session, test_user
+):
     due = datetime.now(timezone.utc) - timedelta(minutes=1)
     n = notification_models.Notification(
         user_id=test_user["id"],
@@ -182,7 +185,9 @@ def test_deliver_notification_task_missing_prefs(session, test_user):
     push.assert_not_called()
 
 
-def test_deliver_notification_task_email_sender_raises_logged(monkeypatch, caplog, session, test_user):
+def test_deliver_notification_task_email_sender_raises_logged(
+    monkeypatch, caplog, session, test_user
+):
     n = notification_models.Notification(
         user_id=test_user["id"],
         content="email",
@@ -203,7 +208,9 @@ def test_deliver_notification_task_email_sender_raises_logged(monkeypatch, caplo
     push.assert_not_called()
 
 
-def test_deliver_notification_task_push_sender_raises_logged(monkeypatch, caplog, session, test_user):
+def test_deliver_notification_task_push_sender_raises_logged(
+    monkeypatch, caplog, session, test_user
+):
     n = notification_models.Notification(
         user_id=test_user["id"],
         content="push",

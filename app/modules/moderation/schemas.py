@@ -8,12 +8,9 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, constr, model_validator
 
-from app.modules.moderation.models import (
-    AppealStatus,
-    BlockDuration,
-    BlockType as BlockTypeEnum,
-)
 from app.modules.messaging.schemas import ScreenShareSessionOut
+from app.modules.moderation.models import AppealStatus, BlockDuration
+from app.modules.moderation.models import BlockType as BlockTypeEnum
 
 
 class WordSeverity(str, Enum):

@@ -2,7 +2,6 @@
 
 import fnmatch
 
-
 from app.core.config import settings
 from app.modules.search import cache as search_cache
 from app.modules.search import typesense_client

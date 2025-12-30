@@ -89,7 +89,8 @@ def test_digital_cooperative_membership_and_revenue(session, test_user, test_use
 
     member_user_ids = {member.user_id for member in coop.members}
     assert member_user_ids == {test_user["id"], test_user2["id"]}
-    assert pytest.approx(
-        sum(member.ownership_percentage for member in coop.members)
-    ) == 100.0
+    assert (
+        pytest.approx(sum(member.ownership_percentage for member in coop.members))
+        == 100.0
+    )
     assert coop.transactions[0].amount == pytest.approx(500.0)

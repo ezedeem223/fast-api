@@ -1,14 +1,11 @@
-from fastapi import status
-
 from app.modules.community import CommunityMember, CommunityRole
+from fastapi import status
 from tests.conftest import TestingSessionLocal
 
 
 def _login(client, email: str, password: str) -> dict:
     """Return authorization headers for the given user."""
-    response = client.post(
-        "/login", data={"username": email, "password": password}
-    )
+    response = client.post("/login", data={"username": email, "password": password})
     assert response.status_code == status.HTTP_200_OK
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -44,9 +41,7 @@ def test_join_community_adds_member(authorized_client, client, test_user2):
     community = _create_community(authorized_client, "Joinable Hub")
 
     headers = _login(client, test_user2["email"], test_user2["password"])
-    response = client.post(
-        f"/communities/{community['id']}/join", headers=headers
-    )
+    response = client.post(f"/communities/{community['id']}/join", headers=headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["message"] == "Successfully joined the community"
 
@@ -60,9 +55,7 @@ def test_join_community_adds_member(authorized_client, client, test_user2):
         assert membership.role == CommunityRole.MEMBER
 
 
-def test_join_community_twice_is_prevented(
-    authorized_client, client, test_user2
-):
+def test_join_community_twice_is_prevented(authorized_client, client, test_user2):
     community = _create_community(authorized_client, "Exclusive Hub")
     headers = _login(client, test_user2["email"], test_user2["password"])
 
@@ -74,15 +67,11 @@ def test_join_community_twice_is_prevented(
     assert second.json()["detail"] == "You are already a member of this community"
 
 
-def test_create_post_requires_membership(
-    authorized_client, client, test_user2
-):
+def test_create_post_requires_membership(authorized_client, client, test_user2):
     community = _create_community(authorized_client, "Writers Lounge")
     post_payload = {"title": "Announcements", "content": "Welcome aboard!"}
 
-    non_member_headers = _login(
-        client, test_user2["email"], test_user2["password"]
-    )
+    non_member_headers = _login(client, test_user2["email"], test_user2["password"])
     denied = client.post(
         f"/communities/{community['id']}/post",
         json=post_payload,

@@ -7,8 +7,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.users.schemas import SortOption
 from app.modules.posts.schemas import PostOut
+from app.modules.users.schemas import SortOption
 
 
 class SearchParams(BaseModel):

@@ -2,10 +2,10 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
-from app import oauth2, models
+from app import models, oauth2
 from app.core.config.settings import Settings
+from fastapi import HTTPException
 
 
 def test_create_and_verify_access_token_roundtrip():
@@ -31,7 +31,9 @@ def test_verify_access_token_missing_user_id_raises():
 
 
 def test_get_current_user_blacklisted_and_banned(session):
-    user = models.User(email="auth19@example.com", hashed_password="x", is_verified=True)
+    user = models.User(
+        email="auth19@example.com", hashed_password="x", is_verified=True
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -89,7 +91,10 @@ def test_key_loading_validations(tmp_path):
 
     # Missing file raises
     with pytest.raises(ValueError):
-        Settings(rsa_private_key_path=str(tmp_path / "missing.pem"), rsa_public_key_path=str(pub))
+        Settings(
+            rsa_private_key_path=str(tmp_path / "missing.pem"),
+            rsa_public_key_path=str(pub),
+        )
 
     # Empty file raises
     empty = tmp_path / "empty.pem"

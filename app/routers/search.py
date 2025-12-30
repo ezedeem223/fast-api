@@ -1,39 +1,42 @@
-"""Search router covering plain and advanced search with spell suggestions and cache integration."""
+"""Search router covering plain and advanced search with spell suggestions and cache integration.
 
-import os
+Supports Typesense offload when configured; falls back to in-app search. Uses Redis-backed
+caches for suggestions/stats and feeds analytics charts. Auth not strictly required for
+plain search, but advanced endpoints may rely on user context.
+"""
+
 import json
 import logging
+import os
 from datetime import datetime
 from typing import List, Optional
 
 from redis.exceptions import RedisError
-
-from fastapi import APIRouter, Depends, Query
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models, schemas, oauth2
 from app.core.config import settings
 from app.core.database import get_db
+from app.modules.search import SearchParams, SearchResponse
+from app.modules.search.service import update_search_statistics
+from app.modules.search.typesense_client import get_typesense_client
+from app.modules.utils.analytics import analyze_user_behavior
 from app.modules.utils.search import (
-    search_posts,
-    get_spell_suggestions,
     format_spell_suggestions,
+    get_spell_suggestions,
+    search_posts,
     sort_search_results,
 )
-from app.modules.utils.analytics import analyze_user_behavior
-from app.modules.search import SearchParams, SearchResponse
-from app.modules.search.service import (
-    update_search_statistics,
-)
-from app.modules.search.typesense_client import get_typesense_client
+from fastapi import APIRouter, Depends, Query
+from fastapi.encoders import jsonable_encoder
+
+from .. import models, oauth2, schemas
 from ..analytics import (
-    record_search_query,
+    generate_search_trends_chart,
     get_popular_searches,
     get_recent_searches,
     get_user_searches,
-    generate_search_trends_chart,
+    record_search_query,
 )
 
 logger = logging.getLogger(__name__)
@@ -202,7 +205,10 @@ async def advanced_search(
         .all()
     )
 
-    return {"total": total, "posts": [schemas.PostOut.model_validate(post) for post in posts]}
+    return {
+        "total": total,
+        "posts": [schemas.PostOut.model_validate(post) for post in posts],
+    }
 
 
 @router.get("/categories", response_model=List[schemas.Category])

@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.modules.notifications import models as notification_models
+from app.modules.notifications import service as notifications_service
 from app.modules.notifications.common import delivery_status_cache
 from app.modules.notifications.service import NotificationDeliveryManager
-from app.modules.notifications import service as notifications_service
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +40,9 @@ def _make_notification(session, user_id):
 
 
 @pytest.mark.asyncio
-async def test_delivery_cache_hit_returns_without_sending(monkeypatch, session, test_user):
+async def test_delivery_cache_hit_returns_without_sending(
+    monkeypatch, session, test_user
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -66,7 +68,9 @@ async def test_delivery_cache_hit_returns_without_sending(monkeypatch, session, 
 
 
 @pytest.mark.asyncio
-async def test_delivery_cache_cleared_triggers_send_and_sets_success(monkeypatch, session, test_user):
+async def test_delivery_cache_cleared_triggers_send_and_sets_success(
+    monkeypatch, session, test_user
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -93,7 +97,9 @@ async def test_delivery_cache_cleared_triggers_send_and_sets_success(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_delivery_cache_updates_to_failure_on_send_error(monkeypatch, session, test_user):
+async def test_delivery_cache_updates_to_failure_on_send_error(
+    monkeypatch, session, test_user
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -141,13 +147,19 @@ async def test_push_channel_success_sets_delivered(monkeypatch, session, test_us
     push_mock.assert_awaited_once()
     session.refresh(n)
     assert n.status == notification_models.NotificationStatus.DELIVERED
-    log = session.query(notification_models.NotificationDeliveryLog).filter_by(notification_id=n.id).first()
+    log = (
+        session.query(notification_models.NotificationDeliveryLog)
+        .filter_by(notification_id=n.id)
+        .first()
+    )
     assert log is not None
     assert log.delivery_channel == "all"
 
 
 @pytest.mark.asyncio
-async def test_push_channel_exception_logged_and_marks_failed(monkeypatch, session, test_user, caplog):
+async def test_push_channel_exception_logged_and_marks_failed(
+    monkeypatch, session, test_user, caplog
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=False,
@@ -174,7 +186,9 @@ async def test_push_channel_exception_logged_and_marks_failed(monkeypatch, sessi
 
 
 @pytest.mark.asyncio
-async def test_push_channel_no_devices_returns_without_error(monkeypatch, session, test_user, caplog):
+async def test_push_channel_no_devices_returns_without_error(
+    monkeypatch, session, test_user, caplog
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=False,
@@ -187,7 +201,9 @@ async def test_push_channel_no_devices_returns_without_error(monkeypatch, sessio
     n = _make_notification(session, test_user["id"])
 
     async def no_devices(notification, content):
-        notifications_service.logger.info("No active devices for user %s", notification.user_id)
+        notifications_service.logger.info(
+            "No active devices for user %s", notification.user_id
+        )
         return None
 
     monkeypatch.setattr(mgr, "_send_push_notification", no_devices)
@@ -218,7 +234,11 @@ async def test_push_channel_status_and_log_consistent(monkeypatch, session, test
     assert success is True
     session.refresh(n)
     assert n.status == notification_models.NotificationStatus.DELIVERED
-    log = session.query(notification_models.NotificationDeliveryLog).filter_by(notification_id=n.id).first()
+    log = (
+        session.query(notification_models.NotificationDeliveryLog)
+        .filter_by(notification_id=n.id)
+        .first()
+    )
     assert log is not None
     assert log.status == notification_models.NotificationStatus.DELIVERED.value
 
@@ -227,7 +247,9 @@ async def test_push_channel_status_and_log_consistent(monkeypatch, session, test
 
 
 @pytest.mark.asyncio
-async def test_email_channel_missing_email_logs_warning(monkeypatch, session, test_user, caplog):
+async def test_email_channel_missing_email_logs_warning(
+    monkeypatch, session, test_user, caplog
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -240,7 +262,9 @@ async def test_email_channel_missing_email_logs_warning(monkeypatch, session, te
     n = _make_notification(session, test_user["id"])
 
     async def warn_email(notification, content):
-        notifications_service.logger.warning("No email found for user %s", notification.user_id)
+        notifications_service.logger.warning(
+            "No email found for user %s", notification.user_id
+        )
 
     monkeypatch.setattr(mgr, "_send_email_notification", warn_email)
     caplog.set_level("WARNING")
@@ -276,7 +300,9 @@ async def test_email_channel_timeout_logged(monkeypatch, session, test_user, cap
 
 
 @pytest.mark.asyncio
-async def test_email_channel_bad_credentials_logged(monkeypatch, session, test_user, caplog):
+async def test_email_channel_bad_credentials_logged(
+    monkeypatch, session, test_user, caplog
+):
     mgr = _make_delivery_manager(session)
     prefs = SimpleNamespace(
         email_notifications=True,
@@ -316,7 +342,9 @@ async def test_realtime_channel_success(monkeypatch, session, test_user):
     mgr._get_user_preferences = lambda _: prefs
     n = _make_notification(session, test_user["id"])
     ws_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", ws_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", ws_mock
+    )
 
     success = await mgr.deliver_notification(n)
     assert success is True
@@ -368,7 +396,9 @@ async def test_realtime_channel_accepts_dict_payload(monkeypatch, session, test_
     mgr._get_user_preferences = lambda _: prefs
     n = _make_notification(session, test_user["id"])
     ws_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", ws_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", ws_mock
+    )
 
     success = await mgr.deliver_notification(n)
     assert success is True
@@ -394,6 +424,10 @@ async def test_email_channel_success_adds_log(monkeypatch, session, test_user):
     assert success is True
     session.refresh(n)
     assert n.status == notification_models.NotificationStatus.DELIVERED
-    log = session.query(notification_models.NotificationDeliveryLog).filter_by(notification_id=n.id).first()
+    log = (
+        session.query(notification_models.NotificationDeliveryLog)
+        .filter_by(notification_id=n.id)
+        .first()
+    )
     assert log is not None
     assert log.status == notification_models.NotificationStatus.DELIVERED.value

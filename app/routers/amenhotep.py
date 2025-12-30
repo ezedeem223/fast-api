@@ -3,17 +3,26 @@
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Request
+import logging
+from typing import List
+
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from typing import List
-import logging
+
+from app import i18n
+from app.core.database import get_db
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 
 # Local imports
-from .. import models, schemas, oauth2
-from app.core.database import get_db
+from .. import models, oauth2, schemas
 from ..ai_chat.amenhotep import AmenhotepAI
-from app import i18n
 
 # =====================================================
 # =============== Global Variables ====================
@@ -26,6 +35,7 @@ DEFAULT_FALLBACK_LANG = "en"
 class AmenhotepAskRequest(BaseModel):
     message: str = Field(..., min_length=1)
     language: str | None = None
+
 
 # =====================================================
 # ================ WebSocket Endpoints =================
@@ -102,9 +112,7 @@ async def websocket_endpoint(
                 break
             except Exception as e:
                 logger.error(f"Error processing message for user {user_id}: {str(e)}")
-                error_message = (
-                    "Sorry, there was an error processing your message. Please try again."
-                )
+                error_message = "Sorry, there was an error processing your message. Please try again."
                 await websocket.send_text(error_message)
 
     except Exception as e:

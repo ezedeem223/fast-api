@@ -1,14 +1,16 @@
 """Social auth router for Facebook/Twitter OAuth flows."""
 
-from fastapi import APIRouter, Depends, Request, HTTPException
-from authlib.integrations.starlette_client import OAuth
-from starlette.config import Config
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-from .. import models, oauth2, schemas
+from authlib.integrations.starlette_client import OAuth
+from sqlalchemy.orm import Session
+from starlette.config import Config
+
 from app.core.config import settings
 from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from .. import models, oauth2, schemas
 
 router = APIRouter(tags=["Social Authentication"])
 

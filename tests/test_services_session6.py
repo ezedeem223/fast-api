@@ -1,12 +1,11 @@
-
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
 from app.services.comments import service as comment_service
-from app.services.users import service as users_service
 from app.services.community import service as community_service
 from app.services.posts.post_service import PostService
+from app.services.users import service as users_service
+from fastapi import HTTPException
 
 
 def _user(session, email="u@example.com", verified=True):

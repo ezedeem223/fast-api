@@ -10,20 +10,9 @@ import enum
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Text,
-    Float,
-    LargeBinary,
-    Enum as SAEnum,
-    JSON,
-    Index,
-)
+from sqlalchemy import JSON, Boolean, Column, DateTime
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Float, ForeignKey, Index, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 
@@ -89,8 +78,13 @@ class Conversation(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
     title = Column(String, nullable=True)
-    type = Column(SAEnum(ConversationType, name="conversation_type_enum"), default=ConversationType.DIRECT)
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    type = Column(
+        SAEnum(ConversationType, name="conversation_type_enum"),
+        default=ConversationType.DIRECT,
+    )
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
     last_message_at = Column(DateTime(timezone=True), nullable=True)
@@ -123,7 +117,11 @@ class ConversationMember(Base):
     conversation = relationship("Conversation", back_populates="members")
     user = relationship("User")
 
-    __table_args__ = (Index("ix_conversation_members_unique", "conversation_id", "user_id", unique=True),)
+    __table_args__ = (
+        Index(
+            "ix_conversation_members_unique", "conversation_id", "user_id", unique=True
+        ),
+    )
 
 
 class Message(Base):
@@ -133,7 +131,9 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    receiver_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
     encrypted_content = Column(LargeBinary, nullable=True, default=b"")
     content = Column(Text, nullable=True)
     replied_to_id = Column(
@@ -194,8 +194,12 @@ class Message(Base):
     # Backwards compatibility alias for legacy code that expected a `created_at` column.
     created_at = synonym("timestamp")
 
-    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
-    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+    sender = relationship(
+        "User", foreign_keys=[sender_id], back_populates="sent_messages"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="received_messages"
+    )
     replied_to = relationship(
         "Message", remote_side=[id], foreign_keys=[replied_to_id], backref="replies"
     )
@@ -247,7 +251,9 @@ class EncryptedSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
     updated_at = Column(DateTime(timezone=True), onupdate=timestamp_default())
 
-    user = relationship("User", back_populates="encrypted_sessions", foreign_keys=[user_id])
+    user = relationship(
+        "User", back_populates="encrypted_sessions", foreign_keys=[user_id]
+    )
     other_user = relationship("User", foreign_keys=[other_user_id])
 
 
@@ -267,8 +273,12 @@ class EncryptedCall(Base):
     quality_score = Column(Integer, default=100)
     last_key_update = Column(DateTime, default=timestamp_default())
 
-    caller = relationship("User", foreign_keys=[caller_id], back_populates="outgoing_encrypted_calls")
-    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="incoming_encrypted_calls")
+    caller = relationship(
+        "User", foreign_keys=[caller_id], back_populates="outgoing_encrypted_calls"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="incoming_encrypted_calls"
+    )
 
 
 class Call(Base):
@@ -280,15 +290,21 @@ class Call(Base):
     caller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     call_type = Column(SAEnum(CallType, name="call_type_enum"))
-    status = Column(SAEnum(CallStatus, name="call_status_enum"), default=CallStatus.PENDING)
+    status = Column(
+        SAEnum(CallStatus, name="call_status_enum"), default=CallStatus.PENDING
+    )
     start_time = Column(DateTime(timezone=True), server_default=timestamp_default())
     end_time = Column(DateTime(timezone=True), nullable=True)
     encryption_key = Column(String, nullable=False)
     last_key_update = Column(DateTime(timezone=True), nullable=False)
     quality_score = Column(Integer, default=100)
 
-    caller = relationship("User", foreign_keys=[caller_id], back_populates="outgoing_calls")
-    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="incoming_calls")
+    caller = relationship(
+        "User", foreign_keys=[caller_id], back_populates="outgoing_calls"
+    )
+    receiver = relationship(
+        "User", foreign_keys=[receiver_id], back_populates="incoming_calls"
+    )
     screen_share_sessions = relationship("ScreenShareSession", back_populates="call")
 
 
@@ -321,7 +337,9 @@ class ConversationStatistics(Base):
     conversation_id = Column(String, index=True)
     total_messages = Column(Integer, default=0)
     total_time = Column(Integer, default=0)
-    last_message_at = Column(DateTime(timezone=True), server_default=timestamp_default())
+    last_message_at = Column(
+        DateTime(timezone=True), server_default=timestamp_default()
+    )
     user1_id = Column(Integer, ForeignKey("users.id"))
     user2_id = Column(Integer, ForeignKey("users.id"))
     total_files = Column(Integer, default=0)

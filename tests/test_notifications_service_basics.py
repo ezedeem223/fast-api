@@ -1,18 +1,18 @@
-from unittest.mock import AsyncMock, MagicMock
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.notifications import models as notification_models
-from app.modules.notifications.service import (
-    NotificationService,
-    NotificationDeliveryManager,
-    MAX_METADATA_BYTES,
-)
-from app.modules.notifications.common import notification_cache, delivery_status_cache
 from app.modules.notifications import schemas as notification_schemas
 from app.modules.notifications import service as notifications_service
+from app.modules.notifications.common import delivery_status_cache, notification_cache
+from app.modules.notifications.service import (
+    MAX_METADATA_BYTES,
+    NotificationDeliveryManager,
+    NotificationService,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +27,9 @@ def _clear_notification_cache():
 def _make_service(session, deliver_result=True):
     """Helper to create NotificationService with delivery patched to avoid external I/O."""
     service = NotificationService(session, background_tasks=MagicMock())
-    service.delivery_manager.deliver_notification = AsyncMock(return_value=deliver_result)
+    service.delivery_manager.deliver_notification = AsyncMock(
+        return_value=deliver_result
+    )
     return service
 
 
@@ -150,7 +152,9 @@ async def test_metadata_valid_json_is_persisted(session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_metadata_parsing_failure_does_not_block_delivery(monkeypatch, session, test_user):
+async def test_metadata_parsing_failure_does_not_block_delivery(
+    monkeypatch, session, test_user
+):
     service = _make_service(session, deliver_result=True)
     service._find_or_create_group = lambda *_, **__: None
     deliver_mock = AsyncMock(return_value=True)
@@ -180,7 +184,9 @@ async def test_commit_failure_rolls_back(session, test_user, monkeypatch):
         rollback_called["value"] = True
         session.rollback()
 
-    monkeypatch.setattr(service, "repository", MagicMock(create_notification=fake_create))
+    monkeypatch.setattr(
+        service, "repository", MagicMock(create_notification=fake_create)
+    )
     monkeypatch.setattr(session, "rollback", fake_rollback)
 
     with pytest.raises(RuntimeError):
@@ -280,7 +286,9 @@ async def test_bulk_create_cache_key_stable_for_same_metadata(session, test_user
 
 
 @pytest.mark.asyncio
-async def test_bulk_create_notifications_rollback_on_failure(session, test_user, monkeypatch):
+async def test_bulk_create_notifications_rollback_on_failure(
+    session, test_user, monkeypatch
+):
     service = _make_service(session)
     service._find_or_create_group = lambda *_, **__: None
 
@@ -313,19 +321,24 @@ async def test_bulk_create_notifications_rollback_on_failure(session, test_user,
     with pytest.raises(RuntimeError):
         await service.bulk_create_notifications(payloads)
     # transaction should rollback completely
-    assert session.query(notification_models.Notification).filter_by(content="ok").count() == 0
-
-
+    assert (
+        session.query(notification_models.Notification).filter_by(content="ok").count()
+        == 0
+    )
 
 
 @pytest.mark.asyncio
 async def test_auto_translate_applied_when_enabled(monkeypatch, session, test_user):
     service = _make_service(session)
     service._find_or_create_group = lambda *_, **__: None
-    monkeypatch.setattr("app.modules.notifications.service.detect_language", lambda _: "ar")
+    monkeypatch.setattr(
+        "app.modules.notifications.service.detect_language", lambda _: "ar"
+    )
     translated = "translated-text"
     translate_mock = MagicMock(return_value=translated)
-    monkeypatch.setattr("app.modules.notifications.service.translate_text", translate_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.service.translate_text", translate_mock
+    )
 
     # force prefs and set attributes not present on model
     prefs = service.repository.ensure_preferences(test_user["id"])
@@ -346,9 +359,13 @@ async def test_auto_translate_applied_when_enabled(monkeypatch, session, test_us
 async def test_auto_translate_disabled(monkeypatch, session, test_user):
     service = _make_service(session)
     service._find_or_create_group = lambda *_, **__: None
-    monkeypatch.setattr("app.modules.notifications.service.detect_language", lambda _: "en")
+    monkeypatch.setattr(
+        "app.modules.notifications.service.detect_language", lambda _: "en"
+    )
     translate_mock = MagicMock(side_effect=AssertionError("should not translate"))
-    monkeypatch.setattr("app.modules.notifications.service.translate_text", translate_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.service.translate_text", translate_mock
+    )
 
     prefs = service.repository.ensure_preferences(test_user["id"])
     setattr(prefs, "auto_translate", False)
@@ -400,8 +417,12 @@ def test_get_user_preferences_handles_db_exception(session, test_user, monkeypat
 async def test_translation_failure_uses_original(monkeypatch, session, test_user):
     service = _make_service(session)
     service._find_or_create_group = lambda *_, **__: None
-    monkeypatch.setattr("app.modules.notifications.service.detect_language", lambda _: "ar")
-    monkeypatch.setattr("app.modules.notifications.service.translate_text", MagicMock(return_value=None))
+    monkeypatch.setattr(
+        "app.modules.notifications.service.detect_language", lambda _: "ar"
+    )
+    monkeypatch.setattr(
+        "app.modules.notifications.service.translate_text", MagicMock(return_value=None)
+    )
     prefs = service.repository.ensure_preferences(test_user["id"])
     setattr(prefs, "auto_translate", True)
     setattr(prefs, "preferred_language", "en")
@@ -413,8 +434,6 @@ async def test_translation_failure_uses_original(monkeypatch, session, test_user
     )
 
     assert notification.content == "مرحبا"
-
-
 
 
 def _make_delivery_manager(session):
@@ -445,7 +464,9 @@ def _make_notification(session, user_id):
 @pytest.mark.asyncio
 async def test_all_channels_delivered(monkeypatch, session, test_user):
     mgr = _make_delivery_manager(session)
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", AsyncMock())
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", AsyncMock()
+    )
     monkeypatch.setattr(mgr, "_send_email_notification", AsyncMock())
     monkeypatch.setattr(mgr, "_send_push_notification", AsyncMock())
 
@@ -464,7 +485,11 @@ async def test_all_channels_delivered(monkeypatch, session, test_user):
     assert success is True
     session.refresh(notification)
     assert notification.status == notification_models.NotificationStatus.DELIVERED
-    log = session.query(notification_models.NotificationDeliveryLog).filter_by(notification_id=notification.id).first()
+    log = (
+        session.query(notification_models.NotificationDeliveryLog)
+        .filter_by(notification_id=notification.id)
+        .first()
+    )
     assert log is not None
     assert log.delivery_channel == "all"
 
@@ -475,7 +500,9 @@ async def test_email_only(monkeypatch, session, test_user):
     email_mock = AsyncMock()
     monkeypatch.setattr(mgr, "_send_email_notification", email_mock)
     monkeypatch.setattr(mgr, "_send_push_notification", AsyncMock())
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", AsyncMock())
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", AsyncMock()
+    )
 
     prefs_obj = SimpleNamespace(
         email_notifications=True,
@@ -500,7 +527,9 @@ async def test_push_only(monkeypatch, session, test_user):
     push_mock = AsyncMock()
     monkeypatch.setattr(mgr, "_send_email_notification", AsyncMock())
     monkeypatch.setattr(mgr, "_send_push_notification", push_mock)
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", AsyncMock())
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", AsyncMock()
+    )
 
     prefs_obj = SimpleNamespace(
         email_notifications=False,
@@ -523,7 +552,9 @@ async def test_push_only(monkeypatch, session, test_user):
 async def test_ws_only(monkeypatch, session, test_user):
     mgr = _make_delivery_manager(session)
     ws_mock = AsyncMock()
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", ws_mock)
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", ws_mock
+    )
     monkeypatch.setattr(mgr, "_send_email_notification", AsyncMock())
     monkeypatch.setattr(mgr, "_send_push_notification", AsyncMock())
 
@@ -547,12 +578,16 @@ async def test_ws_only(monkeypatch, session, test_user):
 @pytest.mark.asyncio
 async def test_missing_email_logs_warning(monkeypatch, session, test_user, caplog):
     mgr = _make_delivery_manager(session)
+
     async def fake_email(notification, content):
         logger = notifications_service.logger
         logger.warning("No email found for user %s", notification.user_id)
+
     monkeypatch.setattr(mgr, "_send_email_notification", fake_email)
     monkeypatch.setattr(mgr, "_send_push_notification", AsyncMock())
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", AsyncMock())
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", AsyncMock()
+    )
     prefs_obj = SimpleNamespace(
         email_notifications=True,
         push_notifications=False,
@@ -572,10 +607,14 @@ async def test_missing_email_logs_warning(monkeypatch, session, test_user, caplo
 async def test_no_devices_logs_and_returns(monkeypatch, session, test_user, caplog):
     mgr = _make_delivery_manager(session)
     monkeypatch.setattr(mgr, "_send_email_notification", AsyncMock())
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", AsyncMock())
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", AsyncMock()
+    )
+
     async def fake_push(notification, content):
         logger = notifications_service.logger
         logger.info("No active devices for user %s", notification.user_id)
+
     monkeypatch.setattr(mgr, "_send_push_notification", fake_push)
     prefs_obj = SimpleNamespace(
         email_notifications=False,
@@ -598,9 +637,13 @@ async def test_ws_manager_exception_logged(monkeypatch, session, test_user, capl
     monkeypatch.setattr(mgr, "_send_email_notification", AsyncMock())
     monkeypatch.setattr(mgr, "_send_push_notification", AsyncMock())
     caplog.set_level("ERROR")
+
     async def boom(*args, **kwargs):
         raise RuntimeError("ws down")
-    monkeypatch.setattr("app.modules.notifications.service.manager.send_personal_message", boom)
+
+    monkeypatch.setattr(
+        "app.modules.notifications.service.manager.send_personal_message", boom
+    )
     prefs_obj = SimpleNamespace(
         email_notifications=False,
         push_notifications=False,
@@ -612,4 +655,6 @@ async def test_ws_manager_exception_logged(monkeypatch, session, test_user, capl
     notification = _make_notification(session, test_user["id"])
     success = await mgr.deliver_notification(notification)
     assert success is True
-    assert any("Error sending realtime notification" in rec.message for rec in caplog.records)
+    assert any(
+        "Error sending realtime notification" in rec.message for rec in caplog.records
+    )

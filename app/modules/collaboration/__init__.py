@@ -1,9 +1,9 @@
 from .models import CollaborativeProject, ProjectContribution, ProjectStatus
 from .schemas import (
-    ProjectCreate,
-    ProjectOut,
     ContributionCreate,
     ContributionOut,
+    ProjectCreate,
+    ProjectOut,
     ProjectWithContributions,
 )
 

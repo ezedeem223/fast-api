@@ -1,5 +1,6 @@
-from app import schemas, models
 from datetime import datetime
+
+from app import models, schemas
 
 
 def test_root(client):
@@ -113,6 +114,7 @@ def test_update_post(authorized_client, test_user, test_posts):
     assert res.status_code == 200
     assert updated_post.title == data["title"]
     assert updated_post.content == data["content"]
+
 
 def test_unauthorized_user_update_post(client, test_user, test_posts):
     res = client.put(f"/posts/{test_posts[0].id}")

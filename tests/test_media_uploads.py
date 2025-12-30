@@ -3,12 +3,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks
 from starlette.datastructures import UploadFile
 
 from app import models
 from app.routers import post as post_router
 from app.services.posts.post_service import PostService
+from fastapi import BackgroundTasks
 
 
 def _fake_upload_file(filename: str, content: bytes, content_type: str) -> UploadFile:
@@ -40,7 +40,7 @@ def test_upload_file_creates_post(session, test_user):
     post = session.query(models.Post).filter_by(id=result.id).first()
     assert post is not None
     assert post.content
-    assert (Path(post.content).exists())
+    assert Path(post.content).exists()
 
 
 def test_upload_short_video(session, test_user):

@@ -1,10 +1,9 @@
-
 import pytest
-from fastapi import FastAPI
 
 from app.core import monitoring
 from app.core.cache import redis_cache
 from app.core.config import settings
+from fastapi import FastAPI
 
 # ---------------- Monitoring setup ----------------
 

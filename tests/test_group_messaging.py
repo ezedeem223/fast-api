@@ -1,5 +1,3 @@
-
-
 def test_create_group_conversation(authorized_client, test_user2):
     payload = {"title": "Project Alpha", "member_ids": [test_user2["id"]]}
     response = authorized_client.post("/message/conversations", json=payload)
@@ -11,7 +9,8 @@ def test_create_group_conversation(authorized_client, test_user2):
 
 def test_group_message_flow(authorized_client, test_user2):
     conversation_resp = authorized_client.post(
-        "/message/conversations", json={"title": "Chat", "member_ids": [test_user2["id"]]}
+        "/message/conversations",
+        json={"title": "Chat", "member_ids": [test_user2["id"]]},
     )
     assert conversation_resp.status_code == 201
     conversation_id = conversation_resp.json()["id"]
@@ -22,7 +21,9 @@ def test_group_message_flow(authorized_client, test_user2):
     )
     assert send_resp.status_code == 201
 
-    list_resp = authorized_client.get(f"/message/conversations/{conversation_id}/messages")
+    list_resp = authorized_client.get(
+        f"/message/conversations/{conversation_id}/messages"
+    )
     assert list_resp.status_code == 200
     assert len(list_resp.json()) == 1
     assert list_resp.json()[0]["content"] == "Hello group!"

@@ -1,15 +1,17 @@
 """Moderation router for warnings, bans, IP bans, and block appeals."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
 from datetime import timedelta
+from typing import List
+
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.modules.moderation.service import ban_user, process_report, warn_user
+from app.modules.utils.analytics import update_ban_statistics
+from fastapi import APIRouter, Depends, HTTPException, status
 
 # Import project modules
-from .. import models, schemas, oauth2
-from app.core.database import get_db
-from app.modules.moderation.service import warn_user, ban_user, process_report
-from app.modules.utils.analytics import update_ban_statistics
+from .. import models, oauth2, schemas
 
 # Configure the moderation router
 router = APIRouter(prefix="/moderation", tags=["Moderation"])

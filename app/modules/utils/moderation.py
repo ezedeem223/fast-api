@@ -6,8 +6,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from .common import logger
 from app.modules.moderation.models import AuditLog
+
+from .common import logger
 
 
 def log_event(db: Session, event_type: str, metadata: Optional[dict] = None) -> None:
@@ -31,7 +32,9 @@ def log_admin_action(
     except Exception:
         db.rollback()
         # Keep logging but avoid breaking callers
-        logger.warning("Failed to persist audit log for admin=%s action=%s", admin_id, action)
+        logger.warning(
+            "Failed to persist audit log for admin=%s action=%s", admin_id, action
+        )
 
 
 __all__ = ["log_event", "log_admin_action"]

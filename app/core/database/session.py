@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Generator
 
 from sqlalchemy import create_engine, event
@@ -15,7 +16,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from datetime import datetime, timezone
 
 
 def _engine_kwargs(database_url: str) -> dict:
@@ -36,7 +36,10 @@ def _engine_kwargs(database_url: str) -> dict:
 
 
 def build_engine(database_url: str | None = None) -> Engine:
-    """Create a SQLAlchemy engine using application settings by default."""
+    """Create a SQLAlchemy engine using application settings by default.
+
+    Respects APP_ENV=test by choosing the test DSN to protect production data.
+    """
     if database_url is None:
         use_test_url = settings.environment.lower() == "test"
         database_url = settings.get_database_url(use_test=use_test_url)
@@ -55,6 +58,7 @@ if engine.dialect.name == "sqlite":
             return datetime.now(timezone.utc).isoformat(" ")
 
         dbapi_connection.create_function("now", 0, _now)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

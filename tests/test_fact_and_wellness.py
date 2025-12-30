@@ -1,24 +1,23 @@
-
 from app.modules.fact_checking.models import FactCheckStatus
+from app.modules.learning.models import (
+    Certificate,
+    LearningEnrollment,
+    LearningModule,
+    LearningPath,
+)
+from app.modules.local_economy.models import (
+    CooperativeMember,
+    CooperativeTransaction,
+    DigitalCooperative,
+    LocalMarketInquiry,
+    LocalMarketListing,
+    LocalMarketTransaction,
+)
 from app.modules.marketplace.models import (
     ContentListing,
     ContentPurchase,
     ContentReview,
     ContentSubscription,
-)
-from app.modules.learning.models import (
-    LearningPath,
-    LearningModule,
-    LearningEnrollment,
-    Certificate,
-)
-from app.modules.local_economy.models import (
-    LocalMarketListing,
-    LocalMarketInquiry,
-    LocalMarketTransaction,
-    DigitalCooperative,
-    CooperativeMember,
-    CooperativeTransaction,
 )
 
 

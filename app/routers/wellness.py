@@ -1,15 +1,19 @@
-"""Wellness router for metrics, alerts, sessions, modes, and goals."""
+"""Wellness router for metrics, alerts, sessions, modes, and goals.
+
+Auth required; delegates to WellnessService for persistence and calculations. Exposes
+endpoints for metrics ingestion, goal management, alerts, mode toggles, and summary.
+"""
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.oauth2 import get_current_user
 from app.modules.users.models import User
 from app.modules.wellness.service import WellnessService
+from app.oauth2 import get_current_user
+from fastapi import APIRouter, Depends
 
 router = APIRouter(prefix="/wellness", tags=["Wellness"])
 
@@ -47,7 +51,7 @@ async def create_wellness_goal(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """  """
+    """ """
     goal = WellnessService.set_wellness_goal(
         db=db,
         user_id=current_user.id,
@@ -63,7 +67,7 @@ async def enable_do_not_disturb(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """   """
+    """ """
     mode = WellnessService.enable_do_not_disturb(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes
     )
@@ -76,7 +80,7 @@ async def enable_mental_health_mode(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """   """
+    """ """
     mode = WellnessService.enable_mental_health_mode(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes
     )

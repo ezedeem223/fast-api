@@ -3,20 +3,19 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app import models
 from app.modules.users.models import User
 from app.modules.utils.content import is_content_offensive
+from fastapi import HTTPException
 
 REPORTS_DAILY_LIMIT = 3
 
+
 def _ensure_reason(reason: Optional[str]) -> str:
     if not reason or not reason.strip():
-        raise HTTPException(
-            status_code=422, detail="A report reason must be provided"
-        )
+        raise HTTPException(status_code=422, detail="A report reason must be provided")
     return reason.strip()
 
 
@@ -66,11 +65,7 @@ def submit_report(
         raise HTTPException(status_code=409, detail="Report already submitted")
 
     if post_id is not None:
-        target = (
-            db.query(models.Post)
-            .filter(models.Post.id == post_id)
-            .first()
-        )
+        target = db.query(models.Post).filter(models.Post.id == post_id).first()
         if not target:
             raise HTTPException(status_code=404, detail="Post not found")
 
@@ -94,9 +89,7 @@ def submit_report(
 
     else:
         target = (
-            db.query(models.Comment)
-            .filter(models.Comment.id == comment_id)
-            .first()
+            db.query(models.Comment).filter(models.Comment.id == comment_id).first()
         )
         if not target:
             raise HTTPException(status_code=404, detail="Comment not found")

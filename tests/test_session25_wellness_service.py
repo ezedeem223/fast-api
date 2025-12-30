@@ -37,12 +37,26 @@ def test_create_and_end_sessions(session):
 
 def test_goals_and_alerts(session):
     svc = WellnessService()
-    goal = svc.set_wellness_goal(session, user_id=3, goal_type="sleep", target_value=8.0, target_date=datetime.now(timezone.utc) + timedelta(days=7))
+    goal = svc.set_wellness_goal(
+        session,
+        user_id=3,
+        goal_type="sleep",
+        target_value=8.0,
+        target_date=datetime.now(timezone.utc) + timedelta(days=7),
+    )
     assert goal.goal_type == "sleep"
-    alert = svc.create_wellness_alert(session, user_id=3, alert_type="usage", severity="high", message="Too much screen time")
+    alert = svc.create_wellness_alert(
+        session,
+        user_id=3,
+        alert_type="usage",
+        severity="high",
+        message="Too much screen time",
+    )
     assert alert.alert_type == "usage"
     # additional goals without target date
-    goal2 = svc.set_wellness_goal(session, user_id=3, goal_type="steps", target_value=10000)
+    goal2 = svc.set_wellness_goal(
+        session, user_id=3, goal_type="steps", target_value=10000
+    )
     assert goal2.target_date is None
 
 

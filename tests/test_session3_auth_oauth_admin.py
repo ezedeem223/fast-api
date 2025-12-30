@@ -1,22 +1,25 @@
 import asyncio
-import pytest
-import pyotp
 from datetime import datetime, timedelta, timezone
-from jose import jwt
-from fastapi import HTTPException
 from types import SimpleNamespace
+
+import pyotp
+import pytest
+from jose import jwt
 
 from app import models, oauth2
 from app.core.config import settings
-from app.modules.utils.security import hash as hash_password
-from app.routers import auth as auth_router
-from app.routers import admin_dashboard
 from app.modules.community import Community, CommunityMember, CommunityRole
 from app.modules.users.models import UserRole
+from app.modules.utils.security import hash as hash_password
 from app.oauth2 import create_access_token
+from app.routers import admin_dashboard
+from app.routers import auth as auth_router
+from fastapi import HTTPException
 
 
-def _make_user(session, email="auth@example.com", password="pass", role=UserRole.USER, **kwargs):
+def _make_user(
+    session, email="auth@example.com", password="pass", role=UserRole.USER, **kwargs
+):
     user = models.User(
         email=email,
         hashed_password=hash_password(password),
@@ -93,7 +96,9 @@ def test_refresh_and_logout_blacklists_token(client, session):
             algorithm=settings.algorithm,
         )
         settings.refresh_secret_key = settings.rsa_public_key
-        refreshed = client.post("/refresh-token", params={"refresh_token": refresh_token})
+        refreshed = client.post(
+            "/refresh-token", params={"refresh_token": refresh_token}
+        )
         assert refreshed.status_code == 200
         assert "access_token" in refreshed.json()
     finally:
@@ -107,7 +112,9 @@ def test_refresh_and_logout_blacklists_token(client, session):
 
     def _fake_verify(tok, exc):
         data = jwt.decode(tok, settings.rsa_public_key, algorithms=[settings.algorithm])
-        return SimpleNamespace(id=data.get("user_id"), session_id=data.get("session_id"))
+        return SimpleNamespace(
+            id=data.get("user_id"), session_id=data.get("session_id")
+        )
 
     oauth2.verify_access_token = _fake_verify
     out = client.post("/logout")
@@ -161,9 +168,7 @@ def test_admin_and_moderator_authorization(client, session):
         == admin_user
     )
     with pytest.raises(HTTPException):
-        asyncio.run(
-            admin_dashboard.get_current_admin(current_user=normal_user)
-        )
+        asyncio.run(admin_dashboard.get_current_admin(current_user=normal_user))
 
     # moderator routes: allow authorized member, deny non-member
     mod_user = _make_user(

@@ -3,29 +3,31 @@
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, asc
 from datetime import date, timedelta
+from functools import wraps
 from typing import List
 
-# Local imports
-from .. import models, schemas, oauth2
-from app.modules.community import Community
+from cachetools import TTLCache
+from sqlalchemy import asc, desc, func
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
+from app.modules.community import Community
+from app.modules.fact_checking.models import Fact, FactCheckStatus
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+# Local imports
+from .. import models, oauth2, schemas
 from ..analytics import (
-    get_user_activity,
-    get_problematic_users,
+    generate_search_trends_chart,
     get_ban_statistics,
     get_popular_searches,
+    get_problematic_users,
     get_recent_searches,
-    generate_search_trends_chart,
+    get_user_activity,
 )
-from app.modules.fact_checking.models import Fact, FactCheckStatus
-
-from cachetools import cached, TTLCache
 
 # =====================================================
 # =============== Global Variables ====================
@@ -34,6 +36,42 @@ router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 templates = Jinja2Templates(directory="app/templates")
 
 admin_cache = TTLCache(maxsize=100, ttl=300)
+
+
+def _hashable(value):
+    """
+    Produce a cache-friendly representation for unhashable args (e.g. DB sessions).
+    """
+    try:
+        hash(value)
+        return value
+    except TypeError:
+        return repr(value)
+
+
+def async_cached(cache):
+    """
+    Lightweight async-aware caching decorator using a shared TTLCache.
+    Ensures cached values are materialized (not coroutines) before returning.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = (
+                func.__name__,
+                tuple(_hashable(a) for a in args),
+                tuple(sorted((k, _hashable(v)) for k, v in kwargs.items())),
+            )
+            if key in cache:
+                return cache[key]
+            result = await func(*args, **kwargs)
+            cache[key] = result
+            return result
+
+        return wrapper
+
+    return decorator
 
 # =====================================================
 # =================== Endpoints =======================
@@ -84,7 +122,7 @@ async def get_current_admin(
 # General Statistics Endpoint
 # -----------------------------------------------------
 @router.get("/stats")
-@cached(admin_cache)  # Cache for 5 minutes
+@async_cached(admin_cache)  # Cache for 5 minutes
 async def get_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -109,19 +147,18 @@ async def get_statistics(
 
 
 @router.get("/fact-check/stats")
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_fact_check_stats(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
     """Fact-checking status counts and recent pending facts."""
     try:
-        counts = (
-            db.query(Fact.status, func.count(Fact.id))
-            .group_by(Fact.status)
-            .all()
-        )
-        count_map = {status.value if isinstance(status, FactCheckStatus) else status: cnt for status, cnt in counts}
+        counts = db.query(Fact.status, func.count(Fact.id)).group_by(Fact.status).all()
+        count_map = {
+            status.value if isinstance(status, FactCheckStatus) else status: cnt
+            for status, cnt in counts
+        }
         pending = (
             db.query(Fact)
             .filter(Fact.status == FactCheckStatus.PENDING)
@@ -189,8 +226,14 @@ async def update_user_role(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.is_moderator = role_update.is_moderator
-    user.is_admin = role_update.is_admin
+
+    # Map enum role to boolean flags.
+    role_value = getattr(role_update, "role", None)
+    if role_value is None:
+        raise HTTPException(status_code=400, detail="Role is required")
+    user.is_admin = role_value == schemas.UserRole.ADMIN
+    user.is_moderator = role_value == schemas.UserRole.MODERATOR
+
     db.commit()
     db.refresh(user)
     return user
@@ -200,7 +243,7 @@ async def update_user_role(
 # Reports Overview Endpoint
 # -----------------------------------------------------
 @router.get("/reports/overview")
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_reports_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -231,7 +274,7 @@ async def get_reports_overview(
 # Communities Overview Endpoint
 # -----------------------------------------------------
 @router.get("/communities/overview")
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_communities_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -303,7 +346,7 @@ async def problematic_users(
 # Ban Statistics Endpoints
 # -----------------------------------------------------
 @router.get("/ban-statistics")
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def ban_statistics(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -321,7 +364,7 @@ async def ban_statistics(
 
 
 @router.get("/ban-overview", response_model=schemas.BanStatisticsOverview)
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_ban_statistics_overview(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -390,7 +433,7 @@ async def get_common_ban_reasons(
 
 
 @router.get("/ban-effectiveness-trend", response_model=List[schemas.EffectivenessTrend])
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_ban_effectiveness_trend(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -418,7 +461,7 @@ async def get_ban_effectiveness_trend(
 
 
 @router.get("/ban-type-distribution", response_model=schemas.BanTypeDistribution)
-@cached(admin_cache)
+@async_cached(admin_cache)
 async def get_ban_type_distribution(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),

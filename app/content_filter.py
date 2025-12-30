@@ -1,5 +1,7 @@
-from sqlalchemy.orm import Session
 import re
+
+from sqlalchemy.orm import Session
+
 from app import models  # Ensure that your models are correctly imported
 
 
@@ -26,7 +28,9 @@ def check_content(db: Session, content: str):
 
     for banned_word in banned_words:
         pattern = (
-            banned_word.word if getattr(banned_word, "is_regex", False) else rf"\b{re.escape(banned_word.word)}\b"
+            banned_word.word
+            if getattr(banned_word, "is_regex", False)
+            else rf"\b{re.escape(banned_word.word)}\b"
         )
         if re.search(pattern, content, re.IGNORECASE):
             if banned_word.severity == "warn":
@@ -55,7 +59,9 @@ def filter_content(db: Session, content: str):
 
     for banned_word in banned_words:
         pattern = (
-            banned_word.word if getattr(banned_word, "is_regex", False) else rf"\b{re.escape(banned_word.word)}\b"
+            banned_word.word
+            if getattr(banned_word, "is_regex", False)
+            else rf"\b{re.escape(banned_word.word)}\b"
         )
         replacement = "*" * len(banned_word.word)
         content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)

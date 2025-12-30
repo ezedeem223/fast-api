@@ -1,33 +1,20 @@
-"""Call router for audio/video call setup, updates, and screen-share integration."""
+"""Call router for audio/video call setup, updates, and screen-share integration.
+
+Handles call lifecycle (start/update/active list), WebSocket exchange, encryption key
+rotation, and quality tracking. Relies on CallService for persistence and uses
+ConnectionManager to fan out realtime events between participants.
+"""
 
 # =====================================================
 # ==================== Imports ========================
 # =====================================================
-from fastapi import (
-    APIRouter,
-    Depends,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-    BackgroundTasks,
-)
-from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
 from typing import List
-from datetime import datetime, timezone, timedelta
 
-# Local imports
-from .. import schemas, oauth2, notifications
-from app.core.database import get_db
-from ..notifications import ConnectionManager
-from app.modules.utils.security import update_encryption_key
-from app.modules.utils.analytics import (
-    check_call_quality,
-    should_adjust_video_quality,
-    get_recommended_video_quality,
-    clean_old_quality_buffers,
-)
 from fastapi_utils.tasks import repeat_every
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.modules.messaging.models import (
     Call,
     CallStatus,
@@ -35,7 +22,26 @@ from app.modules.messaging.models import (
     ScreenShareStatus,
 )
 from app.modules.users.models import User
+from app.modules.utils.analytics import (
+    check_call_quality,
+    clean_old_quality_buffers,
+    get_recommended_video_quality,
+    should_adjust_video_quality,
+)
+from app.modules.utils.security import update_encryption_key
 from app.services.messaging import CallService
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
+
+# Local imports
+from .. import notifications, oauth2, schemas
+from ..notifications import ConnectionManager
 
 # =====================================================
 # =============== Global Variables ====================

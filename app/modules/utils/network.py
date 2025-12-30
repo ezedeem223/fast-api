@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime, timezone
 import time
+from datetime import datetime, timezone
 
-from fastapi import Request
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app import models
+from fastapi import Request
+
 from .common import logger
 
 
@@ -105,4 +106,11 @@ def safe_request(func, retries: int = 3, backoff: float = 0.1):
         return None
 
 
-__all__ = ["get_client_ip", "is_ip_banned", "detect_ip_evasion", "parse_json_response", "with_retry", "safe_request"]
+__all__ = [
+    "get_client_ip",
+    "is_ip_banned",
+    "detect_ip_evasion",
+    "parse_json_response",
+    "with_retry",
+    "safe_request",
+]

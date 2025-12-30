@@ -1,12 +1,10 @@
 """Sticker domain exports."""
 
-from .models import (
-    sticker_category_association,
-    Sticker as StickerModel,
-    StickerCategory as StickerCategoryModel,
-    StickerPack as StickerPackModel,
-    StickerReport as StickerReportModel,
-)
+from .models import Sticker as StickerModel
+from .models import StickerCategory as StickerCategoryModel
+from .models import StickerPack as StickerPackModel
+from .models import StickerReport as StickerReportModel
+from .models import sticker_category_association
 from .schemas import (
     Sticker,
     StickerBase,

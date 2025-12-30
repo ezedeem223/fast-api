@@ -1,8 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
 
-from app.services.community.service import CommunityService
 from app.modules.community.models import Community, CommunityMember, CommunityStatistics
 from app.modules.users.models import User
+from app.services.community.service import CommunityService
 
 
 def _setup_basic(session):

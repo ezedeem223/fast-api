@@ -73,14 +73,17 @@ class NotificationAnalyticsService:
         # attempt to derive aggregate engagement across users (best-effort)
         total_notifications = (
             self.db.query(models.Notification)
-            .filter(models.Notification.created_at >= datetime.now() - timedelta(days=days))
+            .filter(
+                models.Notification.created_at >= datetime.now() - timedelta(days=days)
+            )
             .count()
         )
         if total_notifications:
             read_notifications = (
                 self.db.query(models.Notification)
                 .filter(
-                    models.Notification.created_at >= datetime.now() - timedelta(days=days),
+                    models.Notification.created_at
+                    >= datetime.now() - timedelta(days=days),
                     models.Notification.is_read.is_(True),
                 )
                 .count()
@@ -88,9 +91,11 @@ class NotificationAnalyticsService:
             engagement_snapshot = {
                 "total_notifications": total_notifications,
                 "read_notifications": read_notifications,
-                "engagement_rate": (read_notifications / total_notifications * 100)
-                if total_notifications
-                else 0,
+                "engagement_rate": (
+                    (read_notifications / total_notifications * 100)
+                    if total_notifications
+                    else 0
+                ),
             }
         return {"delivery": delivery, "engagement": engagement_snapshot}
 

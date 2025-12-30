@@ -4,7 +4,6 @@ from sqlalchemy import Column, ForeignKey, Integer, Table
 
 from app.core.database import Base
 
-
 post_mentions = Table(
     "post_mentions",
     Base.metadata,
@@ -20,4 +19,3 @@ user_hashtag_follows = Table(
 )
 
 __all__ = ["post_mentions", "user_hashtag_follows"]
-

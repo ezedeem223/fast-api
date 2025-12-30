@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session, Query
+from sqlalchemy.orm import Query, Session
 
 from app.modules.notifications import models as notification_models
 
@@ -18,14 +18,18 @@ class NotificationRepository:
         self.db = db
 
     # ------------------------------------------------------------------ prefs
-    def get_preferences(self, user_id: int) -> Optional[notification_models.NotificationPreferences]:
+    def get_preferences(
+        self, user_id: int
+    ) -> Optional[notification_models.NotificationPreferences]:
         return (
             self.db.query(notification_models.NotificationPreferences)
             .filter(notification_models.NotificationPreferences.user_id == user_id)
             .first()
         )
 
-    def ensure_preferences(self, user_id: int) -> notification_models.NotificationPreferences:
+    def ensure_preferences(
+        self, user_id: int
+    ) -> notification_models.NotificationPreferences:
         prefs = self.get_preferences(user_id)
         if prefs:
             return prefs
@@ -56,7 +60,9 @@ class NotificationRepository:
         if not include_read:
             query = query.filter(notification_models.Notification.is_read.is_(False))
         if not include_archived:
-            query = query.filter(notification_models.Notification.is_archived.is_(False))
+            query = query.filter(
+                notification_models.Notification.is_archived.is_(False)
+            )
         if category:
             query = query.filter(notification_models.Notification.category == category)
         if priority:

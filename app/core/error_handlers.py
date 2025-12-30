@@ -12,13 +12,13 @@ import logging
 import traceback
 from datetime import datetime, timezone
 
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.exceptions import AppException
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
-from slowapi.errors import RateLimitExceeded
-
-from app.core.exceptions import AppException
 
 logger = logging.getLogger(__name__)
 UNPROCESSABLE_STATUS = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)

@@ -53,14 +53,20 @@ class DummyMessaging:
 
 def test_initialize_firebase_missing_key(monkeypatch):
     monkeypatch.setattr(firebase_config.settings, "firebase_project_id", "proj")
-    monkeypatch.setattr(firebase_config.settings, "firebase_api_key", None, raising=False)
+    monkeypatch.setattr(
+        firebase_config.settings, "firebase_api_key", None, raising=False
+    )
     monkeypatch.setattr(firebase_config.settings, "firebase_auth_domain", "")
     monkeypatch.setattr(firebase_config.settings, "firebase_storage_bucket", "")
     monkeypatch.setattr(firebase_config.settings, "firebase_messaging_sender_id", "")
     monkeypatch.setattr(firebase_config.settings, "firebase_app_id", "")
     monkeypatch.setattr(firebase_config.settings, "firebase_measurement_id", "")
     called = {"init": 0}
-    monkeypatch.setattr(firebase_config, "initialize_app", lambda *a, **k: called.__setitem__("init", called["init"] + 1))
+    monkeypatch.setattr(
+        firebase_config,
+        "initialize_app",
+        lambda *a, **k: called.__setitem__("init", called["init"] + 1),
+    )
     ok = firebase_config.initialize_firebase()
     assert ok is False
     assert called["init"] == 0
@@ -68,17 +74,27 @@ def test_initialize_firebase_missing_key(monkeypatch):
 
 def test_initialize_firebase_success(monkeypatch):
     dummy_credentials = DummyCred()
-    monkeypatch.setattr(firebase_config, "credentials", type("C", (), {"Certificate": dummy_credentials}))
+    monkeypatch.setattr(
+        firebase_config,
+        "credentials",
+        type("C", (), {"Certificate": dummy_credentials}),
+    )
     monkeypatch.setattr(firebase_config.settings, "firebase_project_id", "proj")
     monkeypatch.setattr(firebase_config.settings, "firebase_api_key", "key")
     monkeypatch.setattr(firebase_config.settings, "firebase_auth_domain", "auth")
     monkeypatch.setattr(firebase_config.settings, "firebase_storage_bucket", "bucket")
-    monkeypatch.setattr(firebase_config.settings, "firebase_messaging_sender_id", "sender")
+    monkeypatch.setattr(
+        firebase_config.settings, "firebase_messaging_sender_id", "sender"
+    )
     monkeypatch.setattr(firebase_config.settings, "firebase_app_id", "appid")
     monkeypatch.setattr(firebase_config.settings, "firebase_measurement_id", "mid")
 
     init_calls = {"count": 0}
-    monkeypatch.setattr(firebase_config, "initialize_app", lambda cred, config: init_calls.__setitem__("count", init_calls["count"] + 1))
+    monkeypatch.setattr(
+        firebase_config,
+        "initialize_app",
+        lambda cred, config: init_calls.__setitem__("count", init_calls["count"] + 1),
+    )
     ok = firebase_config.initialize_firebase()
     assert ok is True
     assert init_calls["count"] == 1
@@ -88,9 +104,15 @@ def test_initialize_firebase_success(monkeypatch):
 def test_messaging_send_paths(monkeypatch):
     dummy = DummyMessaging()
     monkeypatch.setattr(firebase_config, "messaging", dummy)
-    monkeypatch.setattr(firebase_config, "logger", type("L", (), {"error": lambda *a, **k: None, "info": lambda *a, **k: None})())
+    monkeypatch.setattr(
+        firebase_config,
+        "logger",
+        type("L", (), {"error": lambda *a, **k: None, "info": lambda *a, **k: None})(),
+    )
 
-    resp_multi = firebase_config.send_multicast_notification(["t1", "t2"], "hi", "body", {"x": "y"})
+    resp_multi = firebase_config.send_multicast_notification(
+        ["t1", "t2"], "hi", "body", {"x": "y"}
+    )
     assert resp_multi["success"] == 2
     resp_topic = firebase_config.send_topic_notification("topic", "t", "b", {"k": "v"})
     assert resp_topic == "msg-id"
@@ -117,16 +139,26 @@ def test_messaging_errors_return_none(monkeypatch):
         def __call__(self, *a, **k):
             raise self.exc
 
-    monkeypatch.setattr(firebase_config, "messaging", type("M", (), {
-        "MulticastMessage": firebase_config.messaging.MulticastMessage,
-        "Notification": firebase_config.messaging.Notification,
-        "Message": firebase_config.messaging.Message,
-        "send_multicast": Err(RuntimeError("multi")),
-        "send": Err(RuntimeError("send")),
-        "subscribe_to_topic": Err(RuntimeError("sub")),
-        "unsubscribe_from_topic": Err(RuntimeError("unsub")),
-    })())
-    monkeypatch.setattr(firebase_config, "logger", type("L", (), {"error": lambda *a, **k: None})())
+    monkeypatch.setattr(
+        firebase_config,
+        "messaging",
+        type(
+            "M",
+            (),
+            {
+                "MulticastMessage": firebase_config.messaging.MulticastMessage,
+                "Notification": firebase_config.messaging.Notification,
+                "Message": firebase_config.messaging.Message,
+                "send_multicast": Err(RuntimeError("multi")),
+                "send": Err(RuntimeError("send")),
+                "subscribe_to_topic": Err(RuntimeError("sub")),
+                "unsubscribe_from_topic": Err(RuntimeError("unsub")),
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        firebase_config, "logger", type("L", (), {"error": lambda *a, **k: None})()
+    )
 
     assert firebase_config.send_multicast_notification(["t"], "a", "b") is None
     assert firebase_config.send_topic_notification("top", "a", "b") is None
@@ -171,7 +203,9 @@ def test_storage_utils_success_and_failure(monkeypatch):
 
     # Success paths
     monkeypatch.setattr(firebase_config, "storage", DummyStorage())
-    monkeypatch.setattr(firebase_config, "logger", type("L", (), {"error": lambda *a, **k: None})())
+    monkeypatch.setattr(
+        firebase_config, "logger", type("L", (), {"error": lambda *a, **k: None})()
+    )
 
     assert firebase_config.upload_file_to_bucket("bkt", "src.txt", "dest.txt") is True
     url = firebase_config.generate_signed_url("bkt", "dest.txt", expires_in_seconds=123)

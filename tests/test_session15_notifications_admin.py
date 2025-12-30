@@ -1,14 +1,15 @@
+from app import models
+from app.core.database import get_db
+from app.oauth2 import get_current_user
+from app.routers import notifications as notifications_router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import models
-from app.core.database import get_db
-from app.routers import notifications as notifications_router
-from app.oauth2 import get_current_user
-
 
 def _user(session, email="n@example.com", is_admin=False):
-    u = models.User(email=email, hashed_password="x", is_verified=True, is_admin=is_admin)
+    u = models.User(
+        email=email, hashed_password="x", is_verified=True, is_admin=is_admin
+    )
     session.add(u)
     session.commit()
     session.refresh(u)
@@ -36,7 +37,9 @@ def test_notifications_list_pagination_and_include_read(session):
     notes = [
         models.Notification(user_id=user.id, content="u1", notification_type="t"),
         models.Notification(user_id=user.id, content="u2", notification_type="t"),
-        models.Notification(user_id=user.id, content="read", notification_type="t", is_read=True),
+        models.Notification(
+            user_id=user.id, content="read", notification_type="t", is_read=True
+        ),
         models.Notification(user_id=other.id, content="other", notification_type="t"),
     ]
     session.add_all(notes)

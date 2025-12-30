@@ -7,36 +7,39 @@ Groups:
 - Messaging/calls/realtime: message, call, screen_share, call_signaling, notifications, reels.
 - Business/support/impact: business, support, impact.
 - Utilities and AI: search, amenhotep, fact_checking, wellness, collaboration, sticker, report.
-"""
 
-from fastapi import APIRouter
+Note: This file is the canonical place to attach routers; keep additions here to
+maintain a single view of API surface and middleware inheritance.
+"""
 
 from app.routers import (
     admin_dashboard,
     amenhotep,
+    auth,
     banned_words,
     block,
     business,
     call,
+    call_signaling,
     category_management,
+    collaboration,
     comment,
     community,
+    fact_checking,
     follow,
     hashtag,
+    impact,
     message,
-    fact_checking,
     moderation,
     moderator,
-    auth,
+    notifications,
     oauth,
     p2fa,
-    notifications,
-    reels,
     post,
     reaction,
+    reels,
     report,
     screen_share,
-    call_signaling,
     search,
     session,
     social_auth,
@@ -46,9 +49,8 @@ from app.routers import (
     user,
     vote,
     wellness,
-    collaboration,
-    impact,
 )
+from fastapi import APIRouter
 
 api_router = APIRouter()
 

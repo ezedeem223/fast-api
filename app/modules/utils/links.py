@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 from sqlalchemy.orm import Session
 
 from app import models

@@ -5,17 +5,17 @@ from __future__ import annotations
 import enum
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Date,
-    Float,
-    Interval,
-    ForeignKey,
-    Enum,
-    Boolean,
     JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    Interval,
+    String,
 )
 from sqlalchemy.orm import relationship
 
@@ -189,7 +189,9 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    admin_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     action = Column(String, nullable=False)
     target_type = Column(String, nullable=True)
     target_id = Column(Integer, nullable=True)

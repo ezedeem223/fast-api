@@ -12,10 +12,10 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.messaging import (
+    ConversationMemberRole,
+    ConversationType,
     MessageType,
     ScreenShareStatus,
-    ConversationType,
-    ConversationMemberRole,
 )
 
 

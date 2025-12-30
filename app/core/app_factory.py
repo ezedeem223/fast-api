@@ -11,49 +11,53 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from http import HTTPStatus
 from pathlib import Path
 
-from contextlib import asynccontextmanager
-
 import orjson
-from fastapi import Depends, FastAPI, Request, status, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from starlette.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import ORJSONResponse, JSONResponse, RedirectResponse
+from sqlalchemy.orm import Session
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import models, oauth2
 from app.api.router import api_router
 from app.api.websocket import router as websocket_router
+from app.core.cache.redis_cache import cache_manager
 from app.core.config import settings
-from app.core.database import get_db, engine
+from app.core.database import engine, get_db
+from app.core.error_handlers import register_exception_handlers
+from app.core.logging_config import setup_logging
 from app.core.middleware import (
     add_language_header,
     ip_ban_middleware,
     language_middleware,
 )
+from app.core.middleware.logging_middleware import LoggingMiddleware
+from app.core.middleware.rate_limit import limiter
+from app.core.monitoring import setup_monitoring  # Task 7: Import Monitoring
 from app.core.scheduling import register_startup_tasks
+from app.core.telemetry import setup_sentry, setup_tracing
 from app.i18n import ALL_LANGUAGES, get_locale, translate_text
 from app.modules.utils.content import train_content_classifier
 from app.notifications import ConnectionManager
-from app.core.middleware.rate_limit import limiter
-from app.core.logging_config import setup_logging
-from app.core.middleware.logging_middleware import LoggingMiddleware
-from app.core.error_handlers import register_exception_handlers
-from app.core.cache.redis_cache import cache_manager
-from app.core.monitoring import setup_monitoring  # Task 7: Import Monitoring
-from app.core.telemetry import setup_tracing, setup_sentry
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, ORJSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 manager = ConnectionManager()
 
 
 class CachedStaticFiles(StaticFiles):
-    """StaticFiles mount that enforces Cache-Control when not provided by the file system."""
+    """StaticFiles mount that enforces Cache-Control when not provided by the file system.
+
+    Used for both `/static` and `/uploads` so edge/CDN caching stays consistent
+    without requiring files on disk to carry headers.
+    """
+
     def __init__(self, *args, cache_control: str | None = None, **kwargs):
         self._cache_control = cache_control
         super().__init__(*args, **kwargs)
@@ -93,7 +97,13 @@ class HostRedirectMiddleware(LoggingMiddleware):
 
 
 def _configure_app(app: FastAPI) -> None:
-    """Wire middleware, CORS, routers, and startup tasks in deterministic order."""
+    """Wire middleware, CORS, routers, static mounts, and startup tasks in order.
+
+    Ordering notes:
+    - TrustedHost/HTTPS guard must run first.
+    - Logging precedes CORS and language/IP filters for full request context.
+    - Language/IP filters run before router dispatch.
+    """
     allowed_hosts = (
         getattr(settings.__class__, "allowed_hosts", None)
         or getattr(settings, "allowed_hosts", None)
@@ -157,7 +167,12 @@ def _reset_test_overrides() -> None:
 
 
 def _register_routes(app: FastAPI) -> None:
-    """Register root, health checks, and protected sample endpoints."""
+    """Register root, health checks, and protected sample endpoints.
+
+    Health endpoints are intentionally lightweight (`/livez`) and dependency-aware
+    (`/readyz`) to support Kubernetes/WAF checks without hitting heavy services.
+    """
+
     @app.get("/")
     async def root():
         return {"message": "Hello, World!"}
@@ -249,7 +264,11 @@ def _register_routes(app: FastAPI) -> None:
 
 
 def _mount_static_files(app: FastAPI) -> None:
-    """Mount static and uploads directories with optional cache-control headers."""
+    """Mount static and uploads directories with optional cache-control headers.
+
+    Directories are ensured to exist to avoid startup errors when mounted read-only.
+    Cache-Control is injected only when missing so pre-set headers on disk are kept.
+    """
     try:
         static_dir = Path(settings.static_root)
         uploads_dir = Path(settings.uploads_root)
@@ -299,7 +318,11 @@ def _mount_static_files(app: FastAPI) -> None:
 
 
 def _lifespan_factory():
-    """Create lifespan context to initialize and tear down shared resources."""
+    """Create lifespan context to initialize and tear down shared resources.
+
+    Guarantees cache init/shutdown and exposes the connection manager on app state.
+    """
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup
@@ -315,7 +338,11 @@ def _lifespan_factory():
 
 
 def _maybe_train_classifier() -> None:
-    """Train content classifier lazily outside tests when artifacts are missing."""
+    """Train content classifier lazily outside tests when artifacts are missing.
+
+    Skips work in tests to keep suites fast; protects prod from running heavy jobs
+    if artifacts already exist.
+    """
     if settings.environment.lower() != "test" and not (
         Path("content_classifier.joblib").exists()
         and Path("content_vectorizer.joblib").exists()

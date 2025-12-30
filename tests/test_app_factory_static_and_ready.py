@@ -1,11 +1,9 @@
 from types import SimpleNamespace
 
-
-from tests.testclient import TestClient
-
 from app.core import app_factory
-from app.core.config import settings
 from app.core.cache import redis_cache
+from app.core.config import settings
+from tests.testclient import TestClient
 
 
 def _build_app(monkeypatch, static_root: str, uploads_root: str):
@@ -144,6 +142,7 @@ def test_readyz_redis_paths(monkeypatch):
     # ping failure logged -> 503
     object.__setattr__(settings, "REDIS_URL", "redis://example")
     monkeypatch.setattr(app_factory, "get_db", fake_get_db)
+
     async def async_noop():
         return None
 

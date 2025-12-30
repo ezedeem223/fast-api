@@ -2,16 +2,16 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.oauth2 import get_current_user
-from app.modules.fact_checking.models import FactCheckStatus, Fact
+from app.modules.fact_checking.models import Fact, FactCheckStatus
 from app.modules.fact_checking.service import FactCheckingService
 from app.modules.users.models import User
+from app.oauth2 import get_current_user
 from app.routers.admin_dashboard import get_current_admin
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 router = APIRouter(prefix="/fact-checking", tags=["Fact Checking"])
 
@@ -53,7 +53,7 @@ async def submit_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """   """
+    """ """
     fact = FactCheckingService.submit_fact(
         db=db,
         claim=request.claim,
@@ -77,7 +77,7 @@ async def verify_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """  """
+    """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -132,7 +132,7 @@ async def vote_on_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """  """
+    """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")
@@ -170,7 +170,7 @@ async def list_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """   """
+    """ """
     if status:
         facts = FactCheckingService.get_facts_by_status(db, status, skip, limit)
     else:
@@ -194,7 +194,7 @@ async def search_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """  """
+    """ """
     facts = FactCheckingService.search_facts(db, q, skip, limit)
     return [
         {
@@ -222,4 +222,8 @@ async def override_fact_status(
         status=request.status,
         note=request.note,
     )
-    return {"id": fact.id, "status": fact.status, "verification_score": fact.verification_score}
+    return {
+        "id": fact.id,
+        "status": fact.status,
+        "verification_score": fact.verification_score,
+    }

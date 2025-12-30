@@ -35,7 +35,9 @@ def _make_call(session, caller_id, receiver_id):
     return call
 
 
-def test_start_call_sets_pending_and_notifies(monkeypatch, caller_client, session, test_user2):
+def test_start_call_sets_pending_and_notifies(
+    monkeypatch, caller_client, session, test_user2
+):
     sent = {}
 
     async def fake_notify(user_id, payload):
@@ -60,7 +62,9 @@ def test_start_call_sets_pending_and_notifies(monkeypatch, caller_client, sessio
     assert "Incoming" in sent["payload"]
 
 
-def test_update_call_ended_marks_end_and_screen_share(caller_client, session, test_user, test_user2):
+def test_update_call_ended_marks_end_and_screen_share(
+    caller_client, session, test_user, test_user2
+):
     resp = caller_client.post(
         "/calls/",
         json={"receiver_id": test_user2["id"], "call_type": "video"},
@@ -85,14 +89,18 @@ def test_update_call_ended_marks_end_and_screen_share(caller_client, session, te
     assert updated_share.end_time is not None
 
 
-def test_update_call_forbidden_for_non_participant(caller_client, client, session, test_user2):
+def test_update_call_forbidden_for_non_participant(
+    caller_client, client, session, test_user2
+):
     start_resp = caller_client.post(
         "/calls/",
         json={"receiver_id": test_user2["id"], "call_type": "video"},
     )
     call_id = start_resp.json()["id"]
 
-    stranger = models.User(email="stranger@example.com", hashed_password="x", is_verified=True)
+    stranger = models.User(
+        email="stranger@example.com", hashed_password="x", is_verified=True
+    )
     session.add(stranger)
     session.commit()
     session.refresh(stranger)
@@ -102,7 +110,8 @@ def test_update_call_forbidden_for_non_participant(caller_client, client, sessio
     )
     try:
         res = client.put(
-            f"/calls/{call_id}", json={"status": "ended", "current_screen_share_id": None}
+            f"/calls/{call_id}",
+            json={"status": "ended", "current_screen_share_id": None},
         )
     finally:
         app.dependency_overrides.pop(oauth2.get_current_user, None)
@@ -110,7 +119,9 @@ def test_update_call_forbidden_for_non_participant(caller_client, client, sessio
     assert res.status_code == 403
 
 
-def test_start_screen_share_sets_active_and_notifies(monkeypatch, caller_client, session, test_user2):
+def test_start_screen_share_sets_active_and_notifies(
+    monkeypatch, caller_client, session, test_user2
+):
     messages = {}
 
     async def fake_personal(msg, user_id):
@@ -136,7 +147,9 @@ def test_start_screen_share_sets_active_and_notifies(monkeypatch, caller_client,
     assert messages["payload"]["type"] == "screen_share_started"
 
 
-def test_start_screen_share_rejects_duplicate_active(caller_client, session, test_user, test_user2):
+def test_start_screen_share_rejects_duplicate_active(
+    caller_client, session, test_user, test_user2
+):
     call_resp = caller_client.post(
         "/calls/", json={"receiver_id": test_user2["id"], "call_type": "video"}
     )
@@ -152,7 +165,9 @@ def test_start_screen_share_rejects_duplicate_active(caller_client, session, tes
     assert res.status_code == 400
 
 
-def test_update_screen_share_status_ended(monkeypatch, caller_client, session, test_user, test_user2):
+def test_update_screen_share_status_ended(
+    monkeypatch, caller_client, session, test_user, test_user2
+):
     notified = {}
 
     async def fake_personal(msg, user_id):
@@ -188,7 +203,9 @@ def test_update_screen_share_status_ended(monkeypatch, caller_client, session, t
     assert notified["msg"]["type"] == "screen_share_updated"
 
 
-def test_end_screen_share_requires_owner(caller_client, client, session, test_user, test_user2):
+def test_end_screen_share_requires_owner(
+    caller_client, client, session, test_user, test_user2
+):
     call = _make_call(session, caller_id=test_user["id"], receiver_id=test_user2["id"])
     share = models.ScreenShareSession(
         call_id=call.id, sharer_id=test_user2["id"], status=ScreenShareStatus.ACTIVE
@@ -217,7 +234,9 @@ async def test_handle_call_data_forwards_valid_types(monkeypatch):
 @pytest.mark.asyncio
 async def test_handle_call_disconnect_sets_status_and_notifies(monkeypatch, session):
     caller = models.User(email="c11@example.com", hashed_password="x", is_verified=True)
-    receiver = models.User(email="r11@example.com", hashed_password="x", is_verified=True)
+    receiver = models.User(
+        email="r11@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([caller, receiver])
     session.commit()
     session.refresh(caller)

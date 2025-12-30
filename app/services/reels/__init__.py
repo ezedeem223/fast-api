@@ -1,3 +1,3 @@
 from .service import ReelService
-__all__ = ['ReelService']
 
+__all__ = ["ReelService"]

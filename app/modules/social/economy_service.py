@@ -1,10 +1,13 @@
-from sqlalchemy.orm import Session
-from app.modules.posts.models import Post, Reaction
-from app.modules.users.models import Badge, User, UserBadge
 import math
 from collections import defaultdict
-from typing import Iterable, Dict
+from typing import Dict, Iterable
+
 from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.modules.posts.models import Post, Reaction
+from app.modules.users.models import Badge, User, UserBadge
+
 try:
     from app.modules.social import economy_accel
 except Exception:
@@ -93,11 +96,7 @@ class SocialEconomyService:
             return {}
 
         # Preload posts in one query
-        posts = (
-            self.db.query(Post)
-            .filter(Post.id.in_(ids))
-            .all()
-        )
+        posts = self.db.query(Post).filter(Post.id.in_(ids)).all()
         if not posts:
             return {}
 
@@ -135,7 +134,9 @@ class SocialEconomyService:
             scores[post.id] = total
             # Credit user without extra query by using relationship
             if post.owner:
-                post.owner.social_credits = (post.owner.social_credits or 0) + total * 0.05
+                post.owner.social_credits = (
+                    post.owner.social_credits or 0
+                ) + total * 0.05
 
         self.db.commit()
         return scores

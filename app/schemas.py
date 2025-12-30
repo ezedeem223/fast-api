@@ -5,83 +5,80 @@ Description: This module defines Pydantic schemas for the social media project.
 It covers various domains including reactions, votes, posts, comments, notifications,
 users, communities, search, and more. The file is organized into sections with clear
 English comments to enhance readability and maintainability.
+
+Note:
+- Canonical schemas now live under `app.modules.*.schemas`; this file re-exports for
+  backwards compatibility. Prefer importing from the module-specific paths for new code.
 """
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 # ================================================================
 # Imports
 # ================================================================
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    conint,
-    ConfigDict,
-    Field,
-)
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any
-from enum import Enum
-from app.modules.posts.schemas import (
-    Comment,
-    PostCategory,
-    PostCategoryCreate,
-    Post,
-    PostOut,
-    CommentOut,
-)
-from app.modules.posts.schemas import *  # noqa: F401,F403
-from app.modules.messaging import MessageType
-from app.modules.messaging.schemas import (
-    Message,
-)
-from app.modules.messaging.schemas import *  # noqa: F401,F403
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, conint
+
+from app.modules.community.schemas import *  # noqa: F401,F403
 from app.modules.community.schemas import (
-    CommunityCreate as CommunityCreateBase,
-    CommunityMemberOut,
+    Category,
+)
+from app.modules.community.schemas import CommunityCreate as CommunityCreateBase
+from app.modules.community.schemas import (
     CommunityInvitationOut,
-    CommunityOut as CommunityOutBase,
+    CommunityMemberOut,
+)
+from app.modules.community.schemas import CommunityOut as CommunityOutBase
+from app.modules.community.schemas import (
     CommunityOutRef,
     CommunityRuleCreate,
     CommunityRuleOut,
-    Category,
 )
-from app.modules.community.schemas import *  # noqa: F401,F403
-from app.modules.users.schemas import (
-    UserContentOut,
-    UserOut,
-    UserRoleUpdate,
-)
-from app.modules.users.schemas import *  # noqa: F401,F403
-from app.modules.notifications.schemas import (
-    NotificationPreferencesUpdate,
-    NotificationPreferencesOut,
-    NotificationBase,
-    NotificationCreate,
-    NotificationUpdate,
-    NotificationDeliveryStatus,
-    NotificationStatistics,
-    NotificationAnalytics,
-    NotificationGroupOut,
-    NotificationDeliveryLogOut,
-    NotificationWithLogs,
-    NotificationOut,
-    NotificationSummary,
-    NotificationFeedResponse,
-    PushNotification,
-)
-from app.modules.notifications.schemas import *  # noqa: F401,F403
+from app.modules.messaging import MessageType
+from app.modules.messaging.schemas import *  # noqa: F401,F403
+from app.modules.messaging.schemas import Message
+from app.modules.moderation.schemas import *  # noqa: F401,F403
 from app.modules.moderation.schemas import (
-    BanStatisticsOverview,
     BanReasonOut,
+    BanStatisticsOverview,
     BanTypeDistribution,
     EffectivenessTrend,
 )
-from app.modules.moderation.schemas import *  # noqa: F401,F403
+from app.modules.notifications.schemas import *  # noqa: F401,F403
+from app.modules.notifications.schemas import (
+    NotificationAnalytics,
+    NotificationBase,
+    NotificationCreate,
+    NotificationDeliveryLogOut,
+    NotificationDeliveryStatus,
+    NotificationFeedResponse,
+    NotificationGroupOut,
+    NotificationOut,
+    NotificationPreferencesOut,
+    NotificationPreferencesUpdate,
+    NotificationStatistics,
+    NotificationSummary,
+    NotificationUpdate,
+    NotificationWithLogs,
+    PushNotification,
+)
+from app.modules.posts.schemas import *  # noqa: F401,F403
+from app.modules.posts.schemas import (
+    Comment,
+    CommentOut,
+    Post,
+    PostCategory,
+    PostCategoryCreate,
+    PostOut,
+)
 from app.modules.search.schemas import *  # noqa: F401,F403
 from app.modules.stickers.schemas import *  # noqa: F401,F403
 from app.modules.support.schemas import *  # noqa: F401,F403
-
+from app.modules.users.schemas import *  # noqa: F401,F403
+from app.modules.users.schemas import UserContentOut, UserOut, UserRoleUpdate
 
 # ================================================================
 # Reactions and Vote Models
@@ -620,4 +617,3 @@ UserContentOut.model_rebuild(
         "ReelOut": ReelOut,
     }
 )
-

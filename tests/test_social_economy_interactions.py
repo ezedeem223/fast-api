@@ -1,5 +1,4 @@
 from app.modules.posts.models import Post
-
 from app.modules.social.economy_service import SocialEconomyService
 
 

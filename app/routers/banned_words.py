@@ -1,14 +1,16 @@
 """Banned words router for managing moderation wordlists with severity levels."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from .. import schemas, oauth2
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from ..cache import cache
 from app.modules.users.models import User
 from app.services.moderation import BannedWordService
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from .. import oauth2, schemas
+from ..cache import cache
 
 router = APIRouter(prefix="/banned-words", tags=["Banned Words"])
 
@@ -47,7 +49,9 @@ async def get_banned_words(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = None,
-    sort_by: Optional[str] = Query("word", description="Sort by 'word' or 'created_at'"),
+    sort_by: Optional[str] = Query(
+        "word", description="Sort by 'word' or 'created_at'"
+    ),
     sort_order: Optional[str] = Query("asc", description="Sort order: 'asc' or 'desc'"),
 ):
     """List banned words with optional filtering/sorting."""

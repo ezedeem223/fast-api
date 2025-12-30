@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,7 @@ from app.modules.moderation.models import BannedWord
 from app.modules.users.models import User
 from app.modules.utils.analytics import update_ban_statistics
 from app.modules.utils.moderation import log_admin_action
+from fastapi import HTTPException, status
 
 
 class BannedWordService:
@@ -21,7 +21,9 @@ class BannedWordService:
     def __init__(self, db: Session):
         self.db = db
 
-    def add_word(self, *, payload: schemas.BannedWordCreate, current_user: User) -> BannedWord:
+    def add_word(
+        self, *, payload: schemas.BannedWordCreate, current_user: User
+    ) -> BannedWord:
         existing = (
             self.db.query(BannedWord)
             .filter(func.lower(BannedWord.word) == payload.word.lower())
@@ -114,7 +116,10 @@ class BannedWordService:
             self.db,
             current_user.id,
             "update_banned_word",
-            {"word_id": word_id, "updates": update_payload.model_dump(exclude_unset=True)},
+            {
+                "word_id": word_id,
+                "updates": update_payload.model_dump(exclude_unset=True),
+            },
         )
         return word
 

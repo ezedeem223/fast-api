@@ -8,24 +8,13 @@ from __future__ import annotations
 import enum
 from datetime import timedelta
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    Date,
-    ForeignKey,
-    Text,
-    JSON,
-    Interval,
-    LargeBinary,
-    Float,
-)
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, JSONB as PG_JSONB
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime
+from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy import Float, ForeignKey, Integer, Interval, LargeBinary, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.sqltypes import TIMESTAMP
-from sqlalchemy import Enum as SQLAlchemyEnum
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default

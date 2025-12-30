@@ -3,11 +3,7 @@ import fnmatch
 import pytest
 
 from app import models
-from app.analytics import (
-    get_popular_searches,
-    get_user_searches,
-    record_search_query,
-)
+from app.analytics import get_popular_searches, get_user_searches, record_search_query
 from app.core.config import settings
 from app.modules.search.cache import invalidate_stats_cache
 

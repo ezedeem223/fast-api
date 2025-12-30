@@ -1,7 +1,6 @@
-from fastapi import status
-
 from app import models
 from app.oauth2 import create_access_token
+from fastapi import status
 
 
 def _auth_headers(user_id: int):
@@ -9,7 +8,9 @@ def _auth_headers(user_id: int):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_block_user_and_unblock_flow(client, session, test_user, test_user2, monkeypatch):
+def test_block_user_and_unblock_flow(
+    client, session, test_user, test_user2, monkeypatch
+):
     """Block another user, inspect block info, then unblock and ensure removal."""
     monkeypatch.setattr(
         "app.routers.block.unblock_user",
@@ -18,7 +19,9 @@ def test_block_user_and_unblock_flow(client, session, test_user, test_user2, mon
 
     payload = {
         "blocked_id": test_user2.id,
-        "block_type": models.BlockType.FULL.value if hasattr(models, "BlockType") else "full",
+        "block_type": (
+            models.BlockType.FULL.value if hasattr(models, "BlockType") else "full"
+        ),
         "duration": 1,
         "duration_unit": "days",
     }
@@ -50,7 +53,9 @@ def test_block_self_rejected(client, test_user):
     assert "cannot block yourself" in res.json()["detail"].lower()
 
 
-def test_appeal_creation_and_duplicate(client, session, test_user, test_user2, monkeypatch):
+def test_appeal_creation_and_duplicate(
+    client, session, test_user, test_user2, monkeypatch
+):
     """Blocked user can appeal once; duplicates rejected; non-owner forbidden."""
     monkeypatch.setattr(
         "app.routers.block.unblock_user",
@@ -106,8 +111,8 @@ def test_moderator_can_list_and_review_appeals(
     session.commit()
     moderator = session.get(models.User, test_user2.id)
 
-    from app.routers import block as block_router
     from app.modules.moderation import schemas as mod_schemas
+    from app.routers import block as block_router
 
     appeals = block_router.get_block_appeals(
         db=session, current_user=moderator, skip=0, limit=10

@@ -1,10 +1,10 @@
 from .models import (
-    LocalMarketListing,
-    LocalMarketInquiry,
-    LocalMarketTransaction,
-    DigitalCooperative,
     CooperativeMember,
     CooperativeTransaction,
+    DigitalCooperative,
+    LocalMarketInquiry,
+    LocalMarketListing,
+    LocalMarketTransaction,
 )
 
 __all__ = [

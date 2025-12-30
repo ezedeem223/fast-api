@@ -2,22 +2,25 @@ import datetime
 
 import pyotp
 import pytest
-from fastapi import status
 from jose import jwt
 
+from app import models
 from app.core.config import settings
 from app.routers import auth
-from app import models
+from fastapi import status
 
 
 def _login(client, email, password):
     return client.post(
-        "/login", data={"username": email, "password": password}, headers={"content-type": "application/x-www-form-urlencoded"}
+        "/login",
+        data={"username": email, "password": password},
+        headers={"content-type": "application/x-www-form-urlencoded"},
     )
 
 
 def test_login_wrong_password_returns_403(client, test_user, monkeypatch):
     """Wrong password should be rejected with 403 and no background side effects."""
+
     async def fake_notify(*_, **__):
         return None
 
@@ -29,6 +32,7 @@ def test_login_wrong_password_returns_403(client, test_user, monkeypatch):
 
 def test_login_success_returns_token(client, test_user, monkeypatch):
     """Correct credentials return a bearer token and not the 2FA sentinel."""
+
     async def fake_notify(*_, **__):
         return None
 
@@ -54,7 +58,9 @@ def test_account_lockout_after_failed_attempts(client, test_user, session):
 async def test_refresh_token_valid_and_invalid(session, test_user, monkeypatch):
     """Valid refresh token issues access token; expired/invalid ones are rejected (endpoint logic)."""
     for target in (settings, settings.__class__):
-        monkeypatch.setattr(target, "refresh_secret_key", "refresh-secret", raising=False)
+        monkeypatch.setattr(
+            target, "refresh_secret_key", "refresh-secret", raising=False
+        )
         monkeypatch.setattr(target, "algorithm", "HS256", raising=False)
 
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -87,6 +93,7 @@ def test_two_factor_flow_requires_otp_then_allows_login(
     client, test_user, session, monkeypatch
 ):
     """2FA enabled user should receive sentinel then succeed with valid OTP and fail on bad OTP."""
+
     async def fake_notify(*_, **__):
         return None
 

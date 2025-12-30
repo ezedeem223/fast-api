@@ -1,4 +1,3 @@
-
 from app import models
 
 
@@ -26,7 +25,8 @@ def test_export_includes_posts_comments_and_identities(
     assert len(data["posts"]) >= 1
     assert len(data["comments"]) >= 1
     assert any(
-        identity["linked_user_id"] == test_user2["id"] for identity in data["identities"]
+        identity["linked_user_id"] == test_user2["id"]
+        for identity in data["identities"]
     )
 
 

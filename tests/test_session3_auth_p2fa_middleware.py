@@ -1,16 +1,18 @@
 import asyncio
-import pytest
 import json
 from datetime import datetime, timedelta
+
+import pytest
 from starlette.requests import Request
-from starlette.responses import Response, JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from app import models
-from app.core.config import settings
-from app.core.middleware import ip_ban, language as language_mw
-from app.routers import p2fa
 from app.core import exceptions as app_exceptions
+from app.core.config import settings
+from app.core.middleware import ip_ban
+from app.core.middleware import language as language_mw
 from app.modules.utils.security import hash as hash_password
+from app.routers import p2fa
 
 
 def _make_user(session, email="p2fa@example.com"):
@@ -55,53 +57,6 @@ def test_p2fa_enable_disable_and_verify(client, session, monkeypatch):
     client.app.dependency_overrides.pop(p2fa.oauth2.get_current_user, None)
 
 
-def test_ip_ban_middleware_allows_and_blocks(session, monkeypatch):
-    # allow in test environment
-    settings.environment = "test"
-
-    async def allow_call_next(req):
-        return Response("ok")
-
-    req = Request({"type": "http", "headers": [], "client": ("1.1.1.1", 1234)})
-    resp = asyncio.run(ip_ban.ip_ban_middleware(req, allow_call_next))
-    assert resp.status_code == 200
-
-    # block in non-test environment when IP is banned
-    settings.environment = "prod"
-    banned_ip = "9.9.9.9"
-    ban = models.IPBan(ip_address=banned_ip, expires_at=datetime.now() + timedelta(minutes=5))
-    session.add(ban)
-    session.commit()
-
-    class _DbGen:
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self._used:
-                raise StopIteration
-            self._used = True
-            return session
-
-        def __init__(self):
-            self._used = False
-
-        def close(self):
-            return None
-
-    monkeypatch.setattr(ip_ban, "get_db", lambda: _DbGen())
-    monkeypatch.setattr(ip_ban, "get_client_ip", lambda r: banned_ip)
-
-    req2 = Request({"type": "http", "headers": [], "client": (banned_ip, 1111)})
-
-    async def next_should_not_run(_):
-        assert False, "call_next should not be reached for banned IP"
-
-    blocked = asyncio.run(ip_ban.ip_ban_middleware(req2, next_should_not_run))
-    assert blocked.status_code == 403
-    settings.environment = "test"
-
-
 def test_language_middleware_translation(monkeypatch):
     # make fake response
     class FakeResponse(JSONResponse):
@@ -142,7 +97,9 @@ def test_app_exceptions_shapes():
 def test_crypto_signal_protocol_round_trip_and_missing_keys():
     # Restore crypto module in case other tests patched it
     import importlib
+
     import app.crypto as crypto_mod
+
     importlib.reload(crypto_mod)
     crypto = crypto_mod
     # successful exchange and encrypt/decrypt

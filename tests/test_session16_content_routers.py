@@ -1,13 +1,12 @@
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from app import models, oauth2
 from app.core.database import get_db
-from app.routers import post as post_router
 from app.routers import comment as comment_router
 from app.routers import community as community_router
+from app.routers import post as post_router
 from app.routers import reaction as reaction_router
 from app.routers import sticker as sticker_router
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 def make_client(session, current_user=None):
@@ -74,11 +73,15 @@ def test_community_create_requires_verified_and_join_private(session):
 
     owner = _user(session, email="owner@example.com")
     client_owner = make_client(session, current_user=owner)
-    resp_ok = client_owner.post("/communities/", json={"name": "C2", "description": "d"})
+    resp_ok = client_owner.post(
+        "/communities/", json={"name": "C2", "description": "d"}
+    )
     assert resp_ok.status_code == 201
     _ = resp_ok.json()["id"]
 
-    private = client_owner.post("/communities/", json={"name": "P", "description": "d", "is_private": True}).json()
+    private = client_owner.post(
+        "/communities/", json={"name": "P", "description": "d", "is_private": True}
+    ).json()
     other = _user(session, email="join@example.com")
     client_other = make_client(session, current_user=other)
     join_resp = client_other.post(f"/communities/{private['id']}/join")
@@ -91,7 +94,9 @@ def test_reaction_invalid_input(session):
     session.add(post)
     session.commit()
     client = make_client(session, current_user=user)
-    resp = client.post("/reactions/", json={"post_id": post.id, "reaction_type": "invalid"})
+    resp = client.post(
+        "/reactions/", json={"post_id": post.id, "reaction_type": "invalid"}
+    )
     assert resp.status_code in (400, 422)
 
 

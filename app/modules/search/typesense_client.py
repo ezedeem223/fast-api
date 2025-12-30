@@ -10,7 +10,11 @@ from app.core.config import settings
 
 
 class TypesenseClient:
-    def __init__(self, *, host: str, port: str, protocol: str, api_key: str, collection: str):
+    """Thin wrapper around Typesense HTTP API used when external search is enabled."""
+
+    def __init__(
+        self, *, host: str, port: str, protocol: str, api_key: str, collection: str
+    ):
         self.base_url = f"{protocol}://{host}:{port}"
         self.collection = collection
         self.headers = {"X-TYPESENSE-API-KEY": api_key}

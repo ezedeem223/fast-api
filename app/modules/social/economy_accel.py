@@ -48,4 +48,3 @@ def quality_score(content: str) -> float:
             score += 15
     score += 20
     return min(100.0, score)
-

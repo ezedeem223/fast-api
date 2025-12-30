@@ -1,12 +1,12 @@
 from types import SimpleNamespace
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+
 from starlette.testclient import TestClient
 
 from app.core import telemetry
 from app.core.middleware import logging_middleware
 from app.core.middleware.logging_middleware import LoggingMiddleware
-
+from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 
 # --- Telemetry tests ---
 
@@ -104,19 +104,24 @@ def test_setup_tracing_enabled_with_endpoint(monkeypatch):
 
 def test_setup_tracing_disabled(monkeypatch):
     """When explicitly disabled, tracing should short-circuit without touching OTEL objects."""
+
     # Ensure any accidental access raises
     class Guard:
         def __getattr__(self, item):
             raise AssertionError("trace should not be accessed when disabled")
 
     monkeypatch.setattr(telemetry, "trace", Guard())
-    telemetry.setup_tracing(FastAPI(), service_name="svc", enabled=False)  # should not raise
+    telemetry.setup_tracing(
+        FastAPI(), service_name="svc", enabled=False
+    )  # should not raise
 
 
 def test_setup_tracing_missing_packages(monkeypatch):
     """When OTEL packages are missing, setup should no-op safely."""
     monkeypatch.setattr(telemetry, "trace", None)
-    telemetry.setup_tracing(FastAPI(), service_name="svc", enabled=True)  # should not raise
+    telemetry.setup_tracing(
+        FastAPI(), service_name="svc", enabled=True
+    )  # should not raise
 
 
 def test_setup_sentry_with_dsn(monkeypatch):
@@ -138,6 +143,7 @@ def test_setup_sentry_with_dsn(monkeypatch):
 
 def test_setup_sentry_without_dsn(monkeypatch):
     """No DSN means no initialization call."""
+
     class FakeSentry:
         def init(self, *_, **__):
             raise AssertionError("init should not be called")

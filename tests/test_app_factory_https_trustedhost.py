@@ -1,10 +1,9 @@
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from tests.testclient import TestClient
-
 from app.core import app_factory
 from app.core.config import settings
+from tests.testclient import TestClient
 
 
 def _build_app(monkeypatch, force_https: bool, allowed_hosts):

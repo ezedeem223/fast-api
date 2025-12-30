@@ -1,12 +1,13 @@
 import datetime
+
 import pyotp
 import pytest
-from fastapi import status
 
 from app import models
 from app.modules.users.models import UserRole
 from app.oauth2 import create_access_token
 from app.routers.auth import MAX_LOGIN_ATTEMPTS
+from fastapi import status
 
 
 def _auth_headers(token: str) -> dict:
@@ -118,7 +119,5 @@ def test_moderator_reports_requires_membership(session, client):
     session.commit()
     token = create_access_token({"user_id": mod_user.id})
 
-    res = client.get(
-        "/moderator/community/1/reports", headers=_auth_headers(token)
-    )
+    res = client.get("/moderator/community/1/reports", headers=_auth_headers(token))
     assert res.status_code == status.HTTP_403_FORBIDDEN

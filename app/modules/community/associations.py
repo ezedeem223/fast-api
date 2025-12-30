@@ -4,7 +4,6 @@ from sqlalchemy import Column, ForeignKey, Integer, Table
 
 from app.core.database import Base
 
-
 community_tags = Table(
     "community_tags",
     Base.metadata,
@@ -21,4 +20,3 @@ community_tags = Table(
 )
 
 __all__ = ["community_tags"]
-

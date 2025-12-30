@@ -1,8 +1,10 @@
-from fastapi import Request
-from fastapi_babel import Babel
-from deep_translator import GoogleTranslator
-from fastapi_cache.decorator import cache
 from types import SimpleNamespace
+
+from deep_translator import GoogleTranslator
+from fastapi_babel import Babel
+from fastapi_cache.decorator import cache
+
+from fastapi import Request
 
 babel = Babel(
     configs=SimpleNamespace(

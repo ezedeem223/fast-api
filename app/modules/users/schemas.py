@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, HttpUrl
 
-
 if TYPE_CHECKING:  # pragma: no cover
-    from app.modules.posts.schemas import Comment as PostComment, PostOut
+    from app.modules.posts.schemas import Comment as PostComment
+    from app.modules.posts.schemas import PostOut
     from app.schemas import ArticleOut, ReelOut
 
 

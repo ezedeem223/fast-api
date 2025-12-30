@@ -2,9 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import WebSocketDisconnect, status
 
 from app.routers import call_signaling
+from fastapi import WebSocketDisconnect, status
 
 
 class FakeWebSocket:
@@ -30,9 +30,7 @@ class FakeWebSocket:
 async def test_join_denied_without_token(monkeypatch):
     registry = call_signaling.CallRoomRegistry(default_ttl=60)
     monkeypatch.setattr(call_signaling, "room_registry", registry)
-    monkeypatch.setattr(
-        "app.notifications.manager.send_personal_message", AsyncMock()
-    )
+    monkeypatch.setattr("app.notifications.manager.send_personal_message", AsyncMock())
 
     # Pre-create a room owned by user 1; allow only user 2
     await registry.create_room("room1", owner_id=1, allowed_participants={2})
@@ -48,9 +46,7 @@ async def test_join_denied_without_token(monkeypatch):
 async def test_room_expiry_blocks_join(monkeypatch):
     registry = call_signaling.CallRoomRegistry(default_ttl=1)
     monkeypatch.setattr(call_signaling, "room_registry", registry)
-    monkeypatch.setattr(
-        "app.notifications.manager.send_personal_message", AsyncMock()
-    )
+    monkeypatch.setattr("app.notifications.manager.send_personal_message", AsyncMock())
 
     await registry.create_room("expire", owner_id=1, allowed_participants=set(), ttl=-1)
     ws = FakeWebSocket([])
@@ -65,9 +61,7 @@ async def test_room_expiry_blocks_join(monkeypatch):
 async def test_join_token_single_use(monkeypatch):
     registry = call_signaling.CallRoomRegistry(default_ttl=120)
     monkeypatch.setattr(call_signaling, "room_registry", registry)
-    monkeypatch.setattr(
-        "app.notifications.manager.send_personal_message", AsyncMock()
-    )
+    monkeypatch.setattr("app.notifications.manager.send_personal_message", AsyncMock())
 
     await registry.create_room("room2", owner_id=1)
     token = await registry.issue_join_token("room2", owner_id=1, allowed_user_id=2)
@@ -75,12 +69,16 @@ async def test_join_token_single_use(monkeypatch):
     # First join succeeds
     ws1 = FakeWebSocket([{"type": "offer"}])
     user2 = SimpleNamespace(id=2)
-    await call_signaling.signaling_ws(ws1, "room2", current_user=user2, join_token=token)
+    await call_signaling.signaling_ws(
+        ws1, "room2", current_user=user2, join_token=token
+    )
     assert ws1.close.await_count == 0
 
     # Replay with same token should be denied
     ws2 = FakeWebSocket([])
-    await call_signaling.signaling_ws(ws2, "room2", current_user=user2, join_token=token)
+    await call_signaling.signaling_ws(
+        ws2, "room2", current_user=user2, join_token=token
+    )
     ws2.close.assert_awaited()
 
 

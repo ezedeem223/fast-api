@@ -1,6 +1,6 @@
+import pytest
 
 from app import models
-import pytest
 
 
 def test_amenhotep_message_and_analytics(session, test_user):

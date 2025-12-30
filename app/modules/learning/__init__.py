@@ -1,4 +1,4 @@
-from .models import LearningPath, LearningModule, LearningEnrollment, Certificate
+from .models import Certificate, LearningEnrollment, LearningModule, LearningPath
 
 __all__ = [
     "LearningPath",

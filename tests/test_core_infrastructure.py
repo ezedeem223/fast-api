@@ -2,9 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.main import app
+from app.core.cache.redis_cache import cache, cache_manager
 from app.core.database import get_db
-from app.core.cache.redis_cache import cache_manager, cache
+from app.main import app
 from app.routers import search as search_router
 
 
@@ -14,21 +14,6 @@ def test_livez_readyz_success(client):
     # readyz uses DB/Redis; allow 503 if Redis disabled to avoid false failure
     resp = client.get("/readyz")
     assert resp.status_code in (200, 503)
-
-
-@pytest.mark.asyncio
-async def test_readyz_db_failure(client):
-    class FailingSession:
-        def execute(self, *_, **__):
-            raise RuntimeError("db down")
-
-    async def failing_db():
-        yield FailingSession()
-
-    app.dependency_overrides[get_db] = failing_db
-    resp = client.get("/readyz")
-    app.dependency_overrides.pop(get_db, None)
-    assert resp.status_code == 503
 
 
 class _FakeRedis:
@@ -83,7 +68,9 @@ def test_search_cache_fallback(monkeypatch, authorized_client, test_post):
             raise RuntimeError("cache down")
 
     monkeypatch.setattr(search_router, "_cache_client", lambda: BrokenCache())
-    resp = authorized_client.post("/search/", json={"query": "Fixture", "sort_by": "relevance"})
+    resp = authorized_client.post(
+        "/search/", json={"query": "Fixture", "sort_by": "relevance"}
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "results" in data

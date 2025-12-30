@@ -1,12 +1,13 @@
 # ruff: noqa: E402
-import os
 import asyncio
 import atexit
 import importlib
+import os
 from typing import Any
 
 import psycopg2
 import pytest
+
 from tests.testclient import TestClient
 
 
@@ -45,10 +46,10 @@ os.environ["REDIS_URL"] = ""
 os.environ.setdefault("ANYIO_BACKENDS", "asyncio")
 
 from app import models
-from app.core.config import settings
-from app.core.database import Base, get_db
 from app.core.cache import redis_cache as rc
 from app.core.cache.redis_cache import cache_manager
+from app.core.config import settings
+from app.core.database import Base, get_db
 from app.main import app
 from app.oauth2 import create_access_token
 
@@ -61,6 +62,7 @@ class AttrDict(dict):
             return self[item]
         except KeyError as exc:
             raise AttributeError(item) from exc
+
 
 os.environ["APP_ENV"] = "test"
 os.environ["DISABLE_EXTERNAL_NOTIFICATIONS"] = "1"
@@ -105,8 +107,10 @@ settings.database_url = test_db_url
 os.environ["DATABASE_URL"] = test_db_url
 # Disable rate limiting in tests explicitly
 from app.core.middleware import rate_limit  # noqa: E402
+
 if hasattr(rate_limit.limiter, "enabled"):
     rate_limit.limiter.enabled = False
+
 
 # Ensure pytest-asyncio sees a default fixture loop scope so it doesn't emit deprecation warnings.
 @pytest.hookimpl(tryfirst=True)
@@ -189,6 +193,8 @@ def _ensure_database_exists(url: URL) -> None:
 
 
 engine = _init_test_engine()
+
+
 # Drop leftover enum types in Postgres to avoid duplicate creation errors
 def _drop_enum_types(engine):
     if engine.dialect.name != "postgresql":

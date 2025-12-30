@@ -1,8 +1,9 @@
 import asyncio
+
 import pytest
 
-from app.core.cache import redis_cache
 from app import cache as local_cache
+from app.core.cache import redis_cache
 
 
 def test_local_cache_decorator_hit_and_args(monkeypatch):
@@ -42,7 +43,16 @@ async def test_cached_query_disabled_runs_function(monkeypatch):
 @pytest.mark.asyncio
 async def test_redis_cache_init_failure_disables(monkeypatch, caplog):
     cache = redis_cache.RedisCache()
-    monkeypatch.setattr(redis_cache, "settings", type("Obj", (), {"redis_url": "redis://bad"}), raising=False)
-    monkeypatch.setattr(redis_cache.redis, "from_url", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("connect fail")))
+    monkeypatch.setattr(
+        redis_cache,
+        "settings",
+        type("Obj", (), {"redis_url": "redis://bad"}),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        redis_cache.redis,
+        "from_url",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("connect fail")),
+    )
     await cache.init_cache()
     assert cache.enabled is False

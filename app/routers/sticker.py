@@ -1,20 +1,26 @@
-"""Sticker router for packs/categories/reports and media upload validation."""
+"""Sticker router for packs/categories/reports and media upload validation.
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from typing import List
-import os
+Auth required; enforces image validation and uses services/models for persistence.
+Uploads go through PIL/emoji checks; DB writes scoped via FastAPI dependencies.
+"""
+
 import io
+import os
+from typing import List
+
+import emoji
 
 # External libraries for image processing and emojis
 from PIL import Image
-import emoji
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-# Import project modules
-from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.modules.stickers import models as sticker_models
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+
+# Import project modules
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/stickers", tags=["Stickers"])
 
@@ -27,6 +33,7 @@ def _is_admin(user: models.User) -> bool:
     if hasattr(role, "value"):
         role = role.value
     return str(role).lower() == "admin" or getattr(user, "is_admin", False)
+
 
 # ------------------------------------------------------------------
 #                         Endpoints
@@ -237,7 +244,9 @@ def create_sticker_category(
 
     existing = (
         db.query(sticker_models.StickerCategory)
-        .filter(func.lower(sticker_models.StickerCategory.name) == category.name.lower())
+        .filter(
+            func.lower(sticker_models.StickerCategory.name) == category.name.lower()
+        )
         .first()
     )
     if existing:

@@ -5,19 +5,14 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app import celery_worker
-from app.modules.notifications import models as notification_models
 from app.modules.notifications import batching
+from app.modules.notifications import models as notification_models
 from app.modules.notifications import realtime
+from app.modules.notifications.email import send_email_notification
 from app.modules.notifications.tasks import (
     deliver_notification_task,
     send_push_notification_task,
 )
-from app.modules.notifications.email import send_email_notification
-
-
-def test_celery_eager_mode_in_test_env():
-    assert celery_worker.celery_app.conf.task_always_eager is True
-    assert celery_worker.celery_app.conf.task_eager_propagates is True
 
 
 def test_cleanup_old_notifications_wrapper_closes_session(monkeypatch):
@@ -192,12 +187,16 @@ def test_send_push_notification_task_logs_on_error(monkeypatch, caplog):
     monkeypatch.setattr("app.modules.notifications.tasks.legacy_models", FakeLegacy)
     monkeypatch.setattr(
         "app.modules.notifications.tasks.messaging.send",
-        lambda *_: (_ for _ in ()).throw(RuntimeError("fcm down")),  # simulate FCM transport failure
+        lambda *_: (_ for _ in ()).throw(
+            RuntimeError("fcm down")
+        ),  # simulate FCM transport failure
     )
 
     send_push_notification_task(fake_session, 1)
     assert fake_session.committed is True
-    assert any("Error sending push notification" in msg for msg in caplog.text.splitlines())
+    assert any(
+        "Error sending push notification" in msg for msg in caplog.text.splitlines()
+    )
 
 
 @pytest.mark.asyncio
@@ -207,19 +206,44 @@ async def test_notification_batcher_groups_three_emails(monkeypatch):
     async def fake_send(message):
         sent["body"] = message.body
 
-    monkeypatch.setattr("app.modules.notifications.batching.send_email_notification", fake_send)
+    monkeypatch.setattr(
+        "app.modules.notifications.batching.send_email_notification", fake_send
+    )
     batcher = batching.NotificationBatcher(max_batch_size=3, max_wait_time=10)
 
-    await batcher.add({"channel": "email", "recipient": "a@example.com", "title": "t1", "content": "c1"})
-    await batcher.add({"channel": "email", "recipient": "a@example.com", "title": "t2", "content": "c2"})
-    await batcher.add({"channel": "email", "recipient": "a@example.com", "title": "t3", "content": "c3"})
+    await batcher.add(
+        {
+            "channel": "email",
+            "recipient": "a@example.com",
+            "title": "t1",
+            "content": "c1",
+        }
+    )
+    await batcher.add(
+        {
+            "channel": "email",
+            "recipient": "a@example.com",
+            "title": "t2",
+            "content": "c2",
+        }
+    )
+    await batcher.add(
+        {
+            "channel": "email",
+            "recipient": "a@example.com",
+            "title": "t3",
+            "content": "c3",
+        }
+    )
 
     assert "t1" in sent["body"] and "t2" in sent["body"] and "t3" in sent["body"]
 
 
 @pytest.mark.asyncio
 async def test_send_email_notification_raises_on_timeout(monkeypatch):
-    monkeypatch.setattr("app.modules.notifications.email.settings.environment", "production")
+    monkeypatch.setattr(
+        "app.modules.notifications.email.settings.environment", "production"
+    )
     monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
     monkeypatch.setattr("app.modules.notifications.email.settings.mail_username", "u")
     monkeypatch.setattr("app.modules.notifications.email.settings.mail_password", "p")

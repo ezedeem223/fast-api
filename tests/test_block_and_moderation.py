@@ -1,11 +1,9 @@
+from types import SimpleNamespace
 
 import pytest
 
-from types import SimpleNamespace
-
+from app import models, oauth2
 from app.main import app
-from app import oauth2
-from app import models
 
 
 @pytest.fixture
@@ -67,4 +65,6 @@ def test_warn_and_ban_user_routes(admin_client, test_user2, session):
     assert banned.reason == "Severe abuse"
 
     # ensure ban recorded
-    assert session.query(models.UserBan).filter_by(user_id=test_user2["id"]).count() == 1
+    assert (
+        session.query(models.UserBan).filter_by(user_id=test_user2["id"]).count() == 1
+    )

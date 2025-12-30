@@ -1,16 +1,17 @@
 """Integration-style test for messaging service flows with moderation hooks and notification stubs."""
 
-import pytest
-from fastapi import BackgroundTasks, HTTPException, UploadFile
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+import pytest
+
 from app import models, schemas
+from app.modules.utils.security import hash as hash_password
+from app.services import reporting
 from app.services.messaging.message_service import MessageService
 from app.services.moderation.banned_word_service import BannedWordService
-from app.services import reporting
-from app.modules.utils.security import hash as hash_password
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 
 
 def _user(session, email="msg@example.com"):
@@ -37,16 +38,32 @@ async def test_message_service_send_list_update_delete(session, monkeypatch):
     # stub notifications and translation
     monkeypatch.setattr(service, "_queue_email_notification", lambda *a, **k: None)
     monkeypatch.setattr(service, "_schedule_email_notification", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.manager.send_personal_message", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.send_real_time_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.notifications.manager.send_personal_message", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.notifications.send_real_time_notification", lambda *a, **k: None
+    )
+
     async def _fake_translate(content, user, lang):
         return content
-    monkeypatch.setattr("app.services.messaging.message_service.get_translated_content", _fake_translate)
-    monkeypatch.setattr("app.services.messaging.message_service.update_conversation_statistics", lambda *a, **k: None)
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.get_translated_content", _fake_translate
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.update_conversation_statistics",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
 
     payload = schemas.MessageCreate(content="hello", receiver_id=recv.id)
-    msg = await service.create_message(payload=payload, current_user=sender, background_tasks=tasks)
+    msg = await service.create_message(
+        payload=payload, current_user=sender, background_tasks=tasks
+    )
     assert msg.content == "hello"
     # normalize timestamp to aware for edit/delete checks
     msg_db = session.get(models.Message, msg.id)
@@ -60,16 +77,27 @@ async def test_message_service_send_list_update_delete(session, monkeypatch):
     service.EDIT_DELETE_WINDOW = 100000
     # update message within window
     upd = schemas.MessageUpdate(content="edited")
-    updated = await service.update_message(message_id=msg.id, payload=upd, current_user=sender, background_tasks=tasks)
+    updated = await service.update_message(
+        message_id=msg.id, payload=upd, current_user=sender, background_tasks=tasks
+    )
     assert updated.is_edited is True
 
     # delete message within window
-    await service.delete_message(message_id=msg.id, current_user=sender, background_tasks=tasks)
-    assert session.query(models.Message).filter(models.Message.id == msg.id).first() is None
+    await service.delete_message(
+        message_id=msg.id, current_user=sender, background_tasks=tasks
+    )
+    assert (
+        session.query(models.Message).filter(models.Message.id == msg.id).first()
+        is None
+    )
 
     # empty content error
     with pytest.raises(HTTPException):
-        await service.create_message(payload=schemas.MessageCreate(content=" ", receiver_id=recv.id), current_user=sender, background_tasks=tasks)
+        await service.create_message(
+            payload=schemas.MessageCreate(content=" ", receiver_id=recv.id),
+            current_user=sender,
+            background_tasks=tasks,
+        )
 
 
 @pytest.mark.asyncio
@@ -81,7 +109,9 @@ async def test_message_service_send_file_and_ordering(session, monkeypatch, tmp_
 
     file_content = b"file-bytes"
     upload = UploadFile(file=BytesIO(file_content), filename="a.txt")
-    result = await service.send_file(file=upload, recipient_id=recv.id, current_user=sender)
+    result = await service.send_file(
+        file=upload, recipient_id=recv.id, current_user=sender
+    )
     assert result["message"].startswith("File sent")
 
     # ordering of conversations by last_message_at
@@ -99,13 +129,27 @@ async def test_message_edit_delete_window_and_permissions(session, monkeypatch):
 
     monkeypatch.setattr(service, "_queue_email_notification", lambda *a, **k: None)
     monkeypatch.setattr(service, "_schedule_email_notification", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.manager.send_personal_message", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.send_real_time_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.notifications.manager.send_personal_message", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.notifications.send_real_time_notification", lambda *a, **k: None
+    )
+
     async def _fake_translate(content, user, lang):
         return content
-    monkeypatch.setattr("app.services.messaging.message_service.get_translated_content", _fake_translate)
-    monkeypatch.setattr("app.services.messaging.message_service.update_conversation_statistics", lambda *a, **k: None)
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.get_translated_content", _fake_translate
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.update_conversation_statistics",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
 
     msg = await service.create_message(
         payload=schemas.MessageCreate(content="will expire", receiver_id=recv.id),
@@ -113,7 +157,9 @@ async def test_message_edit_delete_window_and_permissions(session, monkeypatch):
         background_tasks=tasks,
     )
     msg_db = session.get(models.Message, msg.id)
-    msg_db.timestamp = datetime.now(timezone.utc) - timedelta(minutes=service.EDIT_DELETE_WINDOW + 5)
+    msg_db.timestamp = datetime.now(timezone.utc) - timedelta(
+        minutes=service.EDIT_DELETE_WINDOW + 5
+    )
     session.commit()
 
     with pytest.raises(HTTPException) as exc:
@@ -155,13 +201,27 @@ async def test_message_list_pagination_and_ordering(session, monkeypatch):
 
     monkeypatch.setattr(service, "_queue_email_notification", lambda *a, **k: None)
     monkeypatch.setattr(service, "_schedule_email_notification", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.manager.send_personal_message", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.send_real_time_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.notifications.manager.send_personal_message", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.notifications.send_real_time_notification", lambda *a, **k: None
+    )
+
     async def _fake_translate(content, user, lang):
         return content
-    monkeypatch.setattr("app.services.messaging.message_service.get_translated_content", _fake_translate)
-    monkeypatch.setattr("app.services.messaging.message_service.update_conversation_statistics", lambda *a, **k: None)
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.get_translated_content", _fake_translate
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.update_conversation_statistics",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
 
     for idx in range(3):
         created = await service.create_message(
@@ -206,7 +266,9 @@ async def test_send_file_validation_and_virus_scan(session, monkeypatch, tmp_pat
     monkeypatch.setattr(service, "_scan_file_for_viruses", lambda path: False)
     infected = UploadFile(file=BytesIO(b"abc"), filename="bad.txt")
     with pytest.raises(HTTPException) as exc:
-        await service.send_file(file=infected, recipient_id=recv.id, current_user=sender)
+        await service.send_file(
+            file=infected, recipient_id=recv.id, current_user=sender
+        )
     assert exc.value.status_code == 400
     assert not (service.UPLOAD_DIR / "bad.txt").exists()
 
@@ -221,13 +283,27 @@ async def test_mark_message_as_read_and_get_message_permissions(session, monkeyp
 
     monkeypatch.setattr(service, "_queue_email_notification", lambda *a, **k: None)
     monkeypatch.setattr(service, "_schedule_email_notification", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.manager.send_personal_message", lambda *a, **k: None)
-    monkeypatch.setattr("app.notifications.send_real_time_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.notifications.manager.send_personal_message", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "app.notifications.send_real_time_notification", lambda *a, **k: None
+    )
+
     async def _fake_translate(content, user, lang):
         return content
-    monkeypatch.setattr("app.services.messaging.message_service.get_translated_content", _fake_translate)
-    monkeypatch.setattr("app.services.messaging.message_service.update_conversation_statistics", lambda *a, **k: None)
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
+
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.get_translated_content", _fake_translate
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.update_conversation_statistics",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
 
     msg = await service.create_message(
         payload=schemas.MessageCreate(content="read me", receiver_id=recv.id),
@@ -263,7 +339,10 @@ async def test_create_audio_message_validation(session, monkeypatch, tmp_path):
     sender = _user(session, "audio@example.com")
     recv = _user(session, "audio2@example.com")
 
-    monkeypatch.setattr("app.services.messaging.message_service.create_notification", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.services.messaging.message_service.create_notification",
+        lambda *a, **k: None,
+    )
 
     invalid = UploadFile(file=BytesIO(b"bad"), filename="clip.txt")
     with pytest.raises(HTTPException) as exc:
@@ -310,19 +389,35 @@ def test_get_conversation_messages_membership_guard(session):
 def test_banned_word_service_crud(session, monkeypatch):
     service = BannedWordService(session)
     admin = _user(session, "admin@example.com")
-    monkeypatch.setattr("app.services.moderation.banned_word_service.update_ban_statistics", lambda *a, **k: None)
-    monkeypatch.setattr("app.services.moderation.banned_word_service.log_admin_action", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.services.moderation.banned_word_service.update_ban_statistics",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "app.services.moderation.banned_word_service.log_admin_action",
+        lambda *a, **k: None,
+    )
 
-    word = service.add_word(payload=schemas.BannedWordCreate(word="Spam"), current_user=admin)
+    word = service.add_word(
+        payload=schemas.BannedWordCreate(word="Spam"), current_user=admin
+    )
     assert word.id
 
     with pytest.raises(HTTPException):
-        service.add_word(payload=schemas.BannedWordCreate(word="spam"), current_user=admin)
+        service.add_word(
+            payload=schemas.BannedWordCreate(word="spam"), current_user=admin
+        )
 
-    listed = service.list_words(skip=0, limit=10, search="sp", sort_by="word", sort_order="asc")
+    listed = service.list_words(
+        skip=0, limit=10, search="sp", sort_by="word", sort_order="asc"
+    )
     assert listed["total"] == 1
 
-    updated = service.update_word(word_id=word.id, update_payload=schemas.BannedWordUpdate(word="Eggs"), current_user=admin)
+    updated = service.update_word(
+        word_id=word.id,
+        update_payload=schemas.BannedWordUpdate(word="Eggs"),
+        current_user=admin,
+    )
     assert updated.word == "Eggs"
 
     removed = service.remove_word(word_id=word.id, current_user=admin)
@@ -337,7 +432,9 @@ def test_reporting_negative_paths(session, monkeypatch):
 
     # neither post nor comment
     with pytest.raises(HTTPException):
-        reporting.submit_report(session, user, reason="valid", post_id=None, comment_id=None)
+        reporting.submit_report(
+            session, user, reason="valid", post_id=None, comment_id=None
+        )
 
     # missing post
     with pytest.raises(HTTPException):

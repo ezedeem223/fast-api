@@ -1,8 +1,10 @@
-import pytest
-from fastapi import HTTPException
-from app.oauth2 import create_access_token, verify_access_token
-from app.notifications import send_email_notification
 import logging
+
+import pytest
+
+from app.notifications import send_email_notification
+from app.oauth2 import create_access_token, verify_access_token
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 

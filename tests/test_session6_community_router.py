@@ -49,9 +49,7 @@ def test_owner_limit_enforced(monkeypatch, authorized_client):
     assert second.status_code == 400
 
 
-def test_invitation_send_and_accept_adds_member(
-    authorized_client, client, test_user2
-):
+def test_invitation_send_and_accept_adds_member(authorized_client, client, test_user2):
     community_resp = authorized_client.post(
         "/communities", json={"name": "Invite Only", "description": "Desc"}
     )
@@ -81,9 +79,7 @@ def test_invitation_send_and_accept_adds_member(
         assert members.count() == 2
 
 
-def test_expired_invitation_rejected(
-    authorized_client, client, test_user2
-):
+def test_expired_invitation_rejected(authorized_client, client, test_user2):
     community_resp = authorized_client.post(
         "/communities", json={"name": "Old Invite", "description": "Desc"}
     )
@@ -161,9 +157,7 @@ def test_duplicate_archive_conflict(authorized_client):
     )
     assert community_resp.status_code == 201
     community = community_resp.json()
-    authorized_client.put(
-        f"/communities/{community['id']}", json={"is_active": False}
-    )
+    authorized_client.put(f"/communities/{community['id']}", json={"is_active": False})
 
     second = authorized_client.put(
         f"/communities/{community['id']}", json={"is_active": False}

@@ -1,4 +1,8 @@
-"""Compatibility shim for media processing utilities."""
+"""Compatibility shim for media processing utilities.
+
+Keeps legacy imports (`app.media_processing`) working while the canonical
+implementations live under `app.modules.media`.
+"""
 
 from app.modules.media import (
     extract_audio_from_video,

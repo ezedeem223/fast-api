@@ -1,34 +1,38 @@
-"""User router covering profile, preferences, followers, language, and session endpoints."""
+"""User router covering profile, preferences, followers, language, and session endpoints.
 
-from fastapi import (
-    status,
-    HTTPException,
-    Depends,
-    APIRouter,
-    BackgroundTasks,
-    UploadFile,
-    File,
-    Query,
-    Response,
-)
-from sqlalchemy.orm import Session
+Auth required for mutations; integrates caching (Redis) for user/profile fetches and
+logs notable user events. Includes data export/identity linking helpers.
+"""
+
 from typing import List
 
+from sqlalchemy.orm import Session
 
-# Importing local modules
-from .. import models, schemas, oauth2
+from app.core.cache.redis_cache import cache, cache_manager
+from app.core.database import get_db
 from app.modules.users import UserService
 from app.modules.users.models import User
-from app.modules.users.schemas import IdentityLinkCreate, IdentityOut, DataExportOut
-from app.core.database import get_db
-from ..notifications import send_email_notification
+from app.modules.users.schemas import DataExportOut, IdentityLinkCreate, IdentityOut
 from app.modules.utils.events import log_user_event
-from ..i18n import (
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
+
+# Importing local modules
+from .. import models, oauth2, schemas
+from ..i18n import (  # Assuming get_translated_content is defined here
     ALL_LANGUAGES,
     get_translated_content,
-)  # Assuming get_translated_content is defined here
-from app.core.cache.redis_cache import cache, cache_manager
-
+)
+from ..notifications import send_email_notification
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -120,7 +124,9 @@ def update_public_key(
 
 
 @router.get("/{id}", response_model=schemas.UserOut)
-@cache(prefix="user:profile", ttl=300, include_user=False)  # Cache response for performance.
+@cache(
+    prefix="user:profile", ttl=300, include_user=False
+)  # Cache response for performance.
 async def get_user(
     id: int,
     service: UserService = Depends(get_user_service),
@@ -466,6 +472,7 @@ def update_user_language(
 def get_language_options():
     """Endpoint: get_language_options."""
     return [{"code": code, "name": name} for code, name in ALL_LANGUAGES.items()]
+
 
 @router.get("/me/export", response_model=DataExportOut)
 def export_my_data(

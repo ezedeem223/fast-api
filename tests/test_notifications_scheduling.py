@@ -1,11 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
+
 from app.modules.notifications import models as notification_models
-from app.modules.notifications.tasks import (
-    deliver_notification_task,
-)
 from app.modules.notifications import realtime
+from app.modules.notifications.tasks import deliver_notification_task
 
 
 def _notification(session, user_id: int) -> notification_models.Notification:

@@ -1,11 +1,9 @@
-from fastapi import FastAPI
-
-from tests.testclient import TestClient
-
 from app import i18n, models
 from app.modules.utils import links as utils_links
 from app.modules.utils import search as utils_search
 from app.routers import amenhotep as amenhotep_router
+from fastapi import FastAPI
+from tests.testclient import TestClient
 
 
 def test_extract_links_variations():

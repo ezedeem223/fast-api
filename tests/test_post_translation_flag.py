@@ -1,4 +1,5 @@
 import os
+
 import pytest
 
 from app import models
@@ -55,7 +56,9 @@ async def test_list_posts_translates_when_flag_enabled(session, test_user, sampl
 
 
 @pytest.mark.asyncio
-async def test_list_posts_skips_translation_when_flag_disabled(session, test_user, sample_post):
+async def test_list_posts_skips_translation_when_flag_disabled(
+    session, test_user, sample_post
+):
     service = PostService(session)
     user = session.get(models.User, test_user["id"])
     calls = []

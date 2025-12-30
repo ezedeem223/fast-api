@@ -2,20 +2,21 @@
 
 from .associations import post_mentions, user_hashtag_follows
 from .models import (
-    UserType,
-    VerificationStatus,
+    Badge,
     PrivacyLevel,
-    UserRole,
-    User,
     TokenBlacklist,
+    User,
     UserActivity,
+    UserBadge,
     UserEvent,
+    UserIdentity,
+    UserRole,
     UserSession,
     UserStatistics,
-    Badge,
-    UserBadge,
-    UserIdentity,
+    UserType,
+    VerificationStatus,
 )
+
 __all__ = [
     "post_mentions",
     "user_hashtag_follows",

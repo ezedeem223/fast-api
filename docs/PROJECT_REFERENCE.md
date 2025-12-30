@@ -58,6 +58,7 @@ Single-source reference for architecture, developer guidance, documentation styl
 - Inline comments are rare, reserved for non-obvious logic, performance/security constraints, or compatibility shims.
 - Tests: descriptive names; brief comments only for tricky fixtures/mocks/timeouts.
 - Keep prose in English, line lengths reasonable, ASCII unless existing content requires otherwise.
+- Coverage status: core app factory/config/logging/telemetry/monitoring, middleware, database, cache/scheduling, auth (oauth2/crypto/sessions/2FA/social/OAuth), API aggregation (HTTP/WS), domain routers/services (notifications, messaging/calls/screen share, community, posts/comments/reactions/reels, search/Typesense, support/wellness/collaboration/impact), AI (Amenhotep), utilities, and model registry now have concise docstrings describing scope, auth expectations, cache/side effects, and fail-open behavior. Prefer importing from modular packages; compatibility shims remain documented for legacy imports.
 
 ## Review/CI Checklist
 - Docstrings present on public APIs (core/services/routers/modules); models/enums/schemas documented when behavior is non-trivial.

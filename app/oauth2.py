@@ -4,23 +4,31 @@ Responsibilities:
 - Create and verify RSA-signed access tokens with expirations.
 - Resolve current session/user/admin with IP ban/evasion checks and token blacklist enforcement.
 - Surface HTTP-friendly errors for invalid/expired tokens and banned users.
+
+Notes:
+- Uses RSA keys from settings so downstream services can verify tokens with the public key only.
+- Respects APP_ENV=test defaults (e.g., shorter expirations in settings if configured).
+- Avoids hard failures when client IP is missing; treats as unknown.
 """
+
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 # ============================================
 # Imports and Dependencies
 # ============================================
 from jose import JWTError, jwt
-from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from fastapi import Depends, status, HTTPException, Request
-from fastapi.security import OAuth2PasswordBearer
+
 from app.core.config import settings
-import logging
-from typing import Optional
-from . import schemas
 from app.core.database import get_db
-from app.modules.users.models import User, UserRole, TokenBlacklist
-from app.modules.utils.network import get_client_ip, is_ip_banned, detect_ip_evasion
+from app.modules.users.models import TokenBlacklist, User, UserRole
+from app.modules.utils.network import detect_ip_evasion, get_client_ip, is_ip_banned
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
+
+from . import schemas
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,9 +45,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 # Token Data Model
 # ============================================
 class TokenData(schemas.BaseModel):
-    """
-    Schema to store token data.
-    """
+    """Schema to store token data from validated JWTs."""
 
     id: Optional[int] = None
 
@@ -50,8 +56,8 @@ class TokenData(schemas.BaseModel):
 def create_access_token(data: dict):
     """Create a JWT access token signed with the RSA private key.
 
-    - Clones payload, normalizes user_id to int, and sets exp claim.
-    - Uses RSA private key so downstream services can verify with the public key.
+    Clones payload, normalizes user_id to int, and sets exp claim. Raises ValueError
+    when user_id cannot be coerced to int. Downstream services verify with the public key.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -168,9 +174,7 @@ def get_current_user(
 
         # Check if the token is blacklisted
         blacklisted_token = (
-            db.query(TokenBlacklist)
-            .filter(TokenBlacklist.token == token)
-            .first()
+            db.query(TokenBlacklist).filter(TokenBlacklist.token == token).first()
         )
         if blacklisted_token:
             raise HTTPException(

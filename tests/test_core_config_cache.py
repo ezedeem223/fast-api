@@ -1,7 +1,7 @@
 import asyncio
+import json
 import os
 import time
-import json
 
 import pytest
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -48,8 +48,8 @@ def test_static_uploads_paths_created(monkeypatch, tmp_path):
 
 
 def test_readyz_db_failure_returns_503(monkeypatch, client):
-    from app.main import app
     from app.core.database import get_db
+    from app.main import app
 
     class FailingSession:
         def execute(self, *_):
@@ -67,6 +67,7 @@ def test_readyz_db_failure_returns_503(monkeypatch, client):
 
 def test_readyz_redis_failure_returns_503(monkeypatch, client):
     from app.core.cache.redis_cache import cache_manager
+
     os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
     class FakeRedis:

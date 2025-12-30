@@ -1,184 +1,175 @@
-"""Aggregated model exports kept for legacy import paths."""
+"""Aggregated model exports kept for legacy import paths.
+
+Purpose:
+- Provide backwards-compatible access to models across domains during the migration to modular packages.
+- Allow Alembic to discover `Base` and the full model set without importing every module eagerly in `app.core.database`.
+Usage:
+- Prefer importing from the canonical module (e.g., `app.modules.users.models.User`) in new code.
+- Legacy imports (`from app import models; models.User`) are supported via this registry.
+"""
 
 from app.models.base import Base
-
-from app.modules.users.associations import post_mentions, user_hashtag_follows
-from app.modules.community.associations import community_tags
-from app.modules.stickers import sticker_category_association
-
-from app.modules.users.models import (
-    UserType,
-    VerificationStatus,
-    PrivacyLevel,
-    UserRole,
-    User,
-    TokenBlacklist,
-    UserActivity,
-    UserEvent,
-    UserSession,
-    UserStatistics,
-)
-
-from app.modules.community import (
-    CommunityRole,
-    CommunityCategory,
-    Community,
-    CommunityMember,
-    CommunityStatistics,
-    CommunityRule,
-    CommunityInvitation,
-    Category,
-    SearchSuggestion,
-    SearchStatistics,
-    Tag,
-    Reel,
-    ArchivedReel,
-    Article,
-    CommunityArchive,
-    DigitalMuseumItem,
-)
-
-from app.modules.posts import (
-    CopyrightType,
-    SocialMediaType,
-    PostStatus,
-    ReactionType,
-    Reaction,
-    Post,
-    Comment,
-    PostVoteStatistics,
-    RepostStatistics,
-    PollOption,
-    Poll,
-    PollVote,
-    PostCategory,
-    SocialMediaAccount,
-    SocialMediaPost,
-    post_hashtags,
-    LivingTestimony,
-)
-
-from app.modules.notifications import (
-    NotificationStatus,
-    NotificationPriority,
-    NotificationCategory,
-    NotificationType,
-    NotificationPreferences,
-    NotificationGroup,
-    Notification,
-    NotificationDeliveryAttempt,
-    NotificationAnalytics,
-    NotificationDeliveryLog,
-)
-
-from app.modules.messaging import (
-    CallType,
-    CallStatus,
-    MessageType,
-    ScreenShareStatus,
-    ConversationType,
-    ConversationMemberRole,
-    Conversation,
-    ConversationMember,
-    Message,
-    MessageAttachment,
-    EncryptedSession,
-    EncryptedCall,
-    Call,
-    ScreenShareSession,
-    ConversationStatistics,
-)
-
-from app.modules.support import TicketStatus, SupportTicket, TicketResponse
-
-from app.modules.stickers import (
-    StickerPack,
-    Sticker,
-    StickerCategory,
-    StickerReport,
-)
-
-from app.modules.moderation import (
-    BlockDuration,
-    BlockType,
-    AppealStatus,
-    UserWarning,
-    UserBan,
-    IPBan,
-    BannedWord,
-    BanStatistics,
-    BanReason,
-    Block,
-    BlockLog,
-    BlockAppeal,
-    AuditLog,
-)
-
 from app.modules.amenhotep import (
-    AmenhotepMessage,
     AmenhotepChatAnalytics,
+    AmenhotepMessage,
     CommentEditHistory,
 )
-
-from app.modules.social import (
-    ReportStatus,
-    Hashtag,
-    BusinessTransaction,
-    Vote,
-    Report,
-    Follow,
-    ExpertiseBadge,
-    ImpactCertificate,
-    CulturalDictionaryEntry,
-)
-
-from app.modules.fact_checking import (
-    FactCheckStatus,
-    Fact,
-    FactVerification,
-    FactCorrection,
-    CredibilityBadge,
-    FactVote,
-    MisinformationWarning,
-)
-
-from app.modules.wellness import (
-    DigitalWellnessMetrics,
-    WellnessAlert,
-    WellnessSession,
-    WellnessGoal,
-    WellnessMode,
-    WellnessLevel,
-    UsagePattern,
-)
-
-from app.modules.marketplace import (
-    ContentListing,
-    ContentPurchase,
-    ContentSubscription,
-    ContentReview,
-)
-
-from app.modules.learning import (
-    LearningPath,
-    LearningModule,
-    LearningEnrollment,
-    Certificate,
-)
-
-from app.modules.local_economy import (
-    LocalMarketListing,
-    LocalMarketInquiry,
-    LocalMarketTransaction,
-    DigitalCooperative,
-    CooperativeMember,
-    CooperativeTransaction,
-)
-
 from app.modules.collaboration import (
     CollaborativeProject,
     ProjectContribution,
     ProjectStatus,
+)
+from app.modules.community import (
+    ArchivedReel,
+    Article,
+    Category,
+    Community,
+    CommunityArchive,
+    CommunityCategory,
+    CommunityInvitation,
+    CommunityMember,
+    CommunityRole,
+    CommunityRule,
+    CommunityStatistics,
+    DigitalMuseumItem,
+    Reel,
+    SearchStatistics,
+    SearchSuggestion,
+    Tag,
+)
+from app.modules.community.associations import community_tags
+from app.modules.fact_checking import (
+    CredibilityBadge,
+    Fact,
+    FactCheckStatus,
+    FactCorrection,
+    FactVerification,
+    FactVote,
+    MisinformationWarning,
+)
+from app.modules.learning import (
+    Certificate,
+    LearningEnrollment,
+    LearningModule,
+    LearningPath,
+)
+from app.modules.local_economy import (
+    CooperativeMember,
+    CooperativeTransaction,
+    DigitalCooperative,
+    LocalMarketInquiry,
+    LocalMarketListing,
+    LocalMarketTransaction,
+)
+from app.modules.marketplace import (
+    ContentListing,
+    ContentPurchase,
+    ContentReview,
+    ContentSubscription,
+)
+from app.modules.messaging import (
+    Call,
+    CallStatus,
+    CallType,
+    Conversation,
+    ConversationMember,
+    ConversationMemberRole,
+    ConversationStatistics,
+    ConversationType,
+    EncryptedCall,
+    EncryptedSession,
+    Message,
+    MessageAttachment,
+    MessageType,
+    ScreenShareSession,
+    ScreenShareStatus,
+)
+from app.modules.moderation import (
+    AppealStatus,
+    AuditLog,
+    BannedWord,
+    BanReason,
+    BanStatistics,
+    Block,
+    BlockAppeal,
+    BlockDuration,
+    BlockLog,
+    BlockType,
+    IPBan,
+    UserBan,
+    UserWarning,
+)
+from app.modules.notifications import (
+    Notification,
+    NotificationAnalytics,
+    NotificationCategory,
+    NotificationDeliveryAttempt,
+    NotificationDeliveryLog,
+    NotificationGroup,
+    NotificationPreferences,
+    NotificationPriority,
+    NotificationStatus,
+    NotificationType,
+)
+from app.modules.posts import (
+    Comment,
+    CopyrightType,
+    LivingTestimony,
+    Poll,
+    PollOption,
+    PollVote,
+    Post,
+    PostCategory,
+    PostStatus,
+    PostVoteStatistics,
+    Reaction,
+    ReactionType,
+    RepostStatistics,
+    SocialMediaAccount,
+    SocialMediaPost,
+    SocialMediaType,
+    post_hashtags,
+)
+from app.modules.social import (
+    BusinessTransaction,
+    CulturalDictionaryEntry,
+    ExpertiseBadge,
+    Follow,
+    Hashtag,
+    ImpactCertificate,
+    Report,
+    ReportStatus,
+    Vote,
+)
+from app.modules.stickers import (
+    Sticker,
+    StickerCategory,
+    StickerPack,
+    StickerReport,
+    sticker_category_association,
+)
+from app.modules.support import SupportTicket, TicketResponse, TicketStatus
+from app.modules.users.associations import post_mentions, user_hashtag_follows
+from app.modules.users.models import (
+    PrivacyLevel,
+    TokenBlacklist,
+    User,
+    UserActivity,
+    UserEvent,
+    UserRole,
+    UserSession,
+    UserStatistics,
+    UserType,
+    VerificationStatus,
+)
+from app.modules.wellness import (
+    DigitalWellnessMetrics,
+    UsagePattern,
+    WellnessAlert,
+    WellnessGoal,
+    WellnessLevel,
+    WellnessMode,
+    WellnessSession,
 )
 
 __all__ = [

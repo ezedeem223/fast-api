@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
 from app.modules.moderation import service as moderation_service
-from app.services.moderation.banned_word_service import BannedWordService
 from app.modules.wellness.service import WellnessService
+from app.services.moderation.banned_word_service import BannedWordService
 from app.services.reels.service import ReelService
+from fastapi import HTTPException
 
 
 def _user(session, email="u@example.com"):
@@ -75,10 +75,14 @@ def test_wellness_bounds_and_modes(session):
 
     # Mode transitions
     dnd = WellnessService.enable_do_not_disturb(session, user.id, duration_minutes=10)
-    assert dnd.do_not_disturb is True and dnd.do_not_disturb_until > datetime.now(timezone.utc)
+    assert dnd.do_not_disturb is True and dnd.do_not_disturb_until > datetime.now(
+        timezone.utc
+    )
 
     mh = WellnessService.enable_mental_health_mode(session, user.id, duration_minutes=5)
-    assert mh.mental_health_mode is True and mh.mental_health_mode_until > datetime.now(timezone.utc)
+    assert mh.mental_health_mode is True and mh.mental_health_mode_until > datetime.now(
+        timezone.utc
+    )
 
     # Alert creation
     alert = WellnessService.create_wellness_alert(
@@ -109,7 +113,11 @@ def test_reels_cleanup_and_constraints(session):
     # Create active reel with membership
     reel = svc.create_reel(
         payload=schemas.ReelCreate(
-            title="r1", video_url="http://v", description="", community_id=community.id, expires_in_hours=1
+            title="r1",
+            video_url="http://v",
+            description="",
+            community_id=community.id,
+            expires_in_hours=1,
         ),
         current_user=owner,
     )
@@ -126,7 +134,11 @@ def test_reels_cleanup_and_constraints(session):
     with pytest.raises(HTTPException):
         svc.create_reel(
             payload=schemas.ReelCreate(
-                title="r2", video_url="http://v2", description="", community_id=community.id, expires_in_hours=1
+                title="r2",
+                video_url="http://v2",
+                description="",
+                community_id=community.id,
+                expires_in_hours=1,
             ),
             current_user=other,
         )

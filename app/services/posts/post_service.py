@@ -7,23 +7,24 @@ import inspect
 import logging
 import os
 from datetime import datetime, timezone
-from io import BytesIO
 from http import HTTPStatus
+from io import BytesIO
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from sqlalchemy import func, extract, desc
+from sqlalchemy import desc, extract, func
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
-
 from app import schemas as global_schemas
-from app.modules.posts import schemas as post_schemas
-
 from app.celery_worker import schedule_post_publication
 from app.content_filter import check_content, filter_content
+from app.core.cache.redis_cache import cache_manager
+from app.core.database.query_helpers import optimize_post_query, paginate_query
 from app.modules.community import Community, CommunityMember
+from app.modules.posts import schemas as post_schemas
+from app.modules.posts.models import LivingTestimony, Post, PostRelation
+from app.modules.social.economy_service import SocialEconomyService
 from app.modules.utils.content import (
     get_or_create_hashtag,
     is_content_offensive,
@@ -31,16 +32,10 @@ from app.modules.utils.content import (
     send_repost_notification,
     update_repost_statistics,
 )
-from app.modules.social.economy_service import SocialEconomyService
-from app.modules.posts.models import Post, PostRelation, LivingTestimony
 from app.modules.utils.events import log_user_event
 from app.notifications import create_notification
 from app.services.reporting import submit_report
-from app.core.database.query_helpers import (
-    optimize_post_query,
-    paginate_query,
-)
-from app.core.cache.redis_cache import cache_manager
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 
 
 def _create_pdf(post: models.Post):
@@ -81,6 +76,7 @@ logger = logging.getLogger(__name__)
 
 class PostService:
     """Business logic for posts (CRUD, polls, audio, living memory, reposts, scoring, notifications)."""
+
     def __init__(self, db: Session):
         self.db = db
 
@@ -210,9 +206,7 @@ class PostService:
         self.db.add(new_post)
         self.db.commit()
         author = (
-            self.db.query(models.User)
-            .filter(models.User.id == current_user.id)
-            .first()
+            self.db.query(models.User).filter(models.User.id == current_user.id).first()
         )
         if author and hasattr(author, "post_count"):
             author.post_count = (author.post_count or 0) + 1
@@ -1317,8 +1311,7 @@ class PostService:
             pass
 
     def get_user_timeline(self, user_id: int) -> list[dict]:
-        """
-        """
+        """ """
         timeline_query = (
             self.db.query(
                 func.extract("year", Post.created_at).label("year"),
@@ -1343,8 +1336,7 @@ class PostService:
         ]
 
     def get_on_this_day_memories(self, user_id: int) -> list[dict]:
-        """
-        """
+        """ """
         today = datetime.now(timezone.utc)
 
         memories = (

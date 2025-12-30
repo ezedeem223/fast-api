@@ -1,10 +1,11 @@
 import pytest
 from sqlalchemy import text
-from tests.testclient import TestClient
 
-from app.core.database import query_helpers, session as db_session
 from app.core.app_factory import create_app
 from app.core.config import settings
+from app.core.database import query_helpers
+from app.core.database import session as db_session
+from tests.testclient import TestClient
 
 
 def test_paginate_and_cursor_edge_cases(session):
@@ -20,7 +21,9 @@ def test_paginate_and_cursor_edge_cases(session):
     assert len(paged) == 3
 
     # cursor pagination invalid cursor ignored; next_cursor present
-    result = query_helpers.cursor_paginate(base, cursor="bad", limit=2, cursor_column="id", order_desc=True)
+    result = query_helpers.cursor_paginate(
+        base, cursor="bad", limit=2, cursor_column="id", order_desc=True
+    )
     assert result["count"] == 2
     assert result["has_next"] is True
     assert result["next_cursor"]
@@ -51,7 +54,9 @@ def test_session_engine_configuration_and_bad_url(monkeypatch):
 def test_app_factory_https_trusted_hosts_and_static_fallback(tmp_path, monkeypatch):
     # enforce HTTPS and allowed hosts
     settings.force_https = True
-    monkeypatch.setattr(settings.__class__, "allowed_hosts", ["example.com"], raising=False)
+    monkeypatch.setattr(
+        settings.__class__, "allowed_hosts", ["example.com"], raising=False
+    )
     settings.static_root = str(tmp_path / "static_missing")
     settings.uploads_root = str(tmp_path / "uploads_missing")
     app = create_app()

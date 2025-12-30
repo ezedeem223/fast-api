@@ -1,10 +1,10 @@
 import pytest
-from fastapi import FastAPI
 
 from app import models, oauth2
 from app.core.database import get_db
 from app.modules.moderation.models import BannedWord
 from app.routers import banned_words
+from fastapi import FastAPI
 from tests.testclient import TestClient
 
 
@@ -23,7 +23,10 @@ def _make_app(session, current_user):
 @pytest.fixture
 def admin(session):
     user = models.User(
-        email="admin13@example.com", hashed_password="x", is_verified=True, is_admin=True
+        email="admin13@example.com",
+        hashed_password="x",
+        is_verified=True,
+        is_admin=True,
     )
     session.add(user)
     session.commit()
@@ -39,7 +42,9 @@ def test_add_list_update_and_delete_banned_word(session, admin, monkeypatch):
     app = _make_app(session, admin)
     client = TestClient(app)
 
-    add = client.post("/banned-words/", json={"word": "spam", "severity": "warn", "is_regex": False})
+    add = client.post(
+        "/banned-words/", json={"word": "spam", "severity": "warn", "is_regex": False}
+    )
     assert add.status_code == 201
     word_id = add.json()["id"]
 
@@ -60,9 +65,13 @@ def test_add_list_update_and_delete_banned_word(session, admin, monkeypatch):
 def test_duplicate_word_rejected(session, admin):
     app = _make_app(session, admin)
     client = TestClient(app)
-    client.post("/banned-words/", json={"word": "dupe", "severity": "warn", "is_regex": False})
+    client.post(
+        "/banned-words/", json={"word": "dupe", "severity": "warn", "is_regex": False}
+    )
 
-    dup = client.post("/banned-words/", json={"word": "dupe", "severity": "warn", "is_regex": False})
+    dup = client.post(
+        "/banned-words/", json={"word": "dupe", "severity": "warn", "is_regex": False}
+    )
     assert dup.status_code == 400
 
 
@@ -83,7 +92,10 @@ def test_bulk_insert_and_search_sort(session, admin, monkeypatch):
     )
     assert bulk.status_code == 201
 
-    search = client.get("/banned-words/", params={"search": "alpha", "sort_by": "created_at", "sort_order": "desc"})
+    search = client.get(
+        "/banned-words/",
+        params={"search": "alpha", "sort_by": "created_at", "sort_order": "desc"},
+    )
     assert search.status_code == 200
     data = search.json()
     assert data["total"] == 2
@@ -91,7 +103,12 @@ def test_bulk_insert_and_search_sort(session, admin, monkeypatch):
 
 
 def test_non_admin_cannot_access(session):
-    user = models.User(email="user13@example.com", hashed_password="x", is_verified=True, is_admin=False)
+    user = models.User(
+        email="user13@example.com",
+        hashed_password="x",
+        is_verified=True,
+        is_admin=False,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -101,5 +118,7 @@ def test_non_admin_cannot_access(session):
 
     resp = client.get("/banned-words/")
     assert resp.status_code == 403
-    resp_add = client.post("/banned-words/", json={"word": "nope", "severity": "warn", "is_regex": False})
+    resp_add = client.post(
+        "/banned-words/", json={"word": "nope", "severity": "warn", "is_regex": False}
+    )
     assert resp_add.status_code == 403

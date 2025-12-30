@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from app import models
 import app.analytics as analytics
 import app.modules.utils.analytics as utils_analytics
+from app import models
 
 
 def _user(session, email="u@example.com"):
@@ -15,12 +15,20 @@ def _user(session, email="u@example.com"):
 
 def test_analyze_content_negative_and_short(monkeypatch):
     # stub sentiment pipeline to avoid heavy load
-    monkeypatch.setattr(analytics, "_get_sentiment_pipeline", lambda: lambda text: [{"label": "NEGATIVE", "score": 0.9}])
+    monkeypatch.setattr(
+        analytics,
+        "_get_sentiment_pipeline",
+        lambda: lambda text: [{"label": "NEGATIVE", "score": 0.9}],
+    )
     res = analytics.analyze_content("short text")
     assert res["sentiment"]["sentiment"] == "NEGATIVE"
     assert "positive tone" in res["suggestion"]
 
-    monkeypatch.setattr(analytics, "_get_sentiment_pipeline", lambda: lambda text: [{"label": "POSITIVE", "score": 0.5}])
+    monkeypatch.setattr(
+        analytics,
+        "_get_sentiment_pipeline",
+        lambda: lambda text: [{"label": "POSITIVE", "score": 0.5}],
+    )
     res2 = analytics.analyze_content("tiny")
     assert "short" in res2["suggestion"].lower()
 
@@ -29,12 +37,20 @@ def test_record_search_and_cache_paths(session, monkeypatch):
     user = _user(session)
     # mock cache to test hit/miss
     cache = {}
-    monkeypatch.setattr(analytics, "set_cached_json", lambda key, value, ttl_seconds=300: cache.__setitem__(key, value))
+    monkeypatch.setattr(
+        analytics,
+        "set_cached_json",
+        lambda key, value, ttl_seconds=300: cache.__setitem__(key, value),
+    )
     monkeypatch.setattr(analytics, "get_cached_json", lambda key: cache.get(key))
     monkeypatch.setattr(analytics, "invalidate_stats_cache", lambda **kw: cache.clear())
-    monkeypatch.setattr(analytics, "popular_cache_key", lambda limit: f"popular:{limit}")
+    monkeypatch.setattr(
+        analytics, "popular_cache_key", lambda limit: f"popular:{limit}"
+    )
     monkeypatch.setattr(analytics, "recent_cache_key", lambda limit: f"recent:{limit}")
-    monkeypatch.setattr(analytics, "user_cache_key", lambda uid, limit: f"user:{uid}:{limit}")
+    monkeypatch.setattr(
+        analytics, "user_cache_key", lambda uid, limit: f"user:{uid}:{limit}"
+    )
 
     analytics.record_search_query(session, "hello", user.id)
     analytics.record_search_query(session, "hello", user.id)
@@ -72,7 +88,11 @@ def test_update_conversation_statistics_edge_cases(session):
 
     # no existing stats, creates new
     analytics.update_conversation_statistics(session, "c1", msg)
-    stats = session.query(models.ConversationStatistics).filter_by(conversation_id="c1").first()
+    stats = (
+        session.query(models.ConversationStatistics)
+        .filter_by(conversation_id="c1")
+        .first()
+    )
     assert stats.total_messages == 1
 
     # add previous message to test response time and counts
@@ -105,7 +125,11 @@ def test_update_conversation_statistics_edge_cases(session):
     session.commit()
 
     analytics.update_conversation_statistics(session, "c1", msg2)
-    stats = session.query(models.ConversationStatistics).filter_by(conversation_id="c1").first()
+    stats = (
+        session.query(models.ConversationStatistics)
+        .filter_by(conversation_id="c1")
+        .first()
+    )
     assert stats.total_messages == 2
     assert stats.total_files == 1
     assert stats.total_emojis >= 1
@@ -115,9 +139,14 @@ def test_update_conversation_statistics_edge_cases(session):
 
 def test_check_call_quality_and_cleanup():
     utils_analytics.quality_buffers.clear()
-    score = utils_analytics.check_call_quality({"packet_loss": 1, "latency": 30, "jitter": 5}, "call1")
+    score = utils_analytics.check_call_quality(
+        {"packet_loss": 1, "latency": 30, "jitter": 5}, "call1"
+    )
     assert score < 100
-    assert utils_analytics.should_adjust_video_quality("call1") is False or utils_analytics.should_adjust_video_quality("call1") is True
+    assert (
+        utils_analytics.should_adjust_video_quality("call1") is False
+        or utils_analytics.should_adjust_video_quality("call1") is True
+    )
     quality = utils_analytics.get_recommended_video_quality("call1")
     assert quality in {"low", "medium", "high"}
     # simulate stale buffer
@@ -127,7 +156,13 @@ def test_check_call_quality_and_cleanup():
 
 
 def test_update_post_score_negative_paths(session, monkeypatch):
-    post = models.Post(owner_id=1, title="t", content="c", is_safe_content=True, created_at=datetime.now(timezone.utc))
+    post = models.Post(
+        owner_id=1,
+        title="t",
+        content="c",
+        is_safe_content=True,
+        created_at=datetime.now(timezone.utc),
+    )
     session.add(post)
     session.commit()
     # no reactions, score set to 0 or above

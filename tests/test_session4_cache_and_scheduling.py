@@ -1,5 +1,7 @@
 import asyncio
+
 import pytest
+
 from app.core.cache import redis_cache
 from app.core.config import settings
 
@@ -32,7 +34,9 @@ class DummyRedis:
             self.store.pop(k, None)
 
     async def scan(self, cursor, match=None, count=100):
-        keys = [k for k in self.store if match is None or k.startswith(match.rstrip("*"))]
+        keys = [
+            k for k in self.store if match is None or k.startswith(match.rstrip("*"))
+        ]
         return 0, keys
 
     class Pipeline:
@@ -142,8 +146,12 @@ async def test_cached_query_uses_cache_and_tags(monkeypatch):
         return [{"v": calls["count"]}]
 
     key = "posts:user:42"
-    first = await redis_cache.cached_query(key, query_fn, ttl=15, tags=["posts", "user:42"])
-    second = await redis_cache.cached_query(key, query_fn, ttl=15, tags=["posts", "user:42"])
+    first = await redis_cache.cached_query(
+        key, query_fn, ttl=15, tags=["posts", "user:42"]
+    )
+    second = await redis_cache.cached_query(
+        key, query_fn, ttl=15, tags=["posts", "user:42"]
+    )
 
     assert first == [{"v": 1}]
     assert second == [{"v": 1}]
@@ -152,7 +160,9 @@ async def test_cached_query_uses_cache_and_tags(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_redis_cache_init_without_url_disables(monkeypatch):
-    monkeypatch.setattr(redis_cache, "settings", type("Obj", (), {"redis_url": None}), raising=False)
+    monkeypatch.setattr(
+        redis_cache, "settings", type("Obj", (), {"redis_url": None}), raising=False
+    )
     cache = redis_cache.RedisCache()
     await cache.init_cache()
     assert cache.enabled is False

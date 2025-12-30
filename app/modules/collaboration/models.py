@@ -1,18 +1,12 @@
 """Collaboration domain models."""
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    ForeignKey,
-    DateTime,
-    Text,
-    Enum,
-)
+import enum
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
-import enum
 
 
 class ProjectStatus(str, enum.Enum):

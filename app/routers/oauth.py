@@ -1,12 +1,13 @@
 """OAuth router handling Google OAuth flows and token exchange callbacks."""
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .. import models, oauth2
 from app.core.config import settings
 from app.core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from .. import models, oauth2
 
 router = APIRouter(tags=["OAuth"])
 

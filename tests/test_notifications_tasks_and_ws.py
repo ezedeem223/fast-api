@@ -3,16 +3,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import WebSocketDisconnect
 
+from app.api.websocket import manager as ws_manager
+from app.api.websocket import websocket_endpoint
 from app.modules.notifications import models as notification_models
 from app.modules.notifications.service import (
+    NotificationService,
     deliver_scheduled_notification,
     send_bulk_notifications,
 )
 from app.notifications import send_real_time_notification
-from app.api.websocket import websocket_endpoint, manager as ws_manager
-from app.modules.notifications.service import NotificationService
+from fastapi import WebSocketDisconnect
 
 
 class FakeWebSocket:
@@ -35,7 +36,9 @@ class FakeWebSocket:
 
 
 @pytest.mark.asyncio
-async def test_deliver_scheduled_notification_sends_and_closes(monkeypatch, session, test_user):
+async def test_deliver_scheduled_notification_sends_and_closes(
+    monkeypatch, session, test_user
+):
     notif = notification_models.Notification(
         user_id=test_user["id"],
         content="scheduled",
@@ -69,7 +72,9 @@ async def test_deliver_scheduled_notification_sends_and_closes(monkeypatch, sess
 
 
 @pytest.mark.asyncio
-async def test_deliver_scheduled_notification_missing_logs_and_closes(monkeypatch, session):
+async def test_deliver_scheduled_notification_missing_logs_and_closes(
+    monkeypatch, session
+):
     close_flag = {"closed": False}
 
     def fake_get_db():
@@ -86,8 +91,13 @@ async def test_deliver_scheduled_notification_missing_logs_and_closes(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_send_bulk_notifications_counts_success_and_failures(monkeypatch, session):
-    successes = [AsyncMock(return_value="ok"), AsyncMock(side_effect=RuntimeError("boom"))]
+async def test_send_bulk_notifications_counts_success_and_failures(
+    monkeypatch, session
+):
+    successes = [
+        AsyncMock(return_value="ok"),
+        AsyncMock(side_effect=RuntimeError("boom")),
+    ]
     side_effects = [s for s in successes]
 
     async def fake_create(*args, **kwargs):
@@ -97,7 +107,9 @@ async def test_send_bulk_notifications_counts_success_and_failures(monkeypatch, 
     monkeypatch.setattr(NotificationService, "create_notification", fake_create)
 
     background_tasks = SimpleNamespace()
-    result = await send_bulk_notifications([1, 2], "hi", "welcome", session, background_tasks)
+    result = await send_bulk_notifications(
+        [1, 2], "hi", "welcome", session, background_tasks
+    )
     assert result["total"] == 2
     assert result["successful"] == 1
     assert result["failed"] == 1
@@ -213,6 +225,8 @@ async def test_websocket_auth_requires_token(monkeypatch):
     fake_ws.close = AsyncMock()
     monkeypatch.setattr(ws_module.settings, "environment", "production")
 
-    user = await ws_module._authenticate_websocket(fake_ws, claimed_user_id=5, token=None)
+    user = await ws_module._authenticate_websocket(
+        fake_ws, claimed_user_id=5, token=None
+    )
     assert user is None
     fake_ws.close.assert_awaited()

@@ -66,7 +66,10 @@ class NotificationBatcher:
             bucket.append(notification)
             last_flush = self._digest_last_flush.get(recipient, now)
             elapsed = (now - last_flush).total_seconds()
-            if len(bucket) >= self.digest_max_size or elapsed >= self.digest_window_seconds:
+            if (
+                len(bucket) >= self.digest_max_size
+                or elapsed >= self.digest_window_seconds
+            ):
                 to_flush = list(bucket)
                 self._digest_batches[recipient] = []
                 self._digest_last_flush[recipient] = now
@@ -138,7 +141,9 @@ class NotificationBatcher:
             )
             await send_email_notification(message)
 
-    async def _send_digest_email(self, recipient: str, notifications: List[dict]) -> None:
+    async def _send_digest_email(
+        self, recipient: str, notifications: List[dict]
+    ) -> None:
         """Send a digest email that summarizes multiple notifications."""
         message = MessageSchema(
             subject="Your notification digest",

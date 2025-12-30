@@ -20,7 +20,11 @@ def test_create_listing_success_and_validation(session):
     listing = svc.create_listing(
         current_user=user,
         payload=SimpleNamespace(
-            title="Bike", price=100, category="goods", description="mountain bike", currency="USD"
+            title="Bike",
+            price=100,
+            category="goods",
+            description="mountain bike",
+            currency="USD",
         ),
     )
     assert listing.title == "Bike"
@@ -34,8 +38,12 @@ def test_create_listing_success_and_validation(session):
 
 
 def test_create_inquiry_permissions(session):
-    seller = models.User(email="seller27@example.com", hashed_password="x", is_verified=True)
-    buyer = models.User(email="buyer27@example.com", hashed_password="x", is_verified=True)
+    seller = models.User(
+        email="seller27@example.com", hashed_password="x", is_verified=True
+    )
+    buyer = models.User(
+        email="buyer27@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([seller, buyer])
     session.commit()
     session.refresh(seller)
@@ -56,19 +64,27 @@ def test_create_inquiry_permissions(session):
     session.refresh(listing)
 
     svc = _service(session)
-    inquiry = svc.create_inquiry(listing_id=listing.id, current_user=buyer, message="Is it available?")
+    inquiry = svc.create_inquiry(
+        listing_id=listing.id, current_user=buyer, message="Is it available?"
+    )
     assert inquiry.listing_id == listing.id
     assert inquiry.buyer_id == buyer.id
     refreshed = session.get(models.LocalMarketListing, listing.id)
     assert refreshed.inquiries_count == 1
 
     with pytest.raises(Exception):
-        svc.create_inquiry(listing_id=listing.id, current_user=seller, message="self inquiry")
+        svc.create_inquiry(
+            listing_id=listing.id, current_user=seller, message="self inquiry"
+        )
 
 
 def test_create_transaction(session):
-    seller = models.User(email="seller27b@example.com", hashed_password="x", is_verified=True)
-    buyer = models.User(email="buyer27b@example.com", hashed_password="x", is_verified=True)
+    seller = models.User(
+        email="seller27b@example.com", hashed_password="x", is_verified=True
+    )
+    buyer = models.User(
+        email="buyer27b@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([seller, buyer])
     session.commit()
     session.refresh(seller)
@@ -99,7 +115,9 @@ def test_create_transaction(session):
 
 
 def test_update_and_delete_listing(session):
-    seller = models.User(email="seller27c@example.com", hashed_password="x", is_verified=True)
+    seller = models.User(
+        email="seller27c@example.com", hashed_password="x", is_verified=True
+    )
     session.add(seller)
     session.commit()
     session.refresh(seller)
@@ -132,8 +150,12 @@ def test_update_and_delete_listing(session):
 
 
 def test_transaction_quantity_edge(session):
-    seller = models.User(email="seller27d@example.com", hashed_password="x", is_verified=True)
-    buyer = models.User(email="buyer27d@example.com", hashed_password="x", is_verified=True)
+    seller = models.User(
+        email="seller27d@example.com", hashed_password="x", is_verified=True
+    )
+    buyer = models.User(
+        email="buyer27d@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([seller, buyer])
     session.commit()
     listing = models.LocalMarketListing(
@@ -158,12 +180,23 @@ def test_transaction_quantity_edge(session):
 
 
 def test_cooperative_transaction_flow(session):
-    owner = models.User(email="owner27coop@example.com", hashed_password="x", is_verified=True)
-    member = models.User(email="member27coop@example.com", hashed_password="x", is_verified=True)
+    owner = models.User(
+        email="owner27coop@example.com", hashed_password="x", is_verified=True
+    )
+    member = models.User(
+        email="member27coop@example.com", hashed_password="x", is_verified=True
+    )
     session.add_all([owner, member])
     session.commit()
-    cooperative = models.DigitalCooperative(name="coop", description="d", founder_id=owner.id, total_shares=100, revenue=0)
-    coop_member = models.CooperativeMember(cooperative=cooperative, user_id=member.id, shares_owned=10, ownership_percentage=10)
+    cooperative = models.DigitalCooperative(
+        name="coop", description="d", founder_id=owner.id, total_shares=100, revenue=0
+    )
+    coop_member = models.CooperativeMember(
+        cooperative=cooperative,
+        user_id=member.id,
+        shares_owned=10,
+        ownership_percentage=10,
+    )
     session.add_all([cooperative, coop_member])
     session.commit()
 

@@ -1,15 +1,15 @@
+import nacl.secret
+import nacl.utils
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-import nacl.secret
-import nacl.utils
 
 
 class SignalProtocol:
+    """Simplified Signal-like double ratchet utilities for encrypted sessions."""
+
     def __init__(self):
-        """
-        Initialize with a new X25519 key pair and empty keys.
-        """
+        """Initialize with a new X25519 key pair and empty keys."""
         self.dh_pair = x25519.X25519PrivateKey.generate()
         self.dh_pub = self.dh_pair.public_key()
         self.root_key = None
@@ -17,9 +17,7 @@ class SignalProtocol:
         self.next_header_key = None
 
     def initial_key_exchange(self, other_public_key):
-        """
-        Perform initial key exchange to derive root and chain keys.
-        """
+        """Perform initial key exchange to derive root and chain keys."""
         shared_key = self.dh_pair.exchange(other_public_key)
         kdf = HKDF(
             algorithm=hashes.SHA256(),

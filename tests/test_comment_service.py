@@ -1,13 +1,13 @@
-import pytest
-from fastapi import BackgroundTasks
-from fastapi import HTTPException
-
-from app.services.comments.service import CommentService
-from app.modules.posts.models import Post, Comment
-from app.modules.users.models import User
-from app.modules.notifications import manager as notifications_manager
-from app.schemas import CommentCreate, CommentUpdate
 from datetime import timedelta
+
+import pytest
+
+from app.modules.notifications import manager as notifications_manager
+from app.modules.posts.models import Comment, Post
+from app.modules.users.models import User
+from app.schemas import CommentCreate, CommentUpdate
+from app.services.comments.service import CommentService
+from fastapi import BackgroundTasks, HTTPException
 
 
 def _user(session, email="u@example.com", verified=True):

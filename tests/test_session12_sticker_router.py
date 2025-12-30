@@ -1,14 +1,14 @@
 from io import BytesIO
 
 import pytest
-from fastapi import FastAPI, UploadFile, HTTPException
 from PIL import Image
 
 from app import models, oauth2, schemas
 from app.core.database import get_db
-from app.modules.users.models import UserRole
 from app.modules.stickers import models as sticker_models
+from app.modules.users.models import UserRole
 from app.routers import sticker
+from fastapi import FastAPI, HTTPException, UploadFile
 from tests.testclient import TestClient
 
 
@@ -62,7 +62,9 @@ def test_create_pack_and_duplicate_name(users, session):
 
 
 @pytest.mark.asyncio
-async def test_create_sticker_assigns_pack_and_categories(monkeypatch, tmp_path, users, session):
+async def test_create_sticker_assigns_pack_and_categories(
+    monkeypatch, tmp_path, users, session
+):
     pack = sticker_models.StickerPack(name="packy", creator_id=users["user"].id)
     cat = sticker_models.StickerCategory(name="silly")
     session.add_all([pack, cat])
@@ -87,7 +89,9 @@ async def test_create_sticker_assigns_pack_and_categories(monkeypatch, tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_create_sticker_in_other_users_pack_forbidden(monkeypatch, tmp_path, users, session):
+async def test_create_sticker_in_other_users_pack_forbidden(
+    monkeypatch, tmp_path, users, session
+):
     pack = sticker_models.StickerPack(name="alien", creator_id=users["admin"].id)
     cat = sticker_models.StickerCategory(name="othercat")
     session.add_all([pack, cat])

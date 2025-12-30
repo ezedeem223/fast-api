@@ -1,6 +1,5 @@
-from tests.testclient import TestClient
-
 from app.core import app_factory
+from tests.testclient import TestClient
 
 
 def test_create_app_registers_routes(monkeypatch):

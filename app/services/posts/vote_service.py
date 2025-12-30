@@ -6,25 +6,21 @@ import asyncio
 import logging
 from typing import Dict
 
-from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import schemas, notifications
+from app import notifications, schemas
 from app.modules.posts.models import Post, Reaction
+from app.modules.social.economy_service import SocialEconomyService
 from app.modules.social.models import Vote
 from app.modules.users.models import User
+from app.modules.utils.analytics import update_post_score, update_post_vote_statistics
+from app.modules.utils.common import get_user_display_name
 from app.notifications import (
+    create_notification,
     queue_email_notification,
     schedule_email_notification,
-    create_notification,
 )
-
-from app.modules.utils.common import get_user_display_name
-from app.modules.utils.analytics import (
-    update_post_score,
-    update_post_vote_statistics,
-)
-from app.modules.social.economy_service import SocialEconomyService
+from fastapi import BackgroundTasks, HTTPException, status
 
 
 class VoteService:

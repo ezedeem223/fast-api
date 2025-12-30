@@ -1,21 +1,25 @@
-"""Collaboration router for projects and contributions management."""
+"""Collaboration router for projects and contributions management.
+
+Auth required; exposes project CRUD and contributions. Delegates validation/persistence
+to collaboration services; enforces owner/contributor constraints via service layer.
+"""
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.oauth2 import get_current_user
 from app import models
+from app.core.database import get_db
 from app.modules.collaboration.models import CollaborativeProject, ProjectContribution
 from app.modules.collaboration.schemas import (
-    ProjectCreate,
-    ProjectOut,
     ContributionCreate,
     ContributionOut,
+    ProjectCreate,
+    ProjectOut,
     ProjectWithContributions,
 )
+from app.oauth2 import get_current_user
+from fastapi import APIRouter, Depends, HTTPException
 
 router = APIRouter(prefix="/collaboration", tags=["Collaboration"])
 
@@ -84,7 +88,11 @@ def add_contribution(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    project = db.query(CollaborativeProject).filter(CollaborativeProject.id == project_id).first()
+    project = (
+        db.query(CollaborativeProject)
+        .filter(CollaborativeProject.id == project_id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -109,7 +117,11 @@ def list_contributions(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    project = db.query(CollaborativeProject).filter(CollaborativeProject.id == project_id).first()
+    project = (
+        db.query(CollaborativeProject)
+        .filter(CollaborativeProject.id == project_id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     contributions = (

@@ -1,13 +1,13 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
 from app import models
 from app.core.scheduling import tasks
-from app.modules.notifications import models as notif_models
 from app.modules.community import models as community_models
+from app.modules.notifications import models as notif_models
+from fastapi import FastAPI
 
 
 def test_repeat_every_guard_skips_in_test_env(monkeypatch):
@@ -46,7 +46,9 @@ def test_notification_cleanup_and_retry_tasks(session, monkeypatch):
         "SessionLocal",
         sessionmaker(autocommit=False, autoflush=False, bind=session.get_bind()),
     )
-    user = models.User(email="sched29@example.com", hashed_password="x", is_verified=True)
+    user = models.User(
+        email="sched29@example.com", hashed_password="x", is_verified=True
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -93,7 +95,9 @@ def test_notification_cleanup_and_retry_tasks(session, monkeypatch):
         self.db.commit()
         return True
 
-    monkeypatch.setattr(tasks.NotificationService, "retry_failed_notification", fake_retry)
+    monkeypatch.setattr(
+        tasks.NotificationService, "retry_failed_notification", fake_retry
+    )
     tasks.retry_failed_notifications.__wrapped__()  # type: ignore[attr-defined]
 
     session.refresh(retry_ok)
@@ -102,14 +106,25 @@ def test_notification_cleanup_and_retry_tasks(session, monkeypatch):
     assert retry_ok.retry_count == 1
     assert retry_fail.status == notif_models.NotificationStatus.FAILED
     assert retry_fail.retry_count == 1
-    assert session.query(notif_models.Notification).filter_by(id=deleted_id).count() == 0
-    assert session.query(notif_models.Notification).filter_by(id=recent_archived.id).count() == 1
+    assert (
+        session.query(notif_models.Notification).filter_by(id=deleted_id).count() == 0
+    )
+    assert (
+        session.query(notif_models.Notification)
+        .filter_by(id=recent_archived.id)
+        .count()
+        == 1
+    )
 
 
 def test_cleanup_expired_reels_task(session, monkeypatch):
-    SessionLocalOverride = sessionmaker(autocommit=False, autoflush=False, bind=session.get_bind())
+    SessionLocalOverride = sessionmaker(
+        autocommit=False, autoflush=False, bind=session.get_bind()
+    )
     monkeypatch.setattr(tasks, "SessionLocal", SessionLocalOverride)
-    user = models.User(email="reels29@example.com", hashed_password="x", is_verified=True)
+    user = models.User(
+        email="reels29@example.com", hashed_password="x", is_verified=True
+    )
     community = community_models.Community(name="C29", description="d", owner_id=None)
     session.add_all([user, community])
     session.commit()
@@ -146,7 +161,11 @@ def test_cleanup_expired_reels_task(session, monkeypatch):
     session.refresh(active)
     assert expired.is_active is False
     assert active.is_active is True
-    archived = session.query(community_models.ArchivedReel).filter_by(reel_id=expired.id).first()
+    archived = (
+        session.query(community_models.ArchivedReel)
+        .filter_by(reel_id=expired.id)
+        .first()
+    )
     assert archived is not None
 
     cleaned_again = tasks.cleanup_expired_reels_task.__wrapped__()  # type: ignore[attr-defined]

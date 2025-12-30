@@ -1,16 +1,16 @@
 """Reaction router for post/comment reactions and trending calculations."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List
 
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
-from .. import models, schemas, oauth2
 from app.core.database import get_db
 from app.core.middleware.rate_limit import limiter
 from app.modules.social.economy_service import SocialEconomyService
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from .. import models, oauth2, schemas
 
 router = APIRouter(prefix="/reactions", tags=["Reactions"])
 

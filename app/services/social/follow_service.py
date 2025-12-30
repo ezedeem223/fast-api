@@ -6,21 +6,20 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Dict
 
-from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
-from app import schemas
+from app import notifications, schemas
+from app.modules.posts import Comment, Post
 from app.modules.social import Follow
 from app.modules.users.models import User
-from app.modules.posts import Post, Comment
+from app.modules.utils.events import log_user_event
 from app.notifications import (
+    create_notification,
     queue_email_notification,
     schedule_email_notification,
-    create_notification,
 )
-from app import notifications
-from app.modules.utils.events import log_user_event
+from fastapi import BackgroundTasks, HTTPException, status
 
 
 class FollowService:
@@ -51,9 +50,7 @@ class FollowService:
                 detail="You cannot follow yourself",
             )
 
-        user_to_follow = (
-            self.db.query(User).filter(User.id == target_user_id).first()
-        )
+        user_to_follow = self.db.query(User).filter(User.id == target_user_id).first()
         if not user_to_follow:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -124,7 +121,9 @@ class FollowService:
         else:
             follower_broadcast(broadcast_message)
 
-        follower_identity = getattr(current_user, "username", None) or current_user.email
+        follower_identity = (
+            getattr(current_user, "username", None) or current_user.email
+        )
         create_notification_fn(
             self.db,
             target_user_id,
@@ -158,9 +157,7 @@ class FollowService:
                 detail="You do not follow this user",
             )
 
-        user_unfollowed = (
-            self.db.query(User).filter(User.id == target_user_id).first()
-        )
+        user_unfollowed = self.db.query(User).filter(User.id == target_user_id).first()
         if not user_unfollowed:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

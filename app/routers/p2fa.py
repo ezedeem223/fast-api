@@ -1,12 +1,15 @@
 """Two-factor auth router (OTP setup/verification) for account security."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-import pyotp
 import logging
-from .. import models, oauth2, schemas
+
+import pyotp
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
 from app.modules.utils.files import generate_qr_code
+from fastapi import APIRouter, Depends, HTTPException
+
+from .. import models, oauth2, schemas
 
 logger = logging.getLogger(__name__)
 

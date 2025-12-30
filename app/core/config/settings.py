@@ -16,16 +16,16 @@ Key expectations (defaults in parentheses):
 - Mail: credentials optional; defaults to empty values in tests/CI; TLS flags removed to avoid dotenv quirks.
 """
 
-import os
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 import redis
 from dotenv import load_dotenv
 from fastapi_mail import ConnectionConfig
-from pydantic import EmailStr, PrivateAttr, ConfigDict
+from pydantic import ConfigDict, EmailStr, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Base directory of the project; used for resolving relative paths reliably.
@@ -52,20 +52,23 @@ def _env_flag(name: str, *, default: Optional[bool] = False) -> Optional[bool]:
         return default
     return value.lower() in {"1", "true", "yes", "on"}
 
+
 class CustomConnectionConfig(ConnectionConfig):
+    """FastMail config that ignores extra fields to tolerate lenient env mapping."""
+
     model_config = ConfigDict(extra="ignore")
 
 
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables.
 
-    Notes on integration and fallbacks:
-    - `DATABASE_URL` is preferred; otherwise we compose from components and enforce `_test` names when requested.
-    - Feature toggles use `_env_flag` so unset stays None/False instead of string truthiness.
-    - Mail TLS/SSL flags are stripped before constructing `ConnectionConfig` to avoid dotenv quirks.
-    - `REDIS_URL` is optional; connectivity errors log and disable caching instead of crashing.
-    - CORS origins are derived once at init to avoid mutation issues in Pydantic models.
-    - RSA keys resolve relative to repo root when paths are not absolute and must be non-empty.
+    Behavior highlights:
+    - Loads `.env` at repo root, then lets process env override.
+    - Enforces safe DB URLs (prefers `DATABASE_URL`, ensures `_test` suffix for test DBs).
+    - Feature toggles parsed via `_env_flag` to accept common truthy/falsey strings.
+    - Redis optional: failures disable caching but do not stop startup.
+    - RSA keys resolved relative to repo root when not absolute; empty/missing files raise early errors.
+    - CORS/hosts normalized once to avoid mutation side effects in settings instances.
     """
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
@@ -91,10 +94,14 @@ class Settings(BaseSettings):
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     log_dir: str = os.getenv("LOG_DIR", "logs")
     use_json_logs: bool = _env_flag("USE_JSON_LOGS", default=True)
-    otel_exporter_otlp_endpoint: Optional[str] = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_exporter_otlp_endpoint: Optional[str] = os.getenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+    )
     otel_enabled: Optional[bool] = _env_flag("OTEL_ENABLED", default=None)
     sentry_dsn: Optional[str] = os.getenv("SENTRY_DSN")
-    sentry_traces_sample_rate: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    sentry_traces_sample_rate: float = float(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
+    )
     # Accept raw string from env to avoid JSON parse errors; we normalize to list in __init__
     allowed_hosts: Optional[str] = os.getenv("ALLOWED_HOSTS")
     cors_origins: list[str] = []
@@ -127,7 +134,9 @@ class Settings(BaseSettings):
     twitter_api_key: Optional[str] = os.getenv("TWITTER_API_KEY")
     twitter_api_secret: Optional[str] = os.getenv("TWITTER_API_SECRET")
     twitter_access_token: Optional[str] = os.getenv("TWITTER_ACCESS_TOKEN")
-    twitter_access_token_secret: Optional[str] = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    twitter_access_token_secret: Optional[str] = os.getenv(
+        "TWITTER_ACCESS_TOKEN_SECRET"
+    )
 
     huggingface_api_token: Optional[str] = os.getenv("HUGGINGFACE_API_TOKEN")
     refresh_secret_key: Optional[str] = os.getenv("REFRESH_SECRET_KEY")
@@ -144,7 +153,9 @@ class Settings(BaseSettings):
     firebase_auth_domain: Optional[str] = os.getenv("FIREBASE_AUTH_DOMAIN")
     firebase_project_id: Optional[str] = os.getenv("FIREBASE_PROJECT_ID")
     firebase_storage_bucket: Optional[str] = os.getenv("FIREBASE_STORAGE_BUCKET")
-    firebase_messaging_sender_id: Optional[str] = os.getenv("FIREBASE_MESSAGING_SENDER_ID")
+    firebase_messaging_sender_id: Optional[str] = os.getenv(
+        "FIREBASE_MESSAGING_SENDER_ID"
+    )
     firebase_app_id: Optional[str] = os.getenv("FIREBASE_APP_ID")
     firebase_measurement_id: Optional[str] = os.getenv("FIREBASE_MEASUREMENT_ID")
 
@@ -217,7 +228,9 @@ class Settings(BaseSettings):
 
         cors_env = os.getenv("CORS_ORIGINS")
         if cors_env:
-            origins = [origin.strip() for origin in cors_env.split(",") if origin.strip()]
+            origins = [
+                origin.strip() for origin in cors_env.split(",") if origin.strip()
+            ]
         elif self.cors_origins:
             origins = self.cors_origins
         else:
@@ -319,7 +332,9 @@ class Settings(BaseSettings):
                 if url.drivername.startswith("sqlite"):
                     return str(url)
                 db_name = url.database or ""
-                suffix_name = db_name if db_name.endswith("_test") else f"{db_name}_test"
+                suffix_name = (
+                    db_name if db_name.endswith("_test") else f"{db_name}_test"
+                )
                 url = url.set(database=suffix_name)
                 return str(url)
             except Exception:

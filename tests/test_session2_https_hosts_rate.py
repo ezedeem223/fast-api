@@ -1,19 +1,20 @@
 import importlib
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.testclient import TestClient
 
 from app.core.app_factory import HostRedirectMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 
 @pytest.fixture
 def reload_rate_limit(monkeypatch):
     """Reload rate_limit module with a specific APP_ENV and restore afterwards."""
     import os
+
     from app.core.middleware import rate_limit as rl_module
 
     original_env = os.environ.get("APP_ENV")

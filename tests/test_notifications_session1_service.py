@@ -5,22 +5,22 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
-from fastapi import HTTPException
 
 from app.modules.notifications import models as notification_models
 from app.modules.notifications import schemas as notification_schemas
 from app.modules.notifications.analytics import NotificationAnalyticsService
-from app.modules.notifications.repository import NotificationRepository
-from app.modules.notifications.service import (
-    NotificationService,
-    NotificationDeliveryManager,
-    NotificationRetryHandler,
-)
 from app.modules.notifications.common import (
     delivery_status_cache,
     notification_cache,
     priority_notification_cache,
 )
+from app.modules.notifications.repository import NotificationRepository
+from app.modules.notifications.service import (
+    NotificationDeliveryManager,
+    NotificationRetryHandler,
+    NotificationService,
+)
+from fastapi import HTTPException
 
 
 def _make_notification(user_id: int, **kwargs) -> notification_models.Notification:
@@ -163,7 +163,9 @@ def test_notification_analytics_service(session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_notification_service_respects_preferences(monkeypatch, session, test_user):
+async def test_notification_service_respects_preferences(
+    monkeypatch, session, test_user
+):
     service = NotificationService(session, background_tasks=MagicMock())
     prefs = notification_models.NotificationPreferences(
         user_id=test_user["id"],
@@ -178,8 +180,11 @@ async def test_notification_service_respects_preferences(monkeypatch, session, t
     session.commit()
 
     monkeypatch.setattr(service.repository, "ensure_preferences", lambda uid: prefs)
-    monkeypatch.setattr(service, "_process_language", AsyncMock(return_value="translated"))
+    monkeypatch.setattr(
+        service, "_process_language", AsyncMock(return_value="translated")
+    )
     monkeypatch.setattr(service, "_find_or_create_group", lambda *args, **kwargs: None)
+
     def _fake_create_notification(**kwargs):
         kwargs.pop("language", None)
         kwargs.pop("group_id", None)
@@ -189,7 +194,9 @@ async def test_notification_service_respects_preferences(monkeypatch, session, t
         session.refresh(notif)
         return notif
 
-    monkeypatch.setattr(service.repository, "create_notification", _fake_create_notification)
+    monkeypatch.setattr(
+        service.repository, "create_notification", _fake_create_notification
+    )
     service.delivery_manager = MagicMock()
     service.delivery_manager.deliver_notification = AsyncMock(return_value=True)
 
@@ -218,8 +225,12 @@ async def test_notification_service_respects_preferences(monkeypatch, session, t
 
 def test_notification_service_mark_notifications_seen(session, test_user):
     service = NotificationService(session)
-    notif1 = _make_notification(test_user["id"], status=notification_models.NotificationStatus.PENDING)
-    notif2 = _make_notification(test_user["id"], status=notification_models.NotificationStatus.RETRYING)
+    notif1 = _make_notification(
+        test_user["id"], status=notification_models.NotificationStatus.PENDING
+    )
+    notif2 = _make_notification(
+        test_user["id"], status=notification_models.NotificationStatus.RETRYING
+    )
     session.add_all([notif1, notif2])
     session.commit()
     notifications = [notif1, notif2]
@@ -328,7 +339,9 @@ async def test_delivery_manager_retry_on_failure(monkeypatch, session, test_user
 
 
 @pytest.mark.asyncio
-async def test_delivery_manager_final_failure_records_reason(monkeypatch, session, test_user):
+async def test_delivery_manager_final_failure_records_reason(
+    monkeypatch, session, test_user
+):
     manager = NotificationDeliveryManager(session, background_tasks=MagicMock())
     manager.max_retries = 1
     manager.retry_delays = [1]
@@ -360,7 +373,9 @@ async def test_delivery_manager_final_failure_records_reason(monkeypatch, sessio
 
 
 @pytest.mark.asyncio
-async def test_notification_service_retry_failed_notification(monkeypatch, session, test_user):
+async def test_notification_service_retry_failed_notification(
+    monkeypatch, session, test_user
+):
     notif = _make_notification(
         test_user["id"],
         status=notification_models.NotificationStatus.FAILED,
@@ -385,7 +400,9 @@ async def test_notification_service_retry_failed_notification(monkeypatch, sessi
 
 
 @pytest.mark.asyncio
-async def test_notification_retry_handler_handles_limits(monkeypatch, session, test_user):
+async def test_notification_retry_handler_handles_limits(
+    monkeypatch, session, test_user
+):
     bg = MagicMock()
     handler = NotificationRetryHandler(session, background_tasks=bg)
 
@@ -403,8 +420,6 @@ async def test_notification_retry_handler_handles_limits(monkeypatch, session, t
     assert retrying.status == "retrying"
     assert retrying.next_retry is not None
     bg.add_task.assert_called()
-
-
 
 
 @pytest.mark.asyncio
@@ -473,7 +488,9 @@ async def test_delivery_failure_records_reason_and_respects_next_retry(
 
 
 @pytest.mark.asyncio
-async def test_exceeding_retries_sets_failed_and_archivable(monkeypatch, session, test_user):
+async def test_exceeding_retries_sets_failed_and_archivable(
+    monkeypatch, session, test_user
+):
     delivery_status_cache.clear()
     manager = NotificationDeliveryManager(session, background_tasks=MagicMock())
     manager.max_retries = 1
@@ -563,7 +580,9 @@ async def test_delivery_cache_miss_then_hit(monkeypatch, session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_delivery_prefers_realtime_when_push_unavailable(monkeypatch, session, test_user):
+async def test_delivery_prefers_realtime_when_push_unavailable(
+    monkeypatch, session, test_user
+):
     notification_cache.clear()
     delivery_status_cache.clear()
     manager = NotificationDeliveryManager(session, background_tasks=MagicMock())
@@ -579,7 +598,9 @@ async def test_delivery_prefers_realtime_when_push_unavailable(monkeypatch, sess
         manager, "_send_realtime_notification", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(
-        manager, "_send_push_notification", AsyncMock(side_effect=RuntimeError("redis down"))
+        manager,
+        "_send_push_notification",
+        AsyncMock(side_effect=RuntimeError("redis down")),
     )
 
     notif = _make_notification(test_user["id"])
@@ -591,7 +612,9 @@ async def test_delivery_prefers_realtime_when_push_unavailable(monkeypatch, sess
 
 
 @pytest.mark.asyncio
-async def test_delivery_uses_email_when_other_channels_disabled(monkeypatch, session, test_user):
+async def test_delivery_uses_email_when_other_channels_disabled(
+    monkeypatch, session, test_user
+):
     notification_cache.clear()
     delivery_status_cache.clear()
     manager = NotificationDeliveryManager(session, background_tasks=MagicMock())

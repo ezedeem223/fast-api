@@ -2,16 +2,18 @@
 
 Provides structured, rotating logs with optional JSON output. Binds lightweight contextvars
 (request_id/user_id/ip) to every record for correlation across middleware and handlers.
+Designed to be called once early in startup and to tolerate repeat calls during tests
+by resetting handlers defensively.
 """
 
+import json
 import logging
 import logging.handlers
 import sys
-import json
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from contextvars import ContextVar
 
 # Context variables used across middleware/handlers to enrich logs
 request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
@@ -24,9 +26,9 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -103,7 +105,10 @@ class ContextEnricher(logging.Filter):
 
 
 def bind_request_context(
-    *, request_id: Optional[str] = None, user_id: Optional[int] = None, ip_address: Optional[str] = None
+    *,
+    request_id: Optional[str] = None,
+    user_id: Optional[int] = None,
+    ip_address: Optional[str] = None,
 ):
     """Bind request context into contextvars; returns tokens for reset."""
     tokens = []

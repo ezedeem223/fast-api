@@ -3,44 +3,41 @@
 - Registers startup handlers (search suggestions, post scores, notifications cleanup/retry).
 - Configures APScheduler in non-test environments with cron jobs for statistics/communities.
 - Guards repeat_every tasks in tests to avoid lingering background tasks.
+- Ensures Firebase/search setup happens once at startup in non-test environments.
 """
 
 from __future__ import annotations
 
-import logging
 import asyncio
 import inspect
+import logging
+import os
 from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI
 from fastapi_utils.tasks import repeat_every
 
 from app import models
 from app.ai_chat.amenhotep import AmenhotepAI
 from app.analytics import clean_old_statistics, model
 from app.celery_worker import celery_app
-import os
-
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.firebase_config import initialize_firebase
 from app.modules.community import Community
+from app.modules.search.service import update_search_suggestions
 from app.modules.utils.analytics import create_default_categories, update_post_score
 from app.modules.utils.search import spell, update_search_vector
 from app.notifications import NotificationService
-from app.modules.search.service import update_search_suggestions
 from app.services.reels import ReelService
-
+from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
 
 def _run_async_blocking(awaitable):
-    """
-    Execute an awaitable from sync contexts, creating an event loop when none exists.
-    """
+    """Execute an awaitable from sync contexts, creating an event loop when none exists."""
     try:
         loop = asyncio.get_event_loop()
         if loop.is_closed():
@@ -61,20 +58,21 @@ def _is_test_env() -> bool:
 
 
 def _maybe_repeat_every(**kwargs):
-    """
-    Apply repeat_every only outside test environment to avoid lingering
-    background tasks in unit tests.
-    """
+    """Apply repeat_every only outside test env to avoid lingering background tasks in tests."""
+
     def decorator(fn):
         is_async = inspect.iscoroutinefunction(fn)
         scheduled = repeat_every(**kwargs)(fn)
 
         if is_async:
+
             async def wrapper(*args, **kws):
                 if _is_test_env():
                     return None
                 return await scheduled(*args, **kws)
+
         else:
+
             def wrapper(*args, **kws):
                 if _is_test_env():
                     return None
@@ -87,9 +85,7 @@ def _maybe_repeat_every(**kwargs):
 
 
 def register_startup_tasks(app: FastAPI) -> None:
-    """
-    Attach startup/shutdown handlers and scheduled background tasks to the FastAPI app.
-    """
+    """Attach startup/shutdown handlers and scheduled background tasks to the FastAPI app."""
     if getattr(app.state, "_startup_tasks_registered", False):
         return
 
@@ -101,6 +97,7 @@ def register_startup_tasks(app: FastAPI) -> None:
 
     scheduler = _configure_scheduler()
     if scheduler:
+
         def _shutdown_scheduler() -> None:
             scheduler.shutdown()
 
@@ -111,6 +108,7 @@ def register_startup_tasks(app: FastAPI) -> None:
 
 
 def _configure_scheduler() -> Optional[BackgroundScheduler]:
+    """Configure APScheduler for non-test environments."""
     if settings.environment.lower() == "test":
         # Avoid spinning background threads when tests run synchronously.
         return None
@@ -123,6 +121,7 @@ def _configure_scheduler() -> Optional[BackgroundScheduler]:
 
 
 def _clean_old_statistics_job() -> None:
+    """Cron job wrapper to clean analytics statistics safely."""
     db = next(get_db())
     try:
         clean_old_statistics(db)
@@ -132,6 +131,7 @@ def _clean_old_statistics_job() -> None:
 
 def _startup_event_factory(app: FastAPI):
     async def startup_event() -> None:
+        """One-time startup hook for non-test environments (search, AI, Firebase, beat schedule)."""
         if settings.environment.lower() == "test":
             return
 
@@ -159,9 +159,7 @@ def _startup_event_factory(app: FastAPI):
 
 
 def update_all_communities_statistics() -> None:
-    """
-    Iterate through communities and trigger statistics updates (placeholder behaviour retained).
-    """
+    """Iterate through communities and trigger statistics updates (placeholder behaviour retained)."""
     db = SessionLocal()
     try:
         communities = db.query(Community).all()
@@ -198,6 +196,7 @@ async def update_all_post_scores() -> None:
 
 @_maybe_repeat_every(seconds=86400)
 def cleanup_old_notifications() -> None:
+    """Prune aged notifications (30d) via NotificationService; tolerates async implementations."""
     db = SessionLocal()
     try:
         notification_service = NotificationService(db)
@@ -211,6 +210,7 @@ def cleanup_old_notifications() -> None:
 
 @_maybe_repeat_every(seconds=3600)
 def retry_failed_notifications() -> None:
+    """Retry failed notifications with bounded attempts; logs/raises if all retries fail."""
     db = SessionLocal()
     try:
         notifications = (
@@ -229,7 +229,9 @@ def retry_failed_notifications() -> None:
                 if inspect.isawaitable(result):
                     _run_async_blocking(result)
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Failed to retry notification %s: %s", notification.id, exc)
+                logger.error(
+                    "Failed to retry notification %s: %s", notification.id, exc
+                )
                 errors.append(exc)
         if errors and len(errors) == len(notifications):
             # Surface failure when every notification retry failed.

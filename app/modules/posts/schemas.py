@@ -16,11 +16,7 @@ from app.modules.posts.models import (
 from app.modules.users.schemas import PrivacyLevel
 
 if TYPE_CHECKING:  # pragma: no cover
-    from app.schemas import (
-        CommunityOutRef,
-        Hashtag,
-        UserOut,
-    )
+    from app.schemas import CommunityOutRef, Hashtag, UserOut
 
 
 class ReactionBase(BaseModel):
