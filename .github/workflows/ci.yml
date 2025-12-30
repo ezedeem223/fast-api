@@ -272,15 +272,8 @@ jobs:
       - name: Run pytest
         env:
           APP_ENV: test
-          # ✅ متغيرات Database منفصلة
-          DATABASE_HOSTNAME: localhost
-          DATABASE_PORT: 5432
-          DATABASE_PASSWORD: postgres
-          DATABASE_NAME: fastapi
-          DATABASE_USERNAME: postgres
-
-          # ✅ باقي المتغيرات من Secrets
-          REDIS_URL: ${{ secrets.REDIS_URL }}
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/fastapi_test
+          REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           ALGORITHM: ${{ secrets.ALGORITHM }}
           REFRESH_SECRET_KEY: ${{ secrets.REFRESH_SECRET_KEY }}
@@ -311,12 +304,8 @@ jobs:
       - name: Run startup smoke test
         env:
           APP_ENV: test
-          DATABASE_HOSTNAME: localhost
-          DATABASE_PORT: 5432
-          DATABASE_PASSWORD: postgres
-          DATABASE_NAME: fastapi
-          DATABASE_USERNAME: postgres
-          REDIS_URL: ${{ secrets.REDIS_URL }}
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/fastapi_test
+          REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           ALGORITHM: ${{ secrets.ALGORITHM }}
           RSA_PRIVATE_KEY_PATH: ./private_key.pem
@@ -372,10 +361,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Disk usage before cleanup
+        run: |
+          df -h
+          docker system df || true
+
       - name: Free disk space for Docker build
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/google/chrome || true
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          rm -rf ~/.cache/pip || true
+          sudo rm -rf /var/lib/apt/lists/* || true
           df -h
+
+      - name: Disk usage after cleanup
+        if: always()
+        run: |
+          df -h
+          docker system df || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

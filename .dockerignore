@@ -1,0 +1,65 @@
+﻿# VCS
+.git
+.gitignore
+.github
+
+# Python caches/env
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+*.log
+*.tmp
+*.pid
+*.mo
+*.pot
+*.cover
+*.DS_Store
+.env
+.env.*
+venv/
+.venv/
+env/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# Build/test artifacts
+dist/
+build/
+htmlcov/
+.coverage
+coverage.xml
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Dependency vendors
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Large data/models (adjust as needed)
+*.onnx
+*.pt
+*.pth
+*.joblib
+*.h5
+*.pb
+*.ckpt
+data/
+uploads/
+logs/
+static/media/
+content_classifier.joblib
+content_vectorizer.joblib
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo

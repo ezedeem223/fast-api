@@ -1,0 +1,19 @@
+﻿      - name: Disk usage before cleanup
+        run: |
+          df -h
+          docker system df || true
+
+      - name: Free disk space for Docker build
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android || true
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          rm -rf ~/.cache/pip || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          df -h
+
+      - name: Disk usage after cleanup
+        if: always()
+        run: |
+          df -h
+          docker system df || true
