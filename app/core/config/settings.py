@@ -280,7 +280,6 @@ class Settings(BaseSettings):
         # Always re-read the process environment to honor runtime/monkeypatched values
         # instead of relying solely on class defaults that may have been set at import time.
         env_database_url = os.getenv("DATABASE_URL") if allow_env else None
-        env_test_database_url = os.getenv("TEST_DATABASE_URL") if allow_env else None
         env_hostname = os.getenv("DATABASE_HOSTNAME") if allow_env else None
         env_username = os.getenv("DATABASE_USERNAME") if allow_env else None
         env_password = os.getenv("DATABASE_PASSWORD") if allow_env else None
