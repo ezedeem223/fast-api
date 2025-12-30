@@ -14,7 +14,9 @@ async def test_send_email_notification_skips_in_test_env(monkeypatch):
     monkeypatch.setenv("DISABLE_EXTERNAL_NOTIFICATIONS", "0")
 
     # Should return early without raising, even if recipients are missing.
-    await email.send_email_notification(to="user@example.com", subject="hi", body="body")
+    await email.send_email_notification(
+        to="user@example.com", subject="hi", body="body"
+    )
 
 
 @pytest.mark.asyncio
@@ -167,9 +169,13 @@ async def test_batcher_add_flushes_on_size(monkeypatch):
 
     batcher._process_batch = fake_process  # type: ignore[assignment]
 
-    await batcher.add({"channel": "email", "recipient": "a", "title": "t1", "content": "c1"})
+    await batcher.add(
+        {"channel": "email", "recipient": "a", "title": "t1", "content": "c1"}
+    )
     assert processed == []
-    await batcher.add({"channel": "email", "recipient": "b", "title": "t2", "content": "c2"})
+    await batcher.add(
+        {"channel": "email", "recipient": "b", "title": "t2", "content": "c2"}
+    )
     assert len(processed) == 1
     assert len(processed[0]) == 2
 
@@ -184,7 +190,9 @@ async def test_batcher_add_flushes_on_time(monkeypatch):
 
     batcher._process_batch = fake_process  # type: ignore[assignment]
 
-    await batcher.add({"channel": "email", "recipient": "a", "title": "t", "content": "c"})
+    await batcher.add(
+        {"channel": "email", "recipient": "a", "title": "t", "content": "c"}
+    )
     assert len(processed) == 1
     assert processed[0][0]["recipient"] == "a"
 
@@ -199,9 +207,13 @@ async def test_batcher_digest_flushes_on_size(monkeypatch):
 
     batcher._send_digest_email = fake_send  # type: ignore[assignment]
 
-    await batcher.add_digest({"recipient": "user@example.com", "title": "t1", "content": "c1"})
+    await batcher.add_digest(
+        {"recipient": "user@example.com", "title": "t1", "content": "c1"}
+    )
     assert sent == []
-    await batcher.add_digest({"recipient": "user@example.com", "title": "t2", "content": "c2"})
+    await batcher.add_digest(
+        {"recipient": "user@example.com", "title": "t2", "content": "c2"}
+    )
     assert len(sent) == 1
     assert len(sent[0][1]) == 2
 

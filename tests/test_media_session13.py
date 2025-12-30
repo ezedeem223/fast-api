@@ -22,7 +22,11 @@ def test_extract_audio_from_video_success(monkeypatch, tmp_path):
     def fake_run(stream, overwrite_output=None):
         calls["run"] = (stream, overwrite_output)
 
-    monkeypatch.setattr(media_proc, "ffmpeg", type("FF", (), {"input": fake_input, "output": fake_output, "run": fake_run}))
+    monkeypatch.setattr(
+        media_proc,
+        "ffmpeg",
+        type("FF", (), {"input": fake_input, "output": fake_output, "run": fake_run}),
+    )
 
     src = tmp_path / "video.mp4"
     src.write_bytes(b"data")

@@ -1,12 +1,12 @@
 import asyncio
 
 import pytest
-from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
 from app.api import websocket as ws_module
 from app.core.config import settings
 from app.notifications import manager as notifications_manager
+from fastapi import status
 
 
 class DummyWebSocket:
@@ -44,7 +44,9 @@ def test_auth_missing_token_prod_rejects(monkeypatch):
     monkeypatch.setattr(settings, "allowed_hosts", ["example.com"])
     ws = DummyWebSocket()
     token = None
-    user = asyncio.run(ws_module._authenticate_websocket(ws, claimed_user_id=1, token=token))
+    user = asyncio.run(
+        ws_module._authenticate_websocket(ws, claimed_user_id=1, token=token)
+    )
     assert user is None
     assert ws.closed_with[0] == 4401
 
@@ -52,7 +54,9 @@ def test_auth_missing_token_prod_rejects(monkeypatch):
 def test_auth_missing_token_allowed_in_test(monkeypatch):
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     ws = DummyWebSocket()
-    user = asyncio.run(ws_module._authenticate_websocket(ws, claimed_user_id=42, token=None))
+    user = asyncio.run(
+        ws_module._authenticate_websocket(ws, claimed_user_id=42, token=None)
+    )
     assert user == 42
 
 
@@ -67,7 +71,9 @@ def test_auth_user_mismatch_closes(monkeypatch):
         return TokenData(id=99)
 
     monkeypatch.setattr(ws_module.oauth2, "verify_access_token", fake_verify)
-    user = asyncio.run(ws_module._authenticate_websocket(ws, claimed_user_id=1, token="t"))
+    user = asyncio.run(
+        ws_module._authenticate_websocket(ws, claimed_user_id=1, token="t")
+    )
     assert user is None
     assert ws.closed_with[0] == status.WS_1008_POLICY_VIOLATION
 
@@ -79,7 +85,9 @@ def test_auth_invalid_token_closes(monkeypatch):
         raise exc
 
     monkeypatch.setattr(ws_module.oauth2, "verify_access_token", fake_verify)
-    user = asyncio.run(ws_module._authenticate_websocket(ws, claimed_user_id=1, token="bad"))
+    user = asyncio.run(
+        ws_module._authenticate_websocket(ws, claimed_user_id=1, token="bad")
+    )
     assert user is None
     assert ws.closed_with[0] == 4401
 
@@ -134,6 +142,7 @@ def test_websocket_endpoint_handles_disconnect_exception(monkeypatch):
     monkeypatch.setattr(notifications_manager, "connect", fake_connect)
     monkeypatch.setattr(notifications_manager, "disconnect", fake_disconnect)
     monkeypatch.setattr(ws_module, "send_real_time_notification", lambda *a, **k: None)
+
     async def fake_auth(*args, **kwargs):
         return 5
 

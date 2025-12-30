@@ -1,15 +1,15 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import status
 from starlette.websockets import WebSocketDisconnect
 
 from app import notifications as notifications_module
 from app.api import websocket as ws_module
+from app.core.app_factory import create_app
 from app.core.config import settings
 from app.modules.notifications import service as notification_service
-from app.core.app_factory import create_app
 from app.routers import notifications as notifications_router
+from fastapi import status
 from tests.testclient import TestClient
 
 
@@ -53,7 +53,11 @@ async def test_websocket_sends_and_disconnects_on_empty(monkeypatch):
     async def fake_auth(*args, **kwargs):
         return 9
 
-    monkeypatch.setattr(ws_module, "manager", SimpleNamespace(connect=fake_connect, disconnect=fake_disconnect))
+    monkeypatch.setattr(
+        ws_module,
+        "manager",
+        SimpleNamespace(connect=fake_connect, disconnect=fake_disconnect),
+    )
     monkeypatch.setattr(ws_module, "send_real_time_notification", fake_send)
     monkeypatch.setattr(ws_module, "_authenticate_websocket", fake_auth)
 
@@ -91,7 +95,11 @@ async def test_websocket_exception_path_closes_and_disconnects(monkeypatch):
     async def fake_auth(*args, **kwargs):
         return 4
 
-    monkeypatch.setattr(ws_module, "manager", SimpleNamespace(connect=fake_connect, disconnect=fake_disconnect))
+    monkeypatch.setattr(
+        ws_module,
+        "manager",
+        SimpleNamespace(connect=fake_connect, disconnect=fake_disconnect),
+    )
     monkeypatch.setattr(ws_module, "send_real_time_notification", lambda *a, **k: None)
     monkeypatch.setattr(ws_module, "_authenticate_websocket", fake_auth)
 
@@ -108,7 +116,9 @@ async def test_send_real_time_notification_wraps_string(monkeypatch):
     async def fake_send(payload, user_id):
         sent.append((payload, user_id))
 
-    monkeypatch.setattr(notifications_module.manager, "send_personal_message", fake_send)
+    monkeypatch.setattr(
+        notifications_module.manager, "send_personal_message", fake_send
+    )
 
     await notifications_module.send_real_time_notification(7, "hello-world")
 

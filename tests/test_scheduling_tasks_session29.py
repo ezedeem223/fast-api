@@ -170,7 +170,9 @@ async def test_update_all_post_scores_updates_each(monkeypatch):
     called = []
 
     monkeypatch.setattr(tasks, "SessionLocal", lambda: session)
-    monkeypatch.setattr(tasks, "update_post_score", lambda db, post: called.append(post.id))
+    monkeypatch.setattr(
+        tasks, "update_post_score", lambda db, post: called.append(post.id)
+    )
 
     await tasks.update_all_post_scores.__wrapped__()
 

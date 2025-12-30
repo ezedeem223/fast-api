@@ -1,11 +1,11 @@
 import io
 
 import pytest
-from fastapi import HTTPException
 from starlette.datastructures import Headers, UploadFile
 
 from app import models, notifications
 from app.services.messaging.message_service import MessageService
+from fastapi import HTTPException
 
 
 def _make_user(session, email: str, *, hide_read: bool = False) -> models.User:
@@ -37,7 +37,9 @@ async def test_send_file_empty_and_too_large(monkeypatch, session, tmp_path):
     recipient = _make_user(session, "recipient@example.com")
 
     empty_file = UploadFile(
-        file=io.BytesIO(b""), filename="empty.txt", headers=Headers({"content-type": "text/plain"})
+        file=io.BytesIO(b""),
+        filename="empty.txt",
+        headers=Headers({"content-type": "text/plain"}),
     )
     with pytest.raises(HTTPException) as exc:
         await service.send_file(
@@ -88,10 +90,12 @@ def test_get_or_create_direct_conversation_single_instance(session):
     conv_first = service._get_or_create_direct_conversation(user_a.id, user_b.id)
     conv_second = service._get_or_create_direct_conversation(user_b.id, user_a.id)
 
-    assert conv_first == conv_second == f"{min(user_a.id, user_b.id)}_{max(user_a.id, user_b.id)}"
-    conv_count = (
-        session.query(models.Conversation).filter_by(id=conv_first).count()
+    assert (
+        conv_first
+        == conv_second
+        == f"{min(user_a.id, user_b.id)}_{max(user_a.id, user_b.id)}"
     )
+    conv_count = session.query(models.Conversation).filter_by(id=conv_first).count()
     assert conv_count == 1
 
     members = (
@@ -110,9 +114,7 @@ async def test_mark_message_as_read_notifies_sender(session):
     service = MessageService(session)
     sender = _make_user(session, "notify_sender@example.com")
     receiver = _make_user(session, "notify_receiver@example.com")
-    conversation_id = service._get_or_create_direct_conversation(
-        sender.id, receiver.id
-    )
+    conversation_id = service._get_or_create_direct_conversation(sender.id, receiver.id)
     message = models.Message(
         sender_id=sender.id,
         receiver_id=receiver.id,
@@ -143,9 +145,7 @@ async def test_mark_message_as_read_respects_hide_read_status(session):
     service = MessageService(session)
     sender = _make_user(session, "silent_sender@example.com", hide_read=True)
     receiver = _make_user(session, "silent_receiver@example.com")
-    conversation_id = service._get_or_create_direct_conversation(
-        sender.id, receiver.id
-    )
+    conversation_id = service._get_or_create_direct_conversation(sender.id, receiver.id)
     message = models.Message(
         sender_id=sender.id,
         receiver_id=receiver.id,

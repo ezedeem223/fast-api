@@ -65,7 +65,9 @@ def amenhotep_stubs(monkeypatch):
         amenhotep_module.AutoTokenizer, "from_pretrained", lambda *a, **k: tokenizer
     )
     monkeypatch.setattr(
-        amenhotep_module.AutoModelForCausalLM, "from_pretrained", fake_model_from_pretrained
+        amenhotep_module.AutoModelForCausalLM,
+        "from_pretrained",
+        fake_model_from_pretrained,
     )
     monkeypatch.setattr(amenhotep_module, "pipeline", lambda *a, **k: "qa-pipeline")
     monkeypatch.setattr(
@@ -101,14 +103,18 @@ def test_amenhotep_prefers_onnx_when_available(monkeypatch, tmp_path, amenhotep_
     monkeypatch.setattr(
         os.path,
         "exists",
-        lambda path: True if os.fspath(path) == os.fspath(onnx_path) else real_exists(path),
+        lambda path: (
+            True if os.fspath(path) == os.fspath(onnx_path) else real_exists(path)
+        ),
     )
 
     # If PyTorch model is touched here we want to know.
     monkeypatch.setattr(
         amenhotep_module.AutoModelForCausalLM,
         "from_pretrained",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("Should not init torch model")),
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("Should not init torch model")
+        ),
         raising=True,
     )
 
@@ -147,7 +153,11 @@ def test_amenhotep_falls_back_when_onnx_unusable(
     monkeypatch.setattr(
         os.path,
         "exists",
-        lambda path: True if os.fspath(path) == os.fspath(onnx_path) and onnx_exists else real_exists(path),
+        lambda path: (
+            True
+            if os.fspath(path) == os.fspath(onnx_path) and onnx_exists
+            else real_exists(path)
+        ),
     )
 
     ai = amenhotep_module.AmenhotepAI(onnx_path=str(onnx_path))
@@ -183,7 +193,10 @@ async def test_amenhotep_session_trims_and_caches(monkeypatch, amenhotep_stubs):
     context = ai.session_context[user_id]
     assert len(context) == 10
     assert context[0]["role"] == "user" and context[0]["content"] == "msg7"
-    assert context[-1]["role"] == "assistant" and context[-1]["content"] == "decoded-output"
+    assert (
+        context[-1]["role"] == "assistant"
+        and context[-1]["content"] == "decoded-output"
+    )
     assert cache_calls["count"] == 12
     assert gen_calls["count"] == 12
 

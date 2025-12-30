@@ -108,7 +108,9 @@ def analyze_sentiment(text):
         pipeline_instance = _get_sentiment_pipeline()
         result = pipeline_instance(text)[0]
         return {"sentiment": result["label"], "score": result["score"]}
-    except Exception as exc:  # pragma: no cover - defensive; covered in tests via stubbed failure
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - defensive; covered in tests via stubbed failure
         log_analysis_event(False, {"context": "analyze_sentiment"}, exc)
         return {"sentiment": "NEUTRAL", "score": 0.0}
 

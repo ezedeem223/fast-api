@@ -7,7 +7,10 @@ import app.ai_chat.amenhotep as amenhotep_module
 class DummyTokenizer:
     def __call__(self, text, return_tensors=None, truncation=None, max_length=None):
         if return_tensors == "pt":
-            return {"input_ids": torch.tensor([[1, 2]]), "attention_mask": torch.tensor([[1, 1]])}
+            return {
+                "input_ids": torch.tensor([[1, 2]]),
+                "attention_mask": torch.tensor([[1, 1]]),
+            }
         return {"input_ids": [[1]], "attention_mask": [[1]]}
 
     @property
@@ -45,7 +48,9 @@ def stubbed_model_and_tokenizer(monkeypatch):
         return DummyModel()
 
     monkeypatch.setattr(
-        amenhotep_module.AutoTokenizer, "from_pretrained", lambda *a, **k: DummyTokenizer()
+        amenhotep_module.AutoTokenizer,
+        "from_pretrained",
+        lambda *a, **k: DummyTokenizer(),
     )
     monkeypatch.setattr(
         amenhotep_module.AutoModelForCausalLM, "from_pretrained", fake_from_pretrained
@@ -91,23 +96,31 @@ def test_embedding_cache_ttl_and_eviction(monkeypatch, stubbed_model_and_tokeniz
 
 def test_pytorch_init_gpu_and_cpu_paths(monkeypatch, stubbed_model_and_tokenizer):
     # GPU available -> device_map auto
-    monkeypatch.setattr(amenhotep_module.torch.cuda, "is_available", lambda: True, raising=False)
+    monkeypatch.setattr(
+        amenhotep_module.torch.cuda, "is_available", lambda: True, raising=False
+    )
     ai_gpu = amenhotep_module.AmenhotepAI()
     assert any(call["device_map"] == "auto" for call in stubbed_model_and_tokenizer)
     assert ai_gpu.model is not None
 
     # CPU fallback -> device_map None
     stubbed_model_and_tokenizer.clear()
-    monkeypatch.setattr(amenhotep_module.torch.cuda, "is_available", lambda: False, raising=False)
+    monkeypatch.setattr(
+        amenhotep_module.torch.cuda, "is_available", lambda: False, raising=False
+    )
     ai_cpu = amenhotep_module.AmenhotepAI()
     assert any(call["device_map"] is None for call in stubbed_model_and_tokenizer)
     assert ai_cpu.model is not None
 
 
 def test_pytorch_init_failure_raises(monkeypatch):
-    monkeypatch.setattr(amenhotep_module.torch.cuda, "is_available", lambda: False, raising=False)
     monkeypatch.setattr(
-        amenhotep_module.AutoTokenizer, "from_pretrained", lambda *a, **k: DummyTokenizer()
+        amenhotep_module.torch.cuda, "is_available", lambda: False, raising=False
+    )
+    monkeypatch.setattr(
+        amenhotep_module.AutoTokenizer,
+        "from_pretrained",
+        lambda *a, **k: DummyTokenizer(),
     )
     monkeypatch.setattr(amenhotep_module, "pipeline", lambda *a, **k: "qa-pipeline")
 
@@ -128,7 +141,16 @@ def test_format_royal_response_variations(monkeypatch):
     arabic = "مرحبا بك"
     resp_ar = ai._format_royal_response(arabic)
     assert arabic in resp_ar
-    assert any(prefix in resp_ar for prefix in ["My child", "Listen closely", "Allow me to tell you", "Know this", "As the sages say"])
+    assert any(
+        prefix in resp_ar
+        for prefix in [
+            "My child",
+            "Listen closely",
+            "Allow me to tell you",
+            "Know this",
+            "As the sages say",
+        ]
+    )
 
     # English capitalization maintained
     english = "Hello there"

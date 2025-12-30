@@ -24,7 +24,10 @@ def test_create_community_limit(monkeypatch, session):
     service = CommunityService(session)
     user = _user(session)
     monkeypatch.setattr(service, "db", session)
-    monkeypatch.setattr("app.services.community.service.settings", type("S", (), {"MAX_OWNED_COMMUNITIES": 1})())
+    monkeypatch.setattr(
+        "app.services.community.service.settings",
+        type("S", (), {"MAX_OWNED_COMMUNITIES": 1})(),
+    )
 
     service.create_community(current_user=user, payload=_community_payload("one"))
     with pytest.raises(Exception):
@@ -42,16 +45,23 @@ def test_create_community_duplicate_name(session):
 def test_create_community_success_adds_owner(session):
     service = CommunityService(session)
     user = _user(session)
-    community = service.create_community(current_user=user, payload=_community_payload("ok"))
+    community = service.create_community(
+        current_user=user, payload=_community_payload("ok")
+    )
     assert community.owner_id == user.id
-    assert any(m.user_id == user.id and m.role == models.CommunityRole.OWNER for m in community.members)
+    assert any(
+        m.user_id == user.id and m.role == models.CommunityRole.OWNER
+        for m in community.members
+    )
 
 
 def test_join_private_requires_invitation(session):
     service = CommunityService(session)
     owner = _user(session, "owner@example.com")
     joiner = _user(session, "joiner@example.com")
-    community = service.create_community(current_user=owner, payload=_community_payload("private"))
+    community = service.create_community(
+        current_user=owner, payload=_community_payload("private")
+    )
     community.is_private = True
     session.commit()
 
@@ -71,7 +81,9 @@ def test_join_private_requires_invitation(session):
 def test_cleanup_expired_invitations(monkeypatch, session):
     service = CommunityService(session)
     user = _user(session)
-    community = service.create_community(current_user=user, payload=_community_payload("exp"))
+    community = service.create_community(
+        current_user=user, payload=_community_payload("exp")
+    )
     old_invite = models.CommunityInvitation(
         community_id=community.id,
         inviter_id=user.id,
@@ -96,7 +108,9 @@ def test_update_community_requires_owner(session):
     service = CommunityService(session)
     owner = _user(session, "owner2@example.com")
     member = _user(session, "member@example.com")
-    community = service.create_community(current_user=owner, payload=_community_payload("update"))
+    community = service.create_community(
+        current_user=owner, payload=_community_payload("update")
+    )
     community.members.append(
         models.CommunityMember(user_id=member.id, role=models.CommunityRole.MEMBER)
     )

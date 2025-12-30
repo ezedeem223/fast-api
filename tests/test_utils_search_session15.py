@@ -39,7 +39,11 @@ def test_cache_delete_pattern(monkeypatch):
 
     class DummyClient:
         def scan_iter(self, match=None):
-            return [k for k in store if match is None or k.startswith(match.replace("*", ""))]
+            return [
+                k
+                for k in store
+                if match is None or k.startswith(match.replace("*", ""))
+            ]
 
         def delete(self, *keys):
             for k in keys:
@@ -83,17 +87,21 @@ def test_get_spell_suggestions_filters_tokens(monkeypatch):
 
 
 def test_format_spell_suggestions_differs():
-    assert utils_search.format_spell_suggestions("helo wrld", ["hello", "world"]).startswith(
-        "Did you mean"
+    assert utils_search.format_spell_suggestions(
+        "helo wrld", ["hello", "world"]
+    ).startswith("Did you mean")
+    assert (
+        utils_search.format_spell_suggestions("hello world", ["hello", "world"]) == ""
     )
-    assert utils_search.format_spell_suggestions("hello world", ["hello", "world"]) == ""
 
 
 def test_sort_search_results_sqlite(monkeypatch):
     # Build a fake query with minimal attributes
     class DummyQuery:
         def __init__(self):
-            self.session = SimpleNamespace(bind=SimpleNamespace(dialect=SimpleNamespace(name="sqlite")))
+            self.session = SimpleNamespace(
+                bind=SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+            )
             self.ordered_by = None
 
         def order_by(self, expr):
@@ -116,7 +124,16 @@ def test_sort_search_results_defaults():
             return self
 
     q = DummyQuery()
-    assert utils_search.sort_search_results(q, "DATE_DESC", search_text="x").ordered_by is not None
-    assert utils_search.sort_search_results(q, "DATE_ASC", search_text="x").ordered_by is not None
-    assert utils_search.sort_search_results(q, "POPULARITY", search_text="x").ordered_by is not None
+    assert (
+        utils_search.sort_search_results(q, "DATE_DESC", search_text="x").ordered_by
+        is not None
+    )
+    assert (
+        utils_search.sort_search_results(q, "DATE_ASC", search_text="x").ordered_by
+        is not None
+    )
+    assert (
+        utils_search.sort_search_results(q, "POPULARITY", search_text="x").ordered_by
+        is not None
+    )
     assert utils_search.sort_search_results(q, "UNKNOWN", search_text="x") is q

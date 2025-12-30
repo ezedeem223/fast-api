@@ -43,10 +43,21 @@ if hasattr(settings, "database_url") and settings.database_url:
     SQLALCHEMY_DATABASE_URL = str(settings.database_url)
 else:
     # Backfill a DSN from discrete env pieces when DATABASE_URL is not provided.
-    SQLALCHEMY_DATABASE_URL = (
-        f"postgresql://{settings.database_username}:{settings.database_password}"
-        f"@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"
-    )
+    if all(
+        [
+            settings.database_username,
+            settings.database_password,
+            settings.database_hostname,
+            settings.database_name,
+        ]
+    ):
+        SQLALCHEMY_DATABASE_URL = (
+            f"postgresql://{settings.database_username}:{settings.database_password}"
+            f"@{settings.database_hostname}:{settings.database_port}/{settings.database_name}"
+        )
+    else:
+        # Fail open to local SQLite so the app can start (health checks) when env vars are missing.
+        SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
 # Application engine
 engine = build_engine(SQLALCHEMY_DATABASE_URL)

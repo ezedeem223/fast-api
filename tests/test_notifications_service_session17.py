@@ -45,6 +45,7 @@ async def test_deliver_notification_no_channels(monkeypatch):
         email_notifications=False, push_notifications=False, in_app_notifications=False
     )
     manager._get_user_preferences = lambda user_id: prefs  # type: ignore[assignment]
+
     async def proc(content, lang, prefs):
         return content
 
@@ -69,6 +70,7 @@ async def test_deliver_notification_email_only(monkeypatch):
         email_notifications=True, push_notifications=False, in_app_notifications=False
     )
     manager._get_user_preferences = lambda user_id: prefs  # type: ignore[assignment]
+
     async def proc(content, lang, prefs):
         return content
 
@@ -107,6 +109,7 @@ async def test_deliver_notification_retry_and_failure(monkeypatch):
         email_notifications=True, push_notifications=False, in_app_notifications=False
     )
     manager._get_user_preferences = lambda user_id: prefs  # type: ignore[assignment]
+
     async def proc(content, lang, prefs):
         return content
 

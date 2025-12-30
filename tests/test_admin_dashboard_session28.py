@@ -1,9 +1,9 @@
 import pytest
-from fastapi import HTTPException
 
 from app import models
 from app.core.app_factory import create_app
 from app.routers import admin_dashboard
+from fastapi import HTTPException
 from tests.conftest import TestingSessionLocal
 from tests.testclient import TestClient
 
@@ -12,7 +12,9 @@ def make_client(db_session, current_user):
     app = create_app()
     app.dependency_overrides[admin_dashboard.get_db] = lambda: db_session
     app.dependency_overrides[admin_dashboard.get_current_admin] = lambda: current_user
-    app.dependency_overrides[admin_dashboard.oauth2.get_current_admin] = lambda: current_user
+    app.dependency_overrides[admin_dashboard.oauth2.get_current_admin] = (
+        lambda: current_user
+    )
     return TestClient(app)
 
 
@@ -34,7 +36,9 @@ async def test_admin_stats_overview_routes():
     with TestingSessionLocal() as db:
         admin = seed_admin(db)
         community = models.Community(name="Comm", description="d", owner_id=admin.id)
-        community.members.append(models.CommunityMember(user_id=admin.id, role=models.CommunityRole.OWNER))
+        community.members.append(
+            models.CommunityMember(user_id=admin.id, role=models.CommunityRole.OWNER)
+        )
         db.add(community)
         db.add(models.Post(owner_id=admin.id, title="t", content="c"))
         db.add(
@@ -61,8 +65,12 @@ async def test_admin_stats_overview_routes():
 def test_get_users_sort_and_role_update(monkeypatch):
     with TestingSessionLocal() as db:
         admin = seed_admin(db)
-        user1 = models.User(email="a@example.com", hashed_password="x", is_verified=True)
-        user2 = models.User(email="b@example.com", hashed_password="x", is_verified=True)
+        user1 = models.User(
+            email="a@example.com", hashed_password="x", is_verified=True
+        )
+        user2 = models.User(
+            email="b@example.com", hashed_password="x", is_verified=True
+        )
         db.add_all([user1, user2])
         db.commit()
 
@@ -125,8 +133,6 @@ def test_admin_users_requires_admin_and_auth(monkeypatch):
         def raise_unauth():
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        app.dependency_overrides[
-            admin_dashboard.oauth2.get_current_user
-        ] = raise_unauth
+        app.dependency_overrides[admin_dashboard.oauth2.get_current_user] = raise_unauth
         resp2 = client.get("/admin/users")
         assert resp2.status_code == 401

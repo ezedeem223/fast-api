@@ -97,7 +97,11 @@ async def test_refresh_token_valid(monkeypatch, session):
     monkeypatch.setattr(auth.settings, "algorithm", "HS256")
     monkeypatch.setattr(auth.settings, "refresh_secret_key", "refresh-secret")
     token = jwt.encode(
-        {"sub": str(user.id), "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)},
+        {
+            "sub": str(user.id),
+            "exp": datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(minutes=5),
+        },
         auth.settings.refresh_secret_key,
         algorithm=auth.settings.algorithm,
     )

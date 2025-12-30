@@ -234,7 +234,9 @@ class AmenhotepAI:
         except (ImportError, ModuleNotFoundError, OSError):
             # Minimal stub to satisfy code paths that only need encoding/decoding.
             class _DummyTokenizer:
-                def __call__(self, text, return_tensors=None, truncation=None, max_length=None):
+                def __call__(
+                    self, text, return_tensors=None, truncation=None, max_length=None
+                ):
                     return {"input_ids": [[1]], "attention_mask": [[1]]}
 
                 def encode(self, text, **kwargs):
@@ -253,8 +255,15 @@ class AmenhotepAI:
         except RuntimeError as exc:
             # Some transformers installs raise RuntimeError when optional deps are missing (e.g., tf-keras).
             if "Failed to import" in str(exc) or "No module named" in str(exc):
+
                 class _DummyTokenizer:
-                    def __call__(self, text, return_tensors=None, truncation=None, max_length=None):
+                    def __call__(
+                        self,
+                        text,
+                        return_tensors=None,
+                        truncation=None,
+                        max_length=None,
+                    ):
                         return {"input_ids": [[1]], "attention_mask": [[1]]}
 
                     def encode(self, text, **kwargs):
@@ -284,6 +293,7 @@ class AmenhotepAI:
                 device_map="auto" if torch.cuda.is_available() else None,
             )
         except (ImportError, ModuleNotFoundError, OSError):
+
             class _DummyModel:
                 def generate(self, inputs, **kwargs):
                     return torch.tensor([[1, 2, 3]])
@@ -299,6 +309,7 @@ class AmenhotepAI:
         except RuntimeError as exc:
             # Transformers may raise RuntimeError when optional backends (e.g., tf-keras) are missing.
             if "Failed to import" in str(exc) or "No module named" in str(exc):
+
                 class _DummyModel:
                     def generate(self, inputs, **kwargs):
                         return torch.tensor([[1, 2, 3]])

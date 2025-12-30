@@ -3,13 +3,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
 from starlette.datastructures import Headers, UploadFile
 
 from app import models, notifications
 from app.modules.messaging import MessageType
 from app.modules.messaging.schemas import MessageSearch, MessageUpdate, SortOrder
 from app.services.messaging.message_service import MessageService
+from fastapi import HTTPException
 
 
 def _user(session, email: str) -> models.User:
@@ -215,7 +215,7 @@ async def test_update_message_expired_window(session):
     with pytest.raises(HTTPException) as exc:
         await service.update_message(
             message_id=message.id,
-        payload=MessageUpdate(content="edit"),
+            payload=MessageUpdate(content="edit"),
             current_user=sender,
             background_tasks=bg,
         )
@@ -245,7 +245,7 @@ async def test_update_message_non_sender_forbidden(session):
     with pytest.raises(HTTPException) as exc:
         await service.update_message(
             message_id=message.id,
-        payload=MessageUpdate(content="hack"),
+            payload=MessageUpdate(content="hack"),
             current_user=other,
             background_tasks=bg,
         )

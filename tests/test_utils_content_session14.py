@@ -24,8 +24,12 @@ def test_train_content_classifier_runs(monkeypatch, tmp_path):
         "dump",
         lambda obj, path: __import__("pathlib").Path(path).write_bytes(b"1"),
     )
-    monkeypatch.setattr(utils_content, "profanity", type("P", (), {"load_censor_words": lambda: None}))
-    monkeypatch.setattr(utils_content, "stopwords", type("S", (), {"words": lambda lang: ["a", "b"]}))
+    monkeypatch.setattr(
+        utils_content, "profanity", type("P", (), {"load_censor_words": lambda: None})
+    )
+    monkeypatch.setattr(
+        utils_content, "stopwords", type("S", (), {"words": lambda lang: ["a", "b"]})
+    )
     monkeypatch.setattr(utils_content, "CountVectorizer", utils_content.CountVectorizer)
     monkeypatch.setattr(utils_content, "MultinomialNB", utils_content.MultinomialNB)
 

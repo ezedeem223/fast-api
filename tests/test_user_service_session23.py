@@ -1,8 +1,8 @@
 import pytest
-from fastapi import HTTPException
 
 from app import models, schemas
 from app.services.users.service import UserService
+from fastapi import HTTPException
 
 
 def _user(session, email="u@example.com", verified=True, password="secret"):
@@ -39,7 +39,9 @@ def test_create_user_invalid_public_key_type(session):
 def test_update_privacy_custom_requires_map(session):
     service = UserService(session)
     user = _user(session)
-    update = schemas.UserPrivacyUpdate(privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=None)
+    update = schemas.UserPrivacyUpdate(
+        privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=None
+    )
 
     with pytest.raises(HTTPException) as exc:
         service.update_privacy_settings(user, update)
@@ -50,7 +52,9 @@ def test_update_privacy_custom_applies(session):
     service = UserService(session)
     user = _user(session)
     prefs = {"allowed_users": [user.id]}
-    update = schemas.UserPrivacyUpdate(privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=prefs)
+    update = schemas.UserPrivacyUpdate(
+        privacy_level=schemas.PrivacyLevel.CUSTOM, custom_privacy=prefs
+    )
 
     updated = service.update_privacy_settings(user, update)
     assert updated.privacy_level == schemas.PrivacyLevel.CUSTOM
@@ -61,14 +65,24 @@ def test_change_password_validates_and_updates(monkeypatch, session):
     service = UserService(session)
     user = _user(session, password="oldhash")
 
-    monkeypatch.setattr("app.services.users.service.verify", lambda current, hashed: False)
+    monkeypatch.setattr(
+        "app.services.users.service.verify", lambda current, hashed: False
+    )
     with pytest.raises(HTTPException) as exc:
-        service.change_password(user, schemas.PasswordChange(current_password="bad", new_password="new"))
+        service.change_password(
+            user, schemas.PasswordChange(current_password="bad", new_password="new")
+        )
     assert exc.value.status_code == 400
 
-    monkeypatch.setattr("app.services.users.service.verify", lambda current, hashed: True)
-    monkeypatch.setattr("app.services.users.service.hash_password", lambda pw: f"hashed-{pw}")
-    result = service.change_password(user, schemas.PasswordChange(current_password="old", new_password="new"))
+    monkeypatch.setattr(
+        "app.services.users.service.verify", lambda current, hashed: True
+    )
+    monkeypatch.setattr(
+        "app.services.users.service.hash_password", lambda pw: f"hashed-{pw}"
+    )
+    result = service.change_password(
+        user, schemas.PasswordChange(current_password="old", new_password="new")
+    )
     assert result["message"] == "Password changed successfully"
     assert user.hashed_password == "hashed-new"
 

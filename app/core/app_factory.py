@@ -199,13 +199,20 @@ def _register_routes(app: FastAPI) -> None:
             logger.error(f"Readiness check failed (Database): {e}")
             # When the primary DB is unavailable (e.g., missing role/db in CI), allow a test fallback.
             fallback_succeeded = False
-            if isinstance(e, OperationalError) and settings.environment.lower() == "test":
+            if (
+                isinstance(e, OperationalError)
+                and settings.environment.lower() == "test"
+            ):
                 try:
                     from sqlalchemy import create_engine
 
                     fallback_url = settings.get_database_url(use_test=True)
-                    connect_args = {"check_same_thread": False} if "sqlite" in fallback_url else {}
-                    with create_engine(fallback_url, connect_args=connect_args).connect() as conn:
+                    connect_args = (
+                        {"check_same_thread": False} if "sqlite" in fallback_url else {}
+                    )
+                    with create_engine(
+                        fallback_url, connect_args=connect_args
+                    ).connect() as conn:
                         conn.execute(text("SELECT 1"))
                     fallback_succeeded = True
                     health_status["database"] = "connected"

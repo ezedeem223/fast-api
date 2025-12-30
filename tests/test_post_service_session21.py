@@ -4,12 +4,12 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
 
 from app import models
 from app.modules.posts import schemas as post_schemas
 from app.services.posts import post_service
 from app.services.posts.post_service import PostService, _create_pdf
+from fastapi import BackgroundTasks, HTTPException
 
 
 def _user(session, email="u@example.com", verified=True):
@@ -134,7 +134,9 @@ def test_create_post_mentions_and_notifications(monkeypatch, session):
     async def mention(to, username, post_id):
         mention_calls.append((to, username, post_id))
 
-    monkeypatch.setattr(post_service, "process_mentions", lambda content, db: [mentioned])
+    monkeypatch.setattr(
+        post_service, "process_mentions", lambda content, db: [mentioned]
+    )
 
     post_out = service.create_post(
         background_tasks=bg,
@@ -165,7 +167,9 @@ def test_create_post_offensive_block(monkeypatch, session):
     user = _user(session)
     payload = _post_payload(content="bad content")
 
-    monkeypatch.setattr(post_service, "check_content", lambda db, text: ([], ["banned"]))
+    monkeypatch.setattr(
+        post_service, "check_content", lambda db, text: ([], ["banned"])
+    )
 
     with pytest.raises(HTTPException) as exc:
         service.create_post(
@@ -186,7 +190,8 @@ def test_create_post_scheduled_enqueues(monkeypatch, session):
     service = PostService(session)
     user = _user(session)
     payload = _post_payload(
-        content="scheduled", scheduled_time=datetime.now(timezone.utc) + timedelta(hours=1)
+        content="scheduled",
+        scheduled_time=datetime.now(timezone.utc) + timedelta(hours=1),
     )
     bg = DummyBackgroundTasks()
 
@@ -195,7 +200,11 @@ def test_create_post_scheduled_enqueues(monkeypatch, session):
     def fake_schedule_post_publication(*args, **kwargs):
         scheduled.append((args, kwargs))
 
-    monkeypatch.setattr(post_service, "schedule_post_publication", SimpleNamespace(apply_async=fake_schedule_post_publication))
+    monkeypatch.setattr(
+        post_service,
+        "schedule_post_publication",
+        SimpleNamespace(apply_async=fake_schedule_post_publication),
+    )
 
     service.create_post(
         background_tasks=bg,

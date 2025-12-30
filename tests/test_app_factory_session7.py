@@ -1,8 +1,7 @@
-from fastapi import status
-
 from app.core import app_factory
 from app.core.config import settings
 from app.core.database import get_db
+from fastapi import status
 from tests.testclient import TestClient
 
 
@@ -49,6 +48,7 @@ def test_readyz_success_skips_redis(monkeypatch):
 
 def test_readyz_db_failure(monkeypatch):
     from app.main import app
+
     class FailingSession:
         def execute(self, *args, **kwargs):
             raise RuntimeError("db down")
@@ -83,7 +83,9 @@ def test_maybe_train_classifier_skips_in_test(monkeypatch):
     calls = []
     monkeypatch.setattr(app_factory.Path, "exists", lambda p: False)
     monkeypatch.setattr(app_factory.settings, "environment", "test")
-    monkeypatch.setattr(app_factory, "train_content_classifier", lambda: calls.append("train"))
+    monkeypatch.setattr(
+        app_factory, "train_content_classifier", lambda: calls.append("train")
+    )
     app_factory._maybe_train_classifier()
     assert calls == []
 
@@ -92,7 +94,9 @@ def test_maybe_train_classifier_runs_when_missing_in_prod(monkeypatch):
     calls = []
     monkeypatch.setattr(app_factory.Path, "exists", lambda p: False)
     monkeypatch.setattr(app_factory.settings, "environment", "production")
-    monkeypatch.setattr(app_factory, "train_content_classifier", lambda: calls.append("train"))
+    monkeypatch.setattr(
+        app_factory, "train_content_classifier", lambda: calls.append("train")
+    )
     app_factory._maybe_train_classifier()
     assert calls == ["train"]
 
@@ -105,6 +109,8 @@ def test_maybe_train_classifier_skips_when_artifacts_exist(monkeypatch):
 
     monkeypatch.setattr(app_factory.Path, "exists", fake_exists)
     monkeypatch.setattr(app_factory.settings, "environment", "production")
-    monkeypatch.setattr(app_factory, "train_content_classifier", lambda: calls.append("train"))
+    monkeypatch.setattr(
+        app_factory, "train_content_classifier", lambda: calls.append("train")
+    )
     app_factory._maybe_train_classifier()
     assert calls == []

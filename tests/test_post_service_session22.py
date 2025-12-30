@@ -3,11 +3,11 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from app import models
 from app.modules.posts.models import LivingTestimony, PostRelation
 from app.services.posts.post_service import PostService
+from fastapi import HTTPException
 
 
 def _user(session, email="u@example.com", verified=True):
@@ -57,7 +57,9 @@ def _make_poll(session, owner):
     opt1 = models.PollOption(post_id=post.id, option_text="A")
     opt2 = models.PollOption(post_id=post.id, option_text="B")
     session.add_all([opt1, opt2])
-    poll = models.Poll(post_id=post.id, end_date=datetime.now(timezone.utc) + timedelta(days=1))
+    poll = models.Poll(
+        post_id=post.id, end_date=datetime.now(timezone.utc) + timedelta(days=1)
+    )
     session.add(poll)
     session.commit()
     session.refresh(opt1)
@@ -74,7 +76,9 @@ def test_vote_in_poll_success_and_counts(session):
     assert result["message"] == "Vote recorded successfully"
     count = (
         session.query(models.PollVote)
-        .filter(models.PollVote.post_id == post.id, models.PollVote.option_id == opt1.id)
+        .filter(
+            models.PollVote.post_id == post.id, models.PollVote.option_id == opt1.id
+        )
         .count()
     )
     assert count == 1
@@ -127,7 +131,9 @@ def test_vote_in_poll_ended(session):
     option = models.PollOption(post_id=post.id, option_text="A")
     session.add(option)
     session.add(
-        models.Poll(post_id=post.id, end_date=datetime.now(timezone.utc) - timedelta(days=1))
+        models.Poll(
+            post_id=post.id, end_date=datetime.now(timezone.utc) - timedelta(days=1)
+        )
     )
     session.commit()
     session.refresh(option)

@@ -46,7 +46,11 @@ def test_suggest_improvements_paths():
     short = {"sentiment": "POSITIVE", "score": 0.5}
     neutral = {"sentiment": "POSITIVE", "score": 0.9}
 
-    assert "positive tone" in analytics.suggest_improvements("bad text", negative).lower()
+    assert (
+        "positive tone" in analytics.suggest_improvements("bad text", negative).lower()
+    )
     assert "short" in analytics.suggest_improvements("too short", short).lower()
-    long_text = "this post is definitely long enough to avoid the short warning path now"
+    long_text = (
+        "this post is definitely long enough to avoid the short warning path now"
+    )
     assert "looks good" in analytics.suggest_improvements(long_text, neutral).lower()

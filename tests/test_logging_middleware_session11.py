@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
-from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.middleware.logging_middleware import LoggingMiddleware
+from fastapi import FastAPI
 
 
 def build_app_with_logging(extra_middleware=None):
