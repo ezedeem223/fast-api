@@ -415,6 +415,8 @@ class NotificationService:
             cache_key = f"category_pref_{user_id}_{category.value}"
             priority_notification_cache.pop(cache_key, None)
             validated_metadata = self._normalize_metadata(metadata)
+            # Ensure preferences reflect latest DB state (tests may seed/modify prefs directly).
+            notification_cache.pop(f"user_prefs_{user_id}", None)
             user_prefs = self._get_user_preferences(user_id)
             if not self._should_send_notification(user_prefs, category):
                 logger.info("Notification skipped for user %s per preferences", user_id)
