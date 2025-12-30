@@ -290,15 +290,16 @@ class Settings(BaseSettings):
         if self.database_url:
             return self.database_url
 
-        if (
-            self.database_hostname
-            and self.database_username
-            and self.database_password
-            and self.database_name
-        ):
+        hostname = os.getenv("DATABASE_HOSTNAME", self.database_hostname)
+        username = os.getenv("DATABASE_USERNAME", self.database_username)
+        password = os.getenv("DATABASE_PASSWORD", self.database_password)
+        dbname = os.getenv("DATABASE_NAME", self.database_name)
+        dbport = os.getenv("DATABASE_PORT", self.database_port)
+
+        if hostname and username and password and dbname:
             base_url = (
-                f"postgresql+psycopg2://{self.database_username}:{self.database_password}"
-                f"@{self.database_hostname}:{self.database_port}/{self.database_name}"
+                f"postgresql+psycopg2://{username}:{password}"
+                f"@{hostname}:{dbport}/{dbname}"
             )
             if self.database_ssl_mode:
                 return f"{base_url}?sslmode={self.database_ssl_mode}"
@@ -341,16 +342,17 @@ class Settings(BaseSettings):
                 if "sqlite" in self.database_url:
                     return self.database_url
 
-        if (
-            self.database_hostname
-            and self.database_username
-            and self.database_password
-            and self.database_name
-        ):
-            test_db_name = f"{self.database_name}_test"
+        hostname = os.getenv("DATABASE_HOSTNAME", self.database_hostname)
+        username = os.getenv("DATABASE_USERNAME", self.database_username)
+        password = os.getenv("DATABASE_PASSWORD", self.database_password)
+        dbname = os.getenv("DATABASE_NAME", self.database_name)
+        dbport = os.getenv("DATABASE_PORT", self.database_port)
+
+        if hostname and username and password and dbname:
+            test_db_name = f"{dbname}_test"
             base_url = (
-                f"postgresql+psycopg2://{self.database_username}:{self.database_password}"
-                f"@{self.database_hostname}:{self.database_port}/{test_db_name}"
+                f"postgresql+psycopg2://{username}:{password}"
+                f"@{hostname}:{dbport}/{test_db_name}"
             )
             if self.database_ssl_mode:
                 return f"{base_url}?sslmode={self.database_ssl_mode}"
