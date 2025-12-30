@@ -81,13 +81,13 @@ class Settings(BaseSettings):
     AI_MAX_LENGTH: int = 150
     AI_TEMPERATURE: float = 0.7
 
-    database_url: Optional[str] = os.getenv("DATABASE_URL")
-    test_database_url: Optional[str] = os.getenv("TEST_DATABASE_URL")
-    database_hostname: Optional[str] = os.getenv("DATABASE_HOSTNAME")
+    database_url: Optional[str] = None
+    test_database_url: Optional[str] = None
+    database_hostname: Optional[str] = None
     database_port: str = os.getenv("DATABASE_PORT", "5432")
-    database_password: Optional[str] = os.getenv("DATABASE_PASSWORD")
-    database_name: Optional[str] = os.getenv("DATABASE_NAME")
-    database_username: Optional[str] = os.getenv("DATABASE_USERNAME")
+    database_password: Optional[str] = None
+    database_name: Optional[str] = None
+    database_username: Optional[str] = None
     database_ssl_mode: str = os.getenv("DATABASE_SSL_MODE", "require")
     environment: str = os.getenv("APP_ENV", "production")
     force_https: bool = False
@@ -275,16 +275,17 @@ class Settings(BaseSettings):
         Enforces dedicated test DB names to avoid destructive writes to prod data.
         """
         effective_use_test = bool(use_test)
+        allow_env = isinstance(self, Settings)
 
         # Always re-read the process environment to honor runtime/monkeypatched values
         # instead of relying solely on class defaults that may have been set at import time.
-        env_database_url = os.getenv("DATABASE_URL")
-        env_test_database_url = os.getenv("TEST_DATABASE_URL")
-        env_hostname = os.getenv("DATABASE_HOSTNAME")
-        env_username = os.getenv("DATABASE_USERNAME")
-        env_password = os.getenv("DATABASE_PASSWORD")
-        env_dbname = os.getenv("DATABASE_NAME")
-        env_dbport = os.getenv("DATABASE_PORT")
+        env_database_url = os.getenv("DATABASE_URL") if allow_env else None
+        env_test_database_url = os.getenv("TEST_DATABASE_URL") if allow_env else None
+        env_hostname = os.getenv("DATABASE_HOSTNAME") if allow_env else None
+        env_username = os.getenv("DATABASE_USERNAME") if allow_env else None
+        env_password = os.getenv("DATABASE_PASSWORD") if allow_env else None
+        env_dbname = os.getenv("DATABASE_NAME") if allow_env else None
+        env_dbport = os.getenv("DATABASE_PORT") if allow_env else None
 
         if effective_use_test:
             test_url = self._resolve_test_database_url()
@@ -318,12 +319,6 @@ class Settings(BaseSettings):
                 return f"{base_url}?sslmode={self.database_ssl_mode}"
             return base_url
 
-        if env_test_database_url:
-            return env_test_database_url
-
-        if self.test_database_url:
-            return self.test_database_url
-
         raise ValueError(
             "Database configuration is incomplete; please set DATABASE_URL or the individual components."
         )
@@ -337,21 +332,49 @@ class Settings(BaseSettings):
         3) Derive from Postgres components with a *_test suffix.
         4) Fallback to sqlite for ad-hoc local runs.
         """
-        env_test_database_url = os.getenv("TEST_DATABASE_URL")
+        allow_env = isinstance(self, Settings)
+        env_test_database_url = os.getenv("TEST_DATABASE_URL") if allow_env else None
         if env_test_database_url:
             return env_test_database_url
-
-        env_database_url = os.getenv("DATABASE_URL")
 
         if self.test_database_url:
             return self.test_database_url
 
-        if env_database_url or self.database_url:
+        # Prefer explicit components on the instance before falling back to ambient env.
+        hostname = (
+            (os.getenv("DATABASE_HOSTNAME") if allow_env else None)
+            or self.database_hostname
+        )
+        username = (
+            (os.getenv("DATABASE_USERNAME") if allow_env else None)
+            or self.database_username
+        )
+        password = (
+            (os.getenv("DATABASE_PASSWORD") if allow_env else None)
+            or self.database_password
+        )
+        dbname = (
+            (os.getenv("DATABASE_NAME") if allow_env else None) or self.database_name
+        )
+        dbport = (os.getenv("DATABASE_PORT") if allow_env else None) or self.database_port
+
+        if hostname and username and password and dbname:
+            test_db_name = dbname if dbname.endswith("_test") else f"{dbname}_test"
+            base_url = (
+                f"postgresql+psycopg2://{username}:{password}"
+                f"@{hostname}:{dbport}/{test_db_name}"
+            )
+            if self.database_ssl_mode:
+                return f"{base_url}?sslmode={self.database_ssl_mode}"
+            return base_url
+
+        env_database_url = os.getenv("DATABASE_URL") if allow_env else None
+        candidate = env_database_url or self.database_url
+        if candidate:
             try:
-                # Prefer safe derivation using SQLAlchemy URL parsing when available.
                 from sqlalchemy.engine import make_url  # type: ignore
 
-                url = make_url(env_database_url or self.database_url)
+                url = make_url(candidate)
                 if url.drivername.startswith("sqlite"):
                     return str(url)
                 db_name = url.database or ""
@@ -361,25 +384,8 @@ class Settings(BaseSettings):
                 url = url.set(database=suffix_name)
                 return str(url)
             except Exception:
-                candidate = env_database_url or self.database_url
-                if candidate and "sqlite" in candidate:
+                if "sqlite" in candidate:
                     return candidate
-
-        hostname = os.getenv("DATABASE_HOSTNAME", self.database_hostname)
-        username = os.getenv("DATABASE_USERNAME", self.database_username)
-        password = os.getenv("DATABASE_PASSWORD", self.database_password)
-        dbname = os.getenv("DATABASE_NAME", self.database_name)
-        dbport = os.getenv("DATABASE_PORT", self.database_port)
-
-        if hostname and username and password and dbname:
-            test_db_name = f"{dbname}_test"
-            base_url = (
-                f"postgresql+psycopg2://{username}:{password}"
-                f"@{hostname}:{dbport}/{test_db_name}"
-            )
-            if self.database_ssl_mode:
-                return f"{base_url}?sslmode={self.database_ssl_mode}"
-            return base_url
 
         # Final fallback: keep prior sqlite behavior when no Postgres info is present.
         return "sqlite:///./test.db"
