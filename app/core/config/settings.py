@@ -341,21 +341,20 @@ class Settings(BaseSettings):
 
         # Prefer explicit components on the instance before falling back to ambient env.
         hostname = (
-            (os.getenv("DATABASE_HOSTNAME") if allow_env else None)
-            or self.database_hostname
-        )
+            os.getenv("DATABASE_HOSTNAME") if allow_env else None
+        ) or self.database_hostname
         username = (
-            (os.getenv("DATABASE_USERNAME") if allow_env else None)
-            or self.database_username
-        )
+            os.getenv("DATABASE_USERNAME") if allow_env else None
+        ) or self.database_username
         password = (
-            (os.getenv("DATABASE_PASSWORD") if allow_env else None)
-            or self.database_password
-        )
+            os.getenv("DATABASE_PASSWORD") if allow_env else None
+        ) or self.database_password
         dbname = (
-            (os.getenv("DATABASE_NAME") if allow_env else None) or self.database_name
-        )
-        dbport = (os.getenv("DATABASE_PORT") if allow_env else None) or self.database_port
+            os.getenv("DATABASE_NAME") if allow_env else None
+        ) or self.database_name
+        dbport = (
+            os.getenv("DATABASE_PORT") if allow_env else None
+        ) or self.database_port
 
         if hostname and username and password and dbname:
             test_db_name = dbname if dbname.endswith("_test") else f"{dbname}_test"
