@@ -297,14 +297,17 @@ class Settings(BaseSettings):
                     )
                 return test_url
 
+        if env_database_url:
+            return env_database_url
+
         if self.database_url:
             return self.database_url
 
-        hostname = os.getenv("DATABASE_HOSTNAME", self.database_hostname)
-        username = os.getenv("DATABASE_USERNAME", self.database_username)
-        password = os.getenv("DATABASE_PASSWORD", self.database_password)
-        dbname = os.getenv("DATABASE_NAME", self.database_name)
-        dbport = os.getenv("DATABASE_PORT", self.database_port)
+        hostname = env_hostname or self.database_hostname
+        username = env_username or self.database_username
+        password = env_password or self.database_password
+        dbname = env_dbname or self.database_name
+        dbport = env_dbport or self.database_port
 
         if hostname and username and password and dbname:
             base_url = (
