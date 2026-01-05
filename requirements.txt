@@ -416,7 +416,7 @@ SQLAlchemy==2.0.34
 
 srsly==2.4.8
 
-starlette==0.37.2
+starlette==0.50.0
 
 svglib==1.5.1
 
