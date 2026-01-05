@@ -272,7 +272,7 @@ pluggy==1.5.0
 
 polars==1.15.0
 
-praw==7.8.0
+praw==7.8.1
 
 prawcore==2.4.0
 
