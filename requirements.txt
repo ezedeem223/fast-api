@@ -274,7 +274,7 @@ polars==1.15.0
 
 praw==7.8.0
 
-prawcore==2.4.0
+prawcore==3.0.2
 
 preshed==3.0.9
 
