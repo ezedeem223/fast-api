@@ -1,14 +1,20 @@
 """Moderation router for warnings, bans, IP bans, and block appeals."""
 
 from datetime import timedelta
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.modules.moderation.service import ban_user, process_report, warn_user
+from app.modules.moderation.service import (
+    ban_user,
+    process_report,
+    resolve_report,
+    unban_user,
+    warn_user,
+)
 from app.modules.utils.analytics import update_ban_statistics
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 # Import project modules
 from .. import models, oauth2, schemas
@@ -79,6 +85,20 @@ def ban_user_route(
     return {"message": "User banned successfully"}
 
 
+@router.post("/unban/{user_id}")
+def unban_user_route(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Lift a user's active ban."""
+    if not current_user.is_moderator and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    unban_user(db, user_id)
+    return {"message": "User unbanned successfully"}
+
+
 @router.put("/reports/{report_id}/review")
 def review_report(
     report_id: int,
@@ -106,6 +126,45 @@ def review_report(
 
     process_report(db, report_id, review.is_valid, current_user.id)
     return {"message": "Report reviewed successfully"}
+
+
+@router.get("/reports", response_model=List[schemas.ReportOut])
+def list_reports(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+    status_filter: Optional[schemas.ReportStatus] = Query(None),
+):
+    """List reports filtered by status (moderators/admins only)."""
+    if not current_user.is_moderator and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    query = db.query(models.Report)
+    if status_filter is not None:
+        status_value = getattr(status_filter, "value", status_filter)
+        query = query.filter(models.Report.status == status_value)
+
+    return query.order_by(models.Report.created_at.desc()).all()
+
+
+@router.put("/reports/{report_id}/decision", response_model=schemas.ReportOut)
+def decide_report(
+    report_id: int,
+    decision: schemas.ReportDecision,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Resolve a report by deleting content or ignoring it with notes."""
+    if not current_user.is_moderator and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    report = resolve_report(
+        db,
+        report_id=report_id,
+        action=decision.action.value,
+        reviewer_id=current_user.id,
+        resolution_notes=decision.resolution_notes,
+    )
+    return report
 
 
 @router.post("/ip", status_code=status.HTTP_201_CREATED)
@@ -143,7 +202,7 @@ def ban_ip(
         raise HTTPException(status_code=400, detail="This IP address is already banned")
 
     # Create a new IP ban record
-    new_ban = models.IPBan(**ip_ban.dict(), created_by=current_user.id)
+    new_ban = models.IPBan(**ip_ban.model_dump(), created_by=current_user.id)
     db.add(new_ban)
     db.commit()
     db.refresh(new_ban)

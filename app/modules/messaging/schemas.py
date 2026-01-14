@@ -20,15 +20,18 @@ from app.modules.messaging import (
 
 
 class MessageAttachmentBase(BaseModel):
+    """Pydantic schema for MessageAttachmentBase."""
     file_url: str
     file_type: str
 
 
 class MessageAttachmentCreate(MessageAttachmentBase):
+    """Pydantic schema for MessageAttachmentCreate."""
     pass
 
 
 class MessageAttachment(MessageAttachmentBase):
+    """Pydantic schema for MessageAttachment."""
     id: int
     message_id: int
     created_at: datetime
@@ -37,6 +40,7 @@ class MessageAttachment(MessageAttachmentBase):
 
 
 class MessageBase(BaseModel):
+    """Pydantic schema for MessageBase."""
     content: Optional[str] = None
     encrypted_content: Optional[str] = None
     message_type: MessageType = MessageType.TEXT
@@ -54,6 +58,7 @@ class MessageBase(BaseModel):
 
 
 class MessageCreate(MessageBase):
+    """Pydantic schema for MessageCreate."""
     receiver_id: Optional[int] = Field(default=None, alias="recipient_id")
     conversation_id: Optional[str] = None
     attachments: List[MessageAttachmentCreate] = Field(default_factory=list)
@@ -63,6 +68,7 @@ class MessageCreate(MessageBase):
 
 
 class LinkPreview(BaseModel):
+    """Pydantic schema for LinkPreview."""
     title: str
     description: Optional[str] = None
     image: Optional[str] = None
@@ -70,6 +76,7 @@ class LinkPreview(BaseModel):
 
 
 class Message(MessageBase):
+    """Pydantic schema for Message."""
     id: int
     sender_id: int
     receiver_id: Optional[int] = None
@@ -87,11 +94,13 @@ class Message(MessageBase):
 
 
 class SortOrder(str, Enum):
+    """Pydantic schema for SortOrder."""
     ASC = "asc"
     DESC = "desc"
 
 
 class MessageSearch(BaseModel):
+    """Pydantic schema for MessageSearch."""
     query: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -103,15 +112,18 @@ class MessageSearch(BaseModel):
 
 
 class MessageSearchResponse(BaseModel):
+    """Pydantic schema for MessageSearchResponse."""
     total: int
     messages: List[Message]
 
 
 class MessageUpdate(BaseModel):
+    """Pydantic schema for MessageUpdate."""
     content: str
 
 
 class MessageOut(BaseModel):
+    """Pydantic schema for MessageOut."""
     message: Message
     count: int
 
@@ -119,6 +131,7 @@ class MessageOut(BaseModel):
 
 
 class ConversationMemberOut(BaseModel):
+    """Pydantic schema for ConversationMemberOut."""
     user_id: int
     role: ConversationMemberRole
     joined_at: datetime
@@ -129,14 +142,17 @@ class ConversationMemberOut(BaseModel):
 
 
 class ConversationBase(BaseModel):
+    """Pydantic schema for ConversationBase."""
     title: Optional[str] = None
 
 
 class ConversationCreate(ConversationBase):
+    """Pydantic schema for ConversationCreate."""
     member_ids: List[int] = Field(default_factory=list)
 
 
 class ConversationOut(ConversationBase):
+    """Pydantic schema for ConversationOut."""
     id: str
     type: ConversationType
     created_by: Optional[int]
@@ -148,22 +164,26 @@ class ConversationOut(ConversationBase):
 
 
 class ConversationMembersUpdate(BaseModel):
+    """Pydantic schema for ConversationMembersUpdate."""
     member_ids: List[int]
 
 
 class ConversationStatisticsBase(BaseModel):
+    """Pydantic schema for ConversationStatisticsBase."""
     total_messages: int
     total_time: int
     last_message_at: datetime
 
 
 class ConversationStatisticsCreate(ConversationStatisticsBase):
+    """Pydantic schema for ConversationStatisticsCreate."""
     conversation_id: str
     user1_id: int
     user2_id: int
 
 
 class ConversationStatistics(ConversationStatisticsBase):
+    """Pydantic schema for ConversationStatistics."""
     id: int
     conversation_id: str
     user1_id: int
@@ -177,19 +197,23 @@ class ConversationStatistics(ConversationStatisticsBase):
 
 
 class ScreenShareStart(BaseModel):
+    """Pydantic schema for ScreenShareStart."""
     call_id: int
 
 
 class ScreenShareEnd(BaseModel):
+    """Pydantic schema for ScreenShareEnd."""
     session_id: int
 
 
 class ScreenShareUpdate(BaseModel):
+    """Pydantic schema for ScreenShareUpdate."""
     status: ScreenShareStatus
     error_message: Optional[str] = None
 
 
 class ScreenShareSessionOut(BaseModel):
+    """Pydantic schema for ScreenShareSessionOut."""
     id: int
     call_id: int
     sharer_id: int

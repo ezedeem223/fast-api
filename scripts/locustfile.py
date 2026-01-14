@@ -12,6 +12,7 @@ from locust import HttpUser, task, between
 
 
 def _resolve_host() -> str:
+    """Helper for  resolve host."""
     return (
         os.getenv("LOCUST_HOST")
         or os.getenv("HOST")
@@ -21,6 +22,7 @@ def _resolve_host() -> str:
 
 
 class FastApiUser(HttpUser):
+    """Class FastApiUser."""
     wait_time = between(1, 3)
     host = _resolve_host()
 
@@ -34,6 +36,7 @@ class FastApiUser(HttpUser):
 
 
 class AnonymousUser(HttpUser):
+    """Class AnonymousUser."""
     wait_time = between(2, 5)
     host = _resolve_host()
 

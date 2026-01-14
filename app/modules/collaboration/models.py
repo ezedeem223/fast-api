@@ -10,6 +10,7 @@ from app.core.db_defaults import timestamp_default
 
 
 class ProjectStatus(str, enum.Enum):
+    """Enumeration for ProjectStatus."""
     IDEA = "idea"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"

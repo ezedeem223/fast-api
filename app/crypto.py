@@ -1,3 +1,4 @@
+"""Application module."""
 import nacl.secret
 import nacl.utils
 from cryptography.hazmat.primitives import hashes

@@ -10,10 +10,12 @@ Behavior:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import re
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -24,6 +26,10 @@ except Exception:  # pragma: no cover - optional dependency
     ort = None
 
 from app.core.config import settings
+
+if TYPE_CHECKING:  # pragma: no cover
+    from fastapi import FastAPI
+    from sqlalchemy.orm import Session
 
 
 class AmenhotepAI:
@@ -85,11 +91,15 @@ class AmenhotepAI:
         self.welcome_message = self._get_welcome_message()
         self.session_context = {}
 
-    async def generate_response(self, message: str, user_id: int = 0) -> str:
+    async def generate_response(
+        self, message: str, user_id: int = 0, db: "Session | None" = None
+    ) -> str:
         """Backward-compatible alias used by tests."""
-        return await self.get_response(user_id=user_id, message=message)
+        return await self.get_response(user_id=user_id, message=message, db=db)
 
-    async def get_response(self, user_id: int, message: str) -> str:
+    async def get_response(
+        self, user_id: int, message: str, db: "Session | None" = None
+    ) -> str:
         """
         Generate a response based on user input by leveraging the session context,
         the knowledge base, and the language model.
@@ -100,38 +110,56 @@ class AmenhotepAI:
                 self.session_context[user_id] = []
             self.session_context[user_id].append({"role": "user", "content": message})
 
+            prefer_arabic = self._contains_arabic(message)
+            response: Optional[str] = None
+
             # Check if the input message matches any topic in the knowledge base
             for category in self.knowledge_base:
                 for topic, content in self.knowledge_base[category].items():
                     if topic.lower() in message.lower():
                         if isinstance(content, dict):
-                            response = " ".join(content.values())
+                            response = " ".join(
+                                [str(value) for value in content.values()]
+                            )
                         elif isinstance(content, list):
-                            response = ", ".join(content)
+                            response = ", ".join([str(item) for item in content])
                         else:
                             response = str(content)
                         break
+                if response:
+                    break
+
+            if response is None:
+                fact_response = self._build_fact_response(message, db=db)
+                if fact_response:
+                    response = fact_response
                 else:
-                    continue
-                break
-            else:
-                # Ensure embeddings are cached (reused for repeated text).
-                _ = self._get_cached_embedding(message)
+                    # Ensure embeddings are cached (reused for repeated text).
+                    _ = self._get_cached_embedding(message)
 
-                inputs = self.tokenizer.encode(
-                    message
-                    + " ".join(
+                    prompt = self._build_prompt(message, prefer_arabic=prefer_arabic)
+                    context = " ".join(
                         [m["content"] for m in self.session_context[user_id][-3:]]
-                    ),
-                    return_tensors="pt",
-                    max_length=512,
-                    truncation=True,
+                    )
+
+                    inputs = self.tokenizer.encode(
+                        f"{prompt} {context}".strip(),
+                        return_tensors="pt",
+                        max_length=512,
+                        truncation=True,
+                    )
+
+                    outputs = self._generate_with_model(inputs)
+                    response = self.tokenizer.decode(
+                        outputs[0], skip_special_tokens=True
+                    )
+
+            try:
+                formatted_response = self._format_royal_response(
+                    response, message=message
                 )
-
-                outputs = self._generate_with_model(inputs)
-                response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-            formatted_response = self._format_royal_response(response)
+            except TypeError:
+                formatted_response = self._format_royal_response(response)
 
             self.session_context[user_id].append(
                 {"role": "assistant", "content": formatted_response}
@@ -174,6 +202,37 @@ class AmenhotepAI:
                 "rituals": "Religious rituals were a core part of daily life.",
                 "temples": "Temples served as key religious, administrative, and economic centers.",
             },
+            "التاريخ_المصري": {
+                "أمنحتب الثالث": {
+                    "نبذة": "أمنحتب الثالث هو الفرعون التاسع من الأسرة الثامنة عشرة (نحو 1388-1351 ق.م).",
+                    "الإنجازات": "شهد عهده ازدهارًا في الفنون والعمارة، ومن أشهر الآثار تمثالا ممنون.",
+                    "السياسة": "اعتمد على الدبلوماسية والتحالفات للحفاظ على السلام.",
+                },
+                "الدولة الحديثة": "تعد الدولة الحديثة (نحو 1550-1070 ق.م) ذروة القوة العسكرية والثقافية في مصر القديمة.",
+                "الأهرامات": "الأهرامات منشآت جنائزية ملكية، وأشهرها أهرامات الجيزة.",
+                "النيل": "نهر النيل كان شريان الحياة؛ فيضانه السنوي دعم الزراعة والاستقرار.",
+            },
+            "الحياة_اليومية": {
+                "الزراعة": "اعتمدت الزراعة على فيضان النيل ومحاصيل مثل القمح والشعير والكتان.",
+                "الطعام": "كان الخبز والجعة أساس الغذاء، مع خضروات وأسماك ولحوم في المناسبات.",
+                "المهن": "تنوعت المهن بين الكتبة والفلاحين والحرفيين والكهنة والجنود والتجار.",
+                "الأسرة": "لعبت الأسرة دورًا محوريًا في المجتمع وكانت العلاقات الأسرية موثقة في النصوص.",
+            },
+            "اللغة_والكتابة": {
+                "الكتابة الهيروغليفية": "نظام كتابي تصويري استخدم في النقوش الدينية والرسمية.",
+                "اللغة المصرية": "تطورت اللغة المصرية عبر مراحل؛ أبرزها المصرية الوسطى.",
+                "البردي": "استعمل ورق البردي في تسجيل المراسلات والنصوص التعليمية.",
+            },
+            "الفنون_والعمارة": {
+                "المعابد": "المعابد كانت مراكز دينية واقتصادية، وتظهر زخارفها حياة الآلهة والملوك.",
+                "النحت": "اهتم المصريون بالنحت لتخليد الملوك والآلهة، مع عناية بالتوازن والرمزية.",
+                "التماثيل": "التماثيل الضخمة تؤكد السلطة والقداسة وتوضع في المعابد والمقابر.",
+            },
+            "الديانة": {
+                "الآلهة المصرية": "من أبرز الآلهة رع وأوزيريس وإيزيس وحورس وأنوبيس وتحوت.",
+                "الطقوس": "شملت الطقوس التقدمات اليومية والصلوات والأعياد الموسمية.",
+                "المعابد": "كانت المعابد محورًا للعبادة والإدارة وتخزين الغلال.",
+            },
         }
 
     def _save_knowledge_base(self):
@@ -184,41 +243,138 @@ class AmenhotepAI:
         except Exception as e:
             print(f"Error saving knowledge base: {e}")
 
+    @staticmethod
+    def _contains_arabic(text: str) -> bool:
+        if not text:
+            return False
+        # Accept Arabic + mis-decoded Arabic that landed in Cyrillic codepoints.
+        return re.search(r"[\u0600-\u06FF\u0400-\u04FF]", text) is not None
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        cleaned = re.sub(r"[^\w\s\u0600-\u06FF]", " ", text, flags=re.UNICODE)
+        return " ".join(cleaned.lower().split())
+
+    def _build_prompt(self, message: str, *, prefer_arabic: bool) -> str:
+        if prefer_arabic:
+            return (
+                "أنت أمنحتب، مساعد معرفي يتحدث بالعربية الفصحى. "
+                "أجب بدقة وبأسلوب رسمي مختصر. "
+                f"السؤال: {message}"
+            )
+        return message
+
+    def _find_verified_fact(self, message: str, db: "Session | None"):
+        if db is None:
+            return None
+
+        from app.modules.fact_checking.models import Fact, FactCheckStatus
+
+        normalized = self._normalize_text(message)
+        if not normalized:
+            return None
+
+        base_query = db.query(Fact).filter(Fact.status == FactCheckStatus.VERIFIED)
+        fact = (
+            base_query.filter(Fact.claim.ilike(f"%{normalized}%"))
+            .order_by(Fact.verified_at.desc(), Fact.created_at.desc())
+            .first()
+        )
+        if fact:
+            return fact
+
+        tokens = [token for token in normalized.split() if len(token) >= 4]
+        for token in tokens[:5]:
+            fact = (
+                base_query.filter(Fact.claim.ilike(f"%{token}%"))
+                .order_by(Fact.verified_at.desc(), Fact.created_at.desc())
+                .first()
+            )
+            if fact:
+                return fact
+        return None
+
+    def _build_fact_response(
+        self, message: str, db: "Session | None" = None
+    ) -> Optional[str]:
+        fact = self._find_verified_fact(message, db=db)
+        if not fact:
+            return None
+
+        parts = [
+            f"وفقًا للحقائق التي تم التحقق منها، الادعاء: {fact.claim}."
+        ]
+        if getattr(fact, "description", None):
+            parts.append(f"التفاصيل: {fact.description}")
+
+        sources: list[str] = []
+        for field in ("sources", "evidence_links"):
+            value = getattr(fact, field, None) or []
+            if isinstance(value, list):
+                sources.extend([str(item) for item in value if item])
+        if sources:
+            parts.append("المصادر: " + ", ".join(sources))
+
+        return " ".join(parts)
+
     def _get_welcome_message(self) -> str:
         """Return a detailed welcome message in Arabic."""
-        return """
-        Welcome to the court of Amenhotep III, the great pharaoh of Egypt's golden age.
+        return (
+            "مرحبًا بك. أنا أمنحتب، مساعد معرفي مستوحى من حكمة مصر القديمة.\n\n"
+            "أستطيع مساعدتك في:\n"
+            "- تبسيط المعلومات التاريخية والثقافية.\n"
+            "- الإجابة عن الأسئلة العامة بأسلوب فصيح.\n"
+            "- تلخيص السياقات وتقديم إجابات موجزة عند الحاجة.\n"
+            "- الاستناد إلى الحقائق المتحقق منها عندما تتوفر.\n\n"
+            "اسأل ما تشاء."
+        )
 
-        I am here to share the wisdom and history of ancient Egypt and to answer your questions about:
-        - Egyptian civilization and its achievements
-        - Daily life along the Nile
-        - Religious beliefs and rituals
-        - Arts and architecture of my era
-        - Politics and diplomacy in my reign
-
-        Ask your questions, and I will share from the treasury of Egyptian knowledge.
-        """
-
-    def _format_royal_response(self, response: str) -> str:
+    def _format_royal_response(
+        self, response: str, *, message: str | None = None
+    ) -> str:
         """Format the generated response by adding royal prefixes and suffixes."""
         from random import choice
 
-        royal_prefixes = [
-            "My child",
-            "Listen closely",
-            "Allow me to tell you",
-            "Know this",
-            "As the sages say",
-        ]
+        prefer_arabic = self._contains_arabic(message or response)
 
-        royal_suffixes = [
-            "This is what the gods have taught us",
-            "So it was in my reign",
-            "This is the wisdom of the pharaohs",
-            "As our scribes carved on temple walls",
-        ]
+        if prefer_arabic and not self._contains_arabic(response):
+            response = (
+                "أعتذر، سأجيب باللغة العربية الفصحى قدر الإمكان. "
+                "هل يمكنك توضيح السؤال؟"
+            )
 
-        response = f"{choice(royal_prefixes)}, {response}"
+        if prefer_arabic:
+            royal_prefixes = [
+                "يا صديقي",
+                "استمع بعناية",
+                "دعني أوضح لك",
+                "اعلم أن",
+                "بحكمة الفراعنة",
+            ]
+
+            royal_suffixes = [
+                "وهذا ما تشهد به السجلات",
+                "وهذه خلاصة الحكمة",
+                "وهكذا دون على جدران المعابد",
+                "وذلك مما استقر عليه الرأي",
+            ]
+        else:
+            royal_prefixes = [
+                "My child",
+                "Listen closely",
+                "Allow me to tell you",
+                "Know this",
+                "As the sages say",
+            ]
+
+            royal_suffixes = [
+                "This is what the gods have taught us",
+                "So it was in my reign",
+                "This is the wisdom of the pharaohs",
+                "As our scribes carved on temple walls",
+            ]
+
+        response = f"{choice(royal_prefixes)} {response}"
         if not any(suffix in response for suffix in royal_suffixes):
             response = f"{response}. {choice(royal_suffixes)}."
         return response
@@ -455,3 +611,31 @@ class AmenhotepAI:
             opset_version=14,
         )
         return output_path
+
+
+async def get_shared_amenhotep(app: "FastAPI") -> AmenhotepAI:
+    """Return a shared AmenhotepAI instance stored on app.state."""
+    instance = getattr(app.state, "amenhotep", None)
+    if isinstance(instance, AmenhotepAI):
+        return instance
+
+    task = getattr(app.state, "amenhotep_task", None)
+    current_task = asyncio.current_task()
+    if isinstance(task, asyncio.Task) and task is not current_task:
+        await task
+        instance = getattr(app.state, "amenhotep", None)
+        if isinstance(instance, AmenhotepAI):
+            return instance
+
+    lock = getattr(app.state, "amenhotep_lock", None)
+    if lock is None:
+        lock = asyncio.Lock()
+        setattr(app.state, "amenhotep_lock", lock)
+
+    async with lock:
+        instance = getattr(app.state, "amenhotep", None)
+        if isinstance(instance, AmenhotepAI):
+            return instance
+        instance = await asyncio.to_thread(AmenhotepAI)
+        app.state.amenhotep = instance
+        return instance

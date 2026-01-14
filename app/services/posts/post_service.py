@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from sqlalchemy import desc, extract, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
@@ -1184,7 +1185,28 @@ class PostService:
                 user_id=current_user.id, post_id=post_id, option_id=option_id
             )
             self.db.add(new_vote)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing_vote = (
+                self.db.query(models.PollVote)
+                .filter(
+                    models.PollVote.user_id == current_user.id,
+                    models.PollVote.post_id == post_id,
+                )
+                .first()
+            )
+            if existing_vote:
+                if existing_vote.option_id == option_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="You have already voted for this option",
+                    )
+                existing_vote.option_id = option_id
+                self.db.commit()
+                return {"message": "Vote recorded successfully"}
+            raise HTTPException(status_code=400, detail="Vote already recorded")
         return {"message": "Vote recorded successfully"}
 
     def get_poll_results(self, *, post_id: int) -> dict:

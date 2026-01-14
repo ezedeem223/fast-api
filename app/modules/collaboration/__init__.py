@@ -1,3 +1,4 @@
+"""Package exports for collaboration domain."""
 from .models import CollaborativeProject, ProjectContribution, ProjectStatus
 from .schemas import (
     ContributionCreate,

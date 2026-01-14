@@ -48,6 +48,7 @@ class NotificationBase(BaseModel):
 
 
 class NotificationCreate(NotificationBase):
+    """Pydantic schema for NotificationCreate."""
     user_id: int
     link: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -65,6 +66,7 @@ class NotificationUpdate(BaseModel):
 
 
 class NotificationDeliveryStatus(BaseModel):
+    """Pydantic schema for NotificationDeliveryStatus."""
     success: bool
     channel: str
     timestamp: datetime
@@ -72,6 +74,7 @@ class NotificationDeliveryStatus(BaseModel):
 
 
 class NotificationStatistics(BaseModel):
+    """Pydantic schema for NotificationStatistics."""
     total_count: int
     unread_count: int
     categories_distribution: List[Tuple[str, int]]
@@ -80,6 +83,7 @@ class NotificationStatistics(BaseModel):
 
 
 class NotificationAnalytics(BaseModel):
+    """Pydantic schema for NotificationAnalytics."""
     engagement_rate: float
     response_time: float
     peak_activity_hours: List[Dict[str, Union[int, int]]]
@@ -93,6 +97,7 @@ class NotificationAnalyticsOut(NotificationAnalytics):
 
 
 class NotificationGroupOut(BaseModel):
+    """Pydantic schema for NotificationGroupOut."""
     id: int
     group_type: str
     count: int
@@ -103,6 +108,7 @@ class NotificationGroupOut(BaseModel):
 
 
 class NotificationDeliveryLogOut(BaseModel):
+    """Pydantic schema for NotificationDeliveryLogOut."""
     id: int
     attempt_time: datetime
     status: str
@@ -148,6 +154,7 @@ class NotificationOut(BaseModel):
 
 
 class NotificationSummary(BaseModel):
+    """Pydantic schema for NotificationSummary."""
     unread_count: int
     unseen_count: int
     unread_urgent_count: int
@@ -156,6 +163,7 @@ class NotificationSummary(BaseModel):
 
 
 class NotificationFeedResponse(BaseModel):
+    """Pydantic schema for NotificationFeedResponse."""
     notifications: List[NotificationOut]
     unread_count: int
     unseen_count: int
@@ -167,6 +175,7 @@ class NotificationFeedResponse(BaseModel):
 
 
 class PushNotification(BaseModel):
+    """Pydantic schema for PushNotification."""
     device_token: str
     title: str
     content: str
@@ -177,6 +186,7 @@ class PushNotification(BaseModel):
 
 
 class BulkNotificationRequest(BaseModel):
+    """Pydantic schema for BulkNotificationRequest."""
     user_ids: List[int]
     content: str
     notification_type: str = "system"
@@ -185,6 +195,7 @@ class BulkNotificationRequest(BaseModel):
 
 
 class ScheduleNotificationRequest(BaseModel):
+    """Pydantic schema for ScheduleNotificationRequest."""
     user_id: int
     content: str
     scheduled_for: datetime
@@ -194,6 +205,7 @@ class ScheduleNotificationRequest(BaseModel):
 
 
 class DeviceTokenRequest(BaseModel):
+    """Pydantic schema for DeviceTokenRequest."""
     device_token: str
     device_type: str = "android"  # or 'ios', 'web'
 

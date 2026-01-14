@@ -19,6 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Helper for upgrade."""
     op.add_column(
         "messages",
         sa.Column("has_emoji", sa.Boolean(), server_default=sa.false(), nullable=False),
@@ -27,5 +28,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Helper for downgrade."""
     op.drop_column("messages", "has_emoji")
 

@@ -14,6 +14,7 @@ REPORTS_DAILY_LIMIT = 3
 
 
 def _ensure_reason(reason: Optional[str]) -> str:
+    """Helper for  ensure reason."""
     if not reason or not reason.strip():
         raise HTTPException(status_code=422, detail="A report reason must be provided")
     return reason.strip()
@@ -27,6 +28,7 @@ def submit_report(
     post_id: Optional[int] = None,
     comment_id: Optional[int] = None,
 ) -> dict:
+    """Helper for submit report."""
     if getattr(current_user, "is_suspended", False):
         raise HTTPException(
             status_code=403, detail="Suspended users cannot submit reports"

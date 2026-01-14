@@ -25,6 +25,8 @@ class ConnectionManager:
         *,
         max_connections_per_user: int = 5,
         registry_ttl: int = 600,
+        registry_prefix: str = "realtime:sockets",
+        registry_tag: str = "realtime:sockets",
     ) -> None:
         self.active_connections: Dict[int, List[WebSocket]] = {}
         self.connection_counts: Dict[int, int] = {}
@@ -34,6 +36,8 @@ class ConnectionManager:
         self._lock = asyncio.Lock()
         self.max_connections_per_user = max_connections_per_user
         self.registry_ttl = registry_ttl
+        self.registry_prefix = registry_prefix
+        self.registry_tag = registry_tag
 
     async def connect(self, websocket: WebSocket, user_id: int) -> bool:
         """Accept and register a WebSocket connection for a given user."""
@@ -147,9 +151,9 @@ class ConnectionManager:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
             await cache_manager.set_with_tags(
-                f"realtime:sockets:{user_id}",
+                f"{self.registry_prefix}:{user_id}",
                 payload,
-                tags=["realtime:sockets", f"user:{user_id}"],
+                tags=[self.registry_tag, f"user:{user_id}"],
                 ttl=self.registry_ttl,
             )
         except Exception as exc:  # pragma: no cover - defensive logging

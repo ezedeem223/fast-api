@@ -17,6 +17,8 @@ from fastapi import Request
 class _NoOpLimiter:
     """Disable rate limiting when running tests to keep fixtures deterministic."""
 
+    enabled = False
+
     def limit(self, *args, **kwargs):
         def decorator(func):
             return func
@@ -25,11 +27,20 @@ class _NoOpLimiter:
 
 
 # Use a no-op limiter in tests to keep fixtures deterministic.
+def _parse_global_limits(raw: str) -> list[str]:
+    """Helper for  parse global limits."""
+    if not raw:
+        return []
+    parts = [part.strip() for part in raw.replace(";", ",").split(",")]
+    return [part for part in parts if part]
+
+
 if os.getenv("APP_ENV", settings.environment).lower() == "test":
     limiter = _NoOpLimiter()
 else:
     limiter = Limiter(
-        key_func=get_remote_address, default_limits=["300 per minute", "5000 per day"]
+        key_func=get_remote_address,
+        default_limits=_parse_global_limits(settings.global_rate_limit),
     )
 
 

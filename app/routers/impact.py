@@ -17,12 +17,14 @@ from fastapi import APIRouter, Depends, Query
 
 
 class ImpactCertificateCreate(BaseModel):
+    """Pydantic schema for ImpactCertificateCreate."""
     title: str
     description: Optional[str] = None
     impact_metrics: dict = {}
 
 
 class ImpactCertificateOut(BaseModel):
+    """Pydantic schema for ImpactCertificateOut."""
     id: int
     user_id: int
     title: str
@@ -33,6 +35,7 @@ class ImpactCertificateOut(BaseModel):
 
 
 class CulturalEntryCreate(BaseModel):
+    """Pydantic schema for CulturalEntryCreate."""
     term: str
     definition: str
     cultural_context: str
@@ -40,6 +43,7 @@ class CulturalEntryCreate(BaseModel):
 
 
 class CulturalEntryOut(BaseModel):
+    """Pydantic schema for CulturalEntryOut."""
     id: int
     term: str
     definition: str
@@ -59,6 +63,7 @@ def create_certificate(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Create certificate."""
     cert = ImpactCertificate(
         user_id=current_user.id,
         title=payload.title,
@@ -75,6 +80,7 @@ def create_certificate(
 def list_certificates(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
+    """List certificates."""
     certs = (
         db.query(ImpactCertificate)
         .filter(ImpactCertificate.user_id == current_user.id)
@@ -89,6 +95,7 @@ def create_cultural_entry(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Create cultural entry."""
     entry = CulturalDictionaryEntry(
         term=payload.term,
         definition=payload.definition,
@@ -108,6 +115,7 @@ def list_cultural_entries(
     q: Optional[str] = Query(None, min_length=1),
     db: Session = Depends(get_db),
 ):
+    """List cultural entries."""
     query = db.query(CulturalDictionaryEntry)
     if q:
         like = f"%{q}%"

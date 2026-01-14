@@ -152,6 +152,7 @@ class Follow(Base):
 
 class ExpertiseBadge(Base):
 
+    """SQLAlchemy model for ExpertiseBadge."""
     __tablename__ = "expertise_badges"
 
     id = Column(Integer, primary_key=True)

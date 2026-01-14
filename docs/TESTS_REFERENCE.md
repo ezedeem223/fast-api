@@ -1,0 +1,217 @@
+# Tests Reference
+
+Index of pytest suites and their module-level summaries.
+
+- `tests/admin/test_admin_dashboard.py` - Test module for test admin dashboard session28.
+- `tests/admin/test_admin_dashboard_coverage.py` - Targeted coverage tests for admin dashboard routes and helpers.
+- `tests/admin/test_auth_oauth_admin.py` - Test module for test session3 auth oauth admin.
+- `tests/admin/test_notifications_admin.py` - Test module for test session15 notifications admin.
+- `tests/admin/test_phase8_admin_moderation.py` - Test module for test phase8 admin moderation.
+- `tests/ai/test_ai_amenhotep_and_edit_history.py` - Test module for test ai amenhotep and edit history.
+- `tests/ai/test_amenhotep_cache_and_init.py` - Test module for test amenhotep session2.
+- `tests/ai/test_amenhotep_content_i18n.py` - Test module for test session6 amenhotep content i18n.
+- `tests/ai/test_amenhotep_coverage.py` - Coverage tests for Amenhotep AI helpers with safe stubs.
+- `tests/ai/test_amenhotep_onnx_and_session.py` - Test module for test amenhotep session1.
+- `tests/ai/test_amenhotep_onnx_cache.py` - Test module for test amenhotep onnx cache.
+- `tests/ai/test_amenhotep_router_ws_coverage.py` - Additional coverage for Amenhotep router websocket paths.
+- `tests/ai/test_notifications_email_batch.py` - Test module for test notifications email batch session18.
+- `tests/ai/test_utils_links_search_amenhotep_gaps.py` - Test module for test utils links search amenhotep gaps.
+- `tests/analytics/test_analytics_charts_coverage.py` - Additional coverage for analytics charting helpers.
+- `tests/analytics/test_analytics_core.py` - Test module for test analytics session3.
+- `tests/analytics/test_analytics_lazy.py` - Test module for test analytics lazy.
+- `tests/analytics/test_analytics_logging.py` - Test module for test analytics logging.
+- `tests/analytics/test_analytics_metrics.py` - Test module for test session7 analytics.
+- `tests/analytics/test_analytics_queries.py` - Test module for test analytics session4.
+- `tests/analytics/test_impact_api.py` - Test module for test impact api.
+- `tests/analytics/test_notifications_celery_process_and_analytics.py` - Test module for test notifications celery process and analytics.
+- `tests/analytics/test_utils_content_analytics.py` - Test module for test session15 utils content analytics.
+- `tests/auth/test_auth_coverage.py` - Targeted auth coverage tests for previously missed branches.
+- `tests/auth/test_auth_login_refresh.py` - Test module for test auth session25.
+- `tests/auth/test_auth_p2fa_middleware.py` - Test module for test session3 auth p2fa middleware.
+- `tests/auth/test_auth_router.py` - Test module for test session3 auth router.
+- `tests/auth/test_auth_security_extended.py` - Test module for test auth security extended.
+- `tests/auth/test_auth_tokens_and_login.py` - Test module for test auth.
+- `tests/auth/test_crypto_oauth2.py` - Test module for test session19 crypto oauth2.
+- `tests/auth/test_crypto_oauth2_more_coverage.py` - Additional coverage for crypto helpers and oauth2 error branches.
+- `tests/auth/test_oauth_router_more_coverage.py` - Additional coverage for OAuth router helpers and callbacks.
+- `tests/auth/test_oauth_social.py` - Test module for test session4 oauth social.
+- `tests/auth/test_p2fa_router_more_coverage.py` - Additional coverage for 2FA router error branches.
+- `tests/auth/test_social_auth_more_coverage.py` - Additional coverage for social_auth router branches.
+- `tests/auth/test_websocket_auth.py` - Test module for test websocket auth session5.
+- `tests/comments/test_comment_service_basic.py` - Test module for test comment service.
+- `tests/comments/test_comment_service_extended.py` - Test module for test session21 comment service.
+- `tests/community/test_collaboration_and_memory.py` - Test module for test collaboration and memory.
+- `tests/community/test_collaboration_api.py` - Test module for test collaboration api.
+- `tests/community/test_collaboration_router_more_coverage.py` - Additional coverage for collaboration router branches.
+- `tests/community/test_community.py` - Test module for test community.
+- `tests/community/test_community_posts.py` - Test module for test session2 community posts.
+- `tests/community/test_community_router_basic.py` - Test module for test community router session26.
+- `tests/community/test_community_router_membership.py` - Test module for test session6 community router.
+- `tests/community/test_community_service_basic.py` - Test module for test community service basic.
+- `tests/community/test_community_service_core.py` - Test module for test community service.
+- `tests/community/test_community_service_extra.py` - Test module for test session2 community service extra.
+- `tests/community/test_community_service_limits.py` - Test module for test community service session24.
+- `tests/community/test_community_service_roles_stats.py` - Test module for test session22 community service.
+- `tests/community/test_community_stats.py` - Test module for test community stats.
+- `tests/content/test_category_management_coverage.py` - Additional coverage for category management error branches.
+- `tests/content/test_content_reels_articles.py` - Test module for test content reels articles.
+- `tests/content/test_content_routers.py` - Test module for test session16 content routers.
+- `tests/content/test_file_management.py` - Test module for test file management.
+- `tests/content/test_hashtag_router_coverage.py` - Additional coverage for hashtag router analytics paths.
+- `tests/content/test_living_memory.py` - Test module for test living memory.
+- `tests/content/test_media.py` - Test module for test media session13.
+- `tests/content/test_media_uploads.py` - Test module for test media uploads.
+- `tests/content/test_media_utils.py` - Test module for test session6 media utils.
+- `tests/content/test_post_edge_cases.py` - Test module for test edge cases.
+- `tests/content/test_post_flags.py` - Test module for test post flags.
+- `tests/content/test_post_service_additional.py` - Extra coverage for PostService helper paths.
+- `tests/content/test_post_service_create_and_notifications.py` - Test module for test post service session21.
+- `tests/content/test_post_service_extra.py` - Test module for test session2 post service extra.
+- `tests/content/test_post_service_polls_and_memory.py` - Test module for test post service session22.
+- `tests/content/test_post_service_reposts_and_translation.py` - Test module for test session20 post service.
+- `tests/content/test_post_service_rules_and_scheduling.py` - Test module for test session6 post service.
+- `tests/content/test_post_translation_flag.py` - Test module for test post translation flag.
+- `tests/content/test_posts.py` - Test module for test posts.
+- `tests/content/test_posts_router.py` - Test module for test session7 posts router.
+- `tests/content/test_reaction_router_coverage.py` - Additional coverage for reaction router branches.
+- `tests/content/test_reels.py` - Test module for test reels.
+- `tests/content/test_social_media_accounts.py` - Test module for test social media accounts.
+- `tests/content/test_sticker_router.py` - Test module for test session12 sticker router.
+- `tests/content/test_utils_content.py` - Test module for test utils content session14.
+- `tests/content/test_utils_content_gaps.py` - Test module for test utils content gaps.
+- `tests/content/test_vote_router_more_coverage.py` - Additional coverage for vote router endpoints.
+- `tests/content/test_vote_service.py` - Test module for test session6 vote service.
+- `tests/content/test_votes.py` - Test module for test votes.
+- `tests/core/test_app_factory_errors.py` - Test module for test session11 app factory errors.
+- `tests/core/test_app_factory_health_and_https.py` - Test module for test app factory session7.
+- `tests/core/test_app_factory_https_trustedhost.py` - Test module for test app factory https trustedhost.
+- `tests/core/test_app_factory_more_coverage.py` - Additional coverage for app factory helpers.
+- `tests/core/test_app_factory_routes.py` - Test module for test app factory.
+- `tests/core/test_app_factory_static_and_ready.py` - Test module for test app factory static and ready.
+- `tests/core/test_cache.py` - Test module for test session8 cache.
+- `tests/core/test_cache_and_db_helpers.py` - Test module for test cache and db helpers.
+- `tests/core/test_cache_and_scheduling.py` - Test module for test session4 cache and scheduling.
+- `tests/core/test_celery.py` - Test module for test celery session6.
+- `tests/core/test_celery_worker_coverage.py` - Targeted coverage tests for celery worker tasks.
+- `tests/core/test_celery_worker_more_coverage.py` - Additional coverage for celery worker branches.
+- `tests/core/test_core_config_cache.py` - Test module for test core config cache.
+- `tests/core/test_core_database_helpers_coverage.py` - Additional coverage for core database helpers.
+- `tests/core/test_core_exceptions_coverage.py` - Additional coverage for core exception types.
+- `tests/core/test_core_infrastructure.py` - Test module for test core infrastructure.
+- `tests/core/test_core_scheduling_tasks.py` - Covers scheduler startup/beat wiring and environment guards without touching real schedulers or Firebase.
+- `tests/core/test_database_engine.py` - Test module for test database session10.
+- `tests/core/test_database_fixture_and_helpers.py` - Test module for test session10 database.
+- `tests/core/test_db_app_factory.py` - Test module for test session4 db app factory.
+- `tests/core/test_https_hosts_rate_limit.py` - Test module for test session2 https hosts rate.
+- `tests/core/test_logging_and_middleware.py` - Test module for test session12 logging and middleware.
+- `tests/core/test_logging_middleware.py` - Test module for test logging middleware session11.
+- `tests/core/test_middleware_and_settings.py` - Test module for test middleware and settings.
+- `tests/core/test_monitoring_and_redis_cache.py` - Test module for test monitoring and redis cache.
+- `tests/core/test_monitoring_telemetry_coverage.py` - Targeted coverage for monitoring and telemetry guards.
+- `tests/core/test_query_helpers.py` - Test module for test query helpers.
+- `tests/core/test_redis_cache.py` - Test module for test redis cache session8.
+- `tests/core/test_redis_cache_more_coverage.py` - Additional coverage for Redis cache edge cases.
+- `tests/core/test_scheduling.py` - Test module for test session9 scheduling.
+- `tests/core/test_scheduling_tasks_core.py` - Test module for test scheduling tasks session29.
+- `tests/core/test_scheduling_tasks_jobs.py` - Test module for test session29 scheduling tasks.
+- `tests/core/test_settings.py` - Test module for test settings session9.
+- `tests/core/test_settings_more_coverage.py` - Additional coverage for Settings RSA/DB helper branches.
+- `tests/core/test_shims_exports.py` - Test module for shim export coverage.
+- `tests/core/test_telemetry.py` - Test module for test telemetry session12.
+- `tests/core/test_telemetry_logging.py` - Test module for test session1 telemetry logging.
+- `tests/e2e/test_e2e_lifecycle.py` - Test module for test e2e lifecycle.
+- `tests/e2e/test_end_to_end.py` - Test module for test session30 end to end.
+- `tests/economy/test_business_router_coverage.py` - Additional coverage for business router endpoints.
+- `tests/economy/test_economy_accel_coverage.py` - Targeted coverage tests for social economy acceleration fallbacks.
+- `tests/economy/test_local_economy_models.py` - Test module for test local economy.
+- `tests/economy/test_local_economy_service.py` - Test module for test session27 local economy.
+- `tests/economy/test_local_economy_service_more_coverage.py` - Additional coverage for LocalEconomyService error branches.
+- `tests/economy/test_local_economy_support_reporting.py` - Test module for test local economy support reporting.
+- `tests/economy/test_social_economy_interactions.py` - Test module for test social economy interactions.
+- `tests/economy/test_social_economy_models.py` - Test module for test social economy.
+- `tests/economy/test_social_economy_service.py` - Test module for test session24 social economy.
+- `tests/flows/test_misc_flows.py` - Test module for test session8 misc.
+- `tests/flows/test_negative_paths.py` - Test module for test session8 negatives.
+- `tests/flows/test_resilience.py` - Test module for test resilience.
+- `tests/flows/test_router_mixed_flows.py` - Test module for test routers session7.
+- `tests/flows/test_router_smoke_suite.py` - Test module for test session7 routers.
+- `tests/flows/test_search_and_notifications_flow.py` - Test module for test search and notifications flow.
+- `tests/flows/test_services_misc.py` - Test module for test session20 misc services.
+- `tests/flows/test_services_mixed.py` - Test module for test services session6.
+- `tests/integrations/test_firebase_config.py` - Test module for test session17 firebase config.
+- `tests/messaging/test_call_and_screen_share.py` - Test module for test session11 call and screen share.
+- `tests/messaging/test_call_router_more_coverage.py` - Additional coverage for call router websocket and helpers.
+- `tests/messaging/test_call_service.py` - Test module for test session5 call service.
+- `tests/messaging/test_call_signaling.py` - Test module for test call signaling.
+- `tests/messaging/test_calls_and_screen_share.py` - Test module for test calls and screen share.
+- `tests/messaging/test_group_messaging.py` - Test module for test group messaging.
+- `tests/messaging/test_message.py` - Test module for test message.
+- `tests/messaging/test_message_service_attachments_and_limits.py` - Test module for test message service session20.
+- `tests/messaging/test_message_service_core.py` - Test module for test message service session19.
+- `tests/messaging/test_messaging_moderation.py` - Integration-style test for messaging service flows with moderation hooks and notification stubs.
+- `tests/messaging/test_messaging_router.py` - Test module for test session10 messaging router.
+- `tests/messaging/test_realtime_and_moderation.py` - Test module for test realtime and moderation.
+- `tests/moderation/test_banned_words_router.py` - Test module for test session13 banned words router.
+- `tests/moderation/test_block_and_moderation.py` - Test module for test block and moderation.
+- `tests/moderation/test_block_moderation.py` - Test module for test session5 block moderation.
+- `tests/moderation/test_moderation_blocks.py` - Test module for test moderation blocks session28.
+- `tests/moderation/test_moderation_coverage.py` - Targeted coverage tests for moderation routes.
+- `tests/moderation/test_moderation_wellness_reels.py` - Test module for test moderation wellness reels.
+- `tests/moderation/test_moderator_router_coverage.py` - Targeted coverage tests for moderator routes.
+- `tests/notifications/test_notifications.py` - Test module for test notifications.
+- `tests/notifications/test_notifications_batcher_coverage.py` - Additional coverage for notification batching helpers.
+- `tests/notifications/test_notifications_batching_and_caches.py` - Test module for test notifications batching and caches.
+- `tests/notifications/test_notifications_batching_more_coverage.py` - Additional coverage for notification batching helpers.
+- `tests/notifications/test_notifications_celery_and_push.py` - Test module for test notifications celery and push.
+- `tests/notifications/test_notifications_delivery_manager.py` - Test module for test notifications service session17.
+- `tests/notifications/test_notifications_extra.py` - Test module for test notifications session1 extra.
+- `tests/notifications/test_notifications_repository_and_common.py` - Test module for test notifications repository and common.
+- `tests/notifications/test_notifications_retry_handler.py` - Test module for test notifications retry handler.
+- `tests/notifications/test_notifications_router.py` - Test module for test session9 notifications router.
+- `tests/notifications/test_notifications_router_more_coverage.py` - Additional coverage for notifications router endpoints.
+- `tests/notifications/test_notifications_scheduling.py` - Test module for test notifications scheduling.
+- `tests/notifications/test_notifications_service_basics.py` - Test module for test notifications service basics.
+- `tests/notifications/test_notifications_service_channels_cache.py` - Test module for test notifications service channels cache.
+- `tests/notifications/test_notifications_service_core.py` - Test module for test notifications session1 service.
+- `tests/notifications/test_notifications_service_coverage.py` - Coverage-focused tests for notification services and handlers.
+- `tests/notifications/test_notifications_service_more_coverage.py` - Additional coverage for notification service branches.
+- `tests/notifications/test_notifications_service_retries_and_errors.py` - Test module for test notifications service retries and errors.
+- `tests/notifications/test_notifications_tasks.py` - Test module for test notifications session2 tasks.
+- `tests/notifications/test_notifications_tasks_and_ws.py` - Test module for test notifications tasks and ws.
+- `tests/notifications/test_notifications_tasks_jobs.py` - Test module for test notifications tasks jobs.
+- `tests/notifications/test_ws_notifications.py` - Test module for test ws notifications session30.
+- `tests/search/test_search_cache_core.py` - Test module for test search cache.
+- `tests/search/test_search_cache_layer.py` - Test module for test session14 search cache layer.
+- `tests/search/test_search_cache_queries.py` - Test module for test session13 search cache.
+- `tests/search/test_search_cache_typesense.py` - Covers search cache (Redis-like) helpers and Typesense client fallback without real network/Redis.
+- `tests/search/test_search_router_core.py` - Test module for test search router session27.
+- `tests/search/test_search_router_fallbacks.py` - Test module for test session8 search router.
+- `tests/search/test_search_typesense.py` - Test module for test search typesense.
+- `tests/search/test_typesense_integration.py` - Test module for test typesense integration.
+- `tests/security/test_security_permissions.py` - Test module for test security permissions.
+- `tests/security/test_security_sessions.py` - Test module for test security sessions.
+- `tests/security/test_security_settings.py` - Test module for test security settings.
+- `tests/support/test_fact_and_wellness.py` - Test module for test fact and wellness.
+- `tests/support/test_fact_checking_and_support.py` - Test module for test fact checking and support.
+- `tests/support/test_fact_checking_service.py` - Test module for test session26 fact checking service.
+- `tests/support/test_reporting.py` - Test module for test reporting.
+- `tests/support/test_services_enforcement_and_reporting.py` - Test module for test services enforcement and reporting.
+- `tests/support/test_support_reporting.py` - Test module for test session28 support reporting.
+- `tests/support/test_support_status_routes.py` - Test module for test support status routes.
+- `tests/support/test_wellness_service.py` - Test module for test session25 wellness service.
+- `tests/users/test_follow_api.py` - Test module for test follow.
+- `tests/users/test_privacy_features.py` - Test module for test privacy features.
+- `tests/users/test_user_identities.py` - Test module for test user identities.
+- `tests/users/test_user_service_core.py` - Test module for test user service.
+- `tests/users/test_user_service_profiles_followers.py` - Test module for test session23 user service.
+- `tests/users/test_user_service_security.py` - Test module for test user service session23.
+- `tests/users/test_users.py` - Test module for test users.
+- `tests/users/test_users_comments_sessions.py` - Test module for test session2 users comments sessions.
+- `tests/utils/test_link_preview.py` - Test module for test session18 link preview.
+- `tests/utils/test_utils.py` - Test module for test utils session5.
+- `tests/utils/test_utils_extended.py` - Test module for test utils extended.
+- `tests/utils/test_utils_network_additional.py` - Test module for test utils network session16.
+- `tests/utils/test_utils_network_core.py` - Test module for test session16 utils network.
+- `tests/utils/test_utils_network_gaps.py` - Test module for test utils network gaps.
+- `tests/utils/test_utils_search_core.py` - Test module for test utils search.
+- `tests/utils/test_utils_search_extra.py` - Test module for test utils search session15.

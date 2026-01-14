@@ -5,11 +5,25 @@ app instances are created in tests or interactive sessions.
 """
 
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Gauge
 
 from fastapi import FastAPI
 
 # Global guard to avoid double-registration when multiple app instances are created in tests.
 _metrics_configured = False
+_ws_connections = Gauge(
+    "app_ws_connections",
+    "Active websocket connections by channel",
+    ["channel"],
+)
+
+
+def _count_connections(manager) -> int:
+    """Helper for  count connections."""
+    try:
+        return sum(len(sockets) for sockets in manager.active_connections.values())
+    except Exception:
+        return 0
 
 
 def setup_monitoring(app: FastAPI) -> None:
@@ -45,6 +59,34 @@ def setup_monitoring(app: FastAPI) -> None:
 
     # Expose the metrics endpoint
     instrumentator.expose(app, include_in_schema=False)
+
+    # Attach websocket connection gauges when managers are available.
+    try:
+        from app.notifications import manager as notifications_manager
+
+        _ws_connections.labels(channel="notifications").set_function(
+            lambda m=notifications_manager: _count_connections(m)
+        )
+    except Exception:
+        pass
+
+    try:
+        from app.routers import call as call_router
+
+        _ws_connections.labels(channel="calls").set_function(
+            lambda m=call_router.manager: _count_connections(m)
+        )
+    except Exception:
+        pass
+
+    try:
+        from app.routers import call_signaling as signaling_router
+
+        _ws_connections.labels(channel="call_signaling").set_function(
+            lambda m=signaling_router.call_manager: _count_connections(m)
+        )
+    except Exception:
+        pass
 
     # Mark metrics as configured to avoid duplicate registry errors in tests
     app.state.metrics_enabled = True

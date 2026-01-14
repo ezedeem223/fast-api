@@ -18,6 +18,7 @@ from typing import Dict, Optional, Set
 
 from app.core.cache.redis_cache import cache_manager
 from app.notifications import manager as notifications_manager
+from app.notifications import ConnectionManager
 from app.oauth2 import get_current_user
 from fastapi import (
     APIRouter,
@@ -30,6 +31,10 @@ from fastapi import (
 )
 
 router = APIRouter(prefix="/ws/call", tags=["Calls"])
+call_manager = ConnectionManager(
+    registry_prefix="calls:signaling",
+    registry_tag="calls:signaling",
+)
 
 
 @dataclass
@@ -179,8 +184,6 @@ async def signaling_ws(
     current_user=Depends(get_current_user),
 ):
     """Authenticated WebSocket for call signaling (owner or single-use join token)."""
-    await websocket.accept()
-
     # Ensure room exists (owner on first connect)
     state = room_registry.rooms.get(room_id)
     if not state:
@@ -199,6 +202,10 @@ async def signaling_ws(
         )
         return
 
+    connected = await call_manager.connect(websocket, current_user.id)
+    if connected is False:
+        return
+
     await room_registry.add_participant(room_id, current_user.id)
     try:
         while True:
@@ -215,9 +222,22 @@ async def signaling_ws(
             participants = await room_registry.participants(room_id)
             targets = participants - {current_user.id}
             for uid in targets:
-                await notifications_manager.send_personal_message(payload, uid)
+                if call_manager.active_connections.get(uid):
+                    await call_manager.send_personal_message(payload, uid)
+                else:
+                    await notifications_manager.send_personal_message(payload, uid)
     except WebSocketDisconnect:
         await room_registry.remove_participant(room_id, current_user.id)
+        await call_manager.disconnect(
+            websocket,
+            current_user.id,
+            reason="disconnect",
+        )
     except Exception:
         await room_registry.remove_participant(room_id, current_user.id)
+        await call_manager.disconnect(
+            websocket,
+            current_user.id,
+            reason="error",
+        )
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)

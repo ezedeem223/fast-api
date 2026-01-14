@@ -9,6 +9,7 @@ from typing import List
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.cache.redis_cache import cache
 from app.core.database import get_db
 from app.modules.utils.analytics import get_user_vote_analytics
 from fastapi import APIRouter, Depends, Query
@@ -24,7 +25,8 @@ router = APIRouter(prefix="/statistics", tags=["Statistics"])
 
 
 @router.get("/vote-analytics", response_model=schemas.UserVoteAnalytics)
-def get_vote_analytics(
+@cache(prefix="statistics:vote-analytics", ttl=300, include_user=True)
+async def get_vote_analytics(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
@@ -32,10 +34,12 @@ def get_vote_analytics(
     Retrieve vote analytics for the current user.
     This endpoint calls a utility function to process user vote data.
     """
-    return get_user_vote_analytics(db, current_user.id)
+    analytics = get_user_vote_analytics(db, current_user.id)
+    return analytics.model_dump()
 
 
 @router.get("/comments", response_model=schemas.CommentStatistics)
+@cache(prefix="statistics:comments", ttl=300)
 async def get_comment_statistics(db: Session = Depends(get_db)):
     """
     Retrieve statistics about comments.
@@ -44,9 +48,10 @@ async def get_comment_statistics(db: Session = Depends(get_db)):
     - most_commented_posts: Top 5 posts with the highest comment counts.
     - average_sentiment: Average sentiment score of comments.
     """
+    # Aggregate totals and top lists separately to keep queries simple.
     total_comments = db.query(func.count(models.Comment.id)).scalar()
 
-    top_commenters = (
+    top_commenters_rows = (
         db.query(
             models.User.id,
             models.User.username,
@@ -59,7 +64,7 @@ async def get_comment_statistics(db: Session = Depends(get_db)):
         .all()
     )
 
-    most_commented_posts = (
+    most_commented_posts_rows = (
         db.query(
             models.Post.id,
             models.Post.title,
@@ -74,6 +79,14 @@ async def get_comment_statistics(db: Session = Depends(get_db)):
 
     avg_sentiment = db.query(func.avg(models.Comment.sentiment_score)).scalar()
 
+    # Normalize rows into compact tuples for the response schema.
+    top_commenters = [
+        (row.id, row.username, row.comment_count) for row in top_commenters_rows
+    ]
+    most_commented_posts = [
+        (row.id, row.title, row.comment_count) for row in most_commented_posts_rows
+    ]
+
     return {
         "total_comments": total_comments,
         "top_commenters": top_commenters,
@@ -83,6 +96,7 @@ async def get_comment_statistics(db: Session = Depends(get_db)):
 
 
 @router.get("/ban-overview", response_model=schemas.BanStatisticsOverview)
+@cache(prefix="statistics:ban-overview", ttl=300)
 async def get_ban_statistics_overview(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
@@ -119,6 +133,7 @@ async def get_ban_statistics_overview(
 
 
 @router.get("/common-ban-reasons", response_model=List[schemas.BanReasonOut])
+@cache(prefix="statistics:ban-reasons", ttl=300)
 async def get_common_ban_reasons(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
@@ -134,10 +149,13 @@ async def get_common_ban_reasons(
         .limit(limit)
         .all()
     )
-    return reasons
+    return [
+        schemas.BanReasonOut.model_validate(reason).model_dump() for reason in reasons
+    ]
 
 
 @router.get("/ban-effectiveness-trend", response_model=List[schemas.EffectivenessTrend])
+@cache(prefix="statistics:ban-effectiveness", ttl=300)
 async def get_ban_effectiveness_trend(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
@@ -161,6 +179,7 @@ async def get_ban_effectiveness_trend(
 
 
 @router.get("/ban-type-distribution", response_model=schemas.BanTypeDistribution)
+@cache(prefix="statistics:ban-type", ttl=300)
 async def get_ban_type_distribution(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_admin),
@@ -191,6 +210,7 @@ async def get_ban_type_distribution(
 
 
 @router.get("/top-posts", response_model=List[schemas.TopPostStat])
+@cache(prefix="statistics:top-posts", ttl=300)
 async def get_top_posts(
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -219,12 +239,13 @@ async def get_top_posts(
             title=post.title,
             votes=post.votes or 0,
             comment_count=post.comment_count or 0,
-        )
+        ).model_dump()
         for post in posts
     ]
 
 
 @router.get("/top-users", response_model=List[schemas.TopUserStat])
+@cache(prefix="statistics:top-users", ttl=300)
 async def get_top_users(
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
@@ -233,6 +254,7 @@ async def get_top_users(
     """
     Return the most active community members based on followers and publishing activity.
     """
+    # Precompute follower counts to avoid repeated aggregation in the main query.
     followers_subq = (
         db.query(
             models.Follow.followed_id.label("user_id"),
@@ -268,6 +290,6 @@ async def get_top_users(
             followers=user.followers or 0,
             post_count=user.post_count or 0,
             comment_count=user.comment_count or 0,
-        )
+        ).model_dump()
         for user in users
     ]

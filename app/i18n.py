@@ -1,3 +1,4 @@
+"""Application module."""
 from types import SimpleNamespace
 
 from deep_translator import GoogleTranslator

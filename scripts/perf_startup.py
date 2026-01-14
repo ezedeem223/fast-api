@@ -23,6 +23,7 @@ os.environ.setdefault("APP_ENV", "test")
 
 
 def measure_startup(iterations: int) -> list[float]:
+    """Helper for measure startup."""
     from app.core.app_factory import create_app
 
     timings: list[float] = []
@@ -34,6 +35,7 @@ def measure_startup(iterations: int) -> list[float]:
 
 
 def main() -> int:
+    """Helper for main."""
     parser = argparse.ArgumentParser(description="Measure FastAPI startup time.")
     parser.add_argument(
         "--iterations",

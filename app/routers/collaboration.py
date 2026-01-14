@@ -19,7 +19,7 @@ from app.modules.collaboration.schemas import (
     ProjectWithContributions,
 )
 from app.oauth2 import get_current_user
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 router = APIRouter(prefix="/collaboration", tags=["Collaboration"])
 
@@ -30,6 +30,7 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Create project."""
     project = CollaborativeProject(
         title=payload.title,
         description=payload.description,
@@ -45,11 +46,17 @@ def create_project(
 
 @router.get("/projects", response_model=List[ProjectOut])
 def list_projects(
-    db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
 ):
+    """List projects."""
     projects = (
         db.query(CollaborativeProject)
         .filter(CollaborativeProject.owner_id == current_user.id)
+        .offset(skip)
+        .limit(limit)
         .all()
     )
     return projects
@@ -64,6 +71,7 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Return project."""
     project = (
         db.query(CollaborativeProject)
         .filter(
@@ -88,6 +96,7 @@ def add_contribution(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Helper for add contribution."""
     project = (
         db.query(CollaborativeProject)
         .filter(CollaborativeProject.id == project_id)
@@ -116,7 +125,10 @@ def list_contributions(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
 ):
+    """List contributions."""
     project = (
         db.query(CollaborativeProject)
         .filter(CollaborativeProject.id == project_id)
@@ -128,6 +140,8 @@ def list_contributions(
         db.query(ProjectContribution)
         .filter(ProjectContribution.project_id == project_id)
         .order_by(ProjectContribution.created_at.asc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )
     return contributions

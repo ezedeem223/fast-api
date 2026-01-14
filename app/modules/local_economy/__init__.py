@@ -1,3 +1,4 @@
+"""Package exports for local_economy domain."""
 from .models import (
     CooperativeMember,
     CooperativeTransaction,

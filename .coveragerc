@@ -2,7 +2,6 @@
 branch = True
 source =
     app
-    tests
 omit =
     venv/*
     */site-packages/*

@@ -297,6 +297,8 @@ jobs:
           FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           FIREBASE_MEASUREMENT_ID: ${{ secrets.FIREBASE_MEASUREMENT_ID }}
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+          RSA_PUBLIC_KEY: ${{ secrets.RSA_PUBLIC_KEY }}
           RSA_PRIVATE_KEY_PATH: ./private_key.pem
           RSA_PUBLIC_KEY_PATH: ./public_key.pem
         run: python -m pytest -q
@@ -308,6 +310,8 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           ALGORITHM: ${{ secrets.ALGORITHM }}
+          RSA_PRIVATE_KEY: ${{ secrets.RSA_PRIVATE_KEY }}
+          RSA_PUBLIC_KEY: ${{ secrets.RSA_PUBLIC_KEY }}
           RSA_PRIVATE_KEY_PATH: ./private_key.pem
           RSA_PUBLIC_KEY_PATH: ./public_key.pem
         run: python scripts/perf_startup.py

@@ -321,6 +321,7 @@ def create_block_appeal(
     Returns:
         The created block appeal record.
     """
+    # Validate block ownership before allowing an appeal.
     block = db.query(models.Block).filter(models.Block.id == appeal.block_id).first()
     if not block:
         raise HTTPException(
@@ -412,6 +413,7 @@ def review_block_appeal(
     appeal.reviewed_at = datetime.now()
     appeal.reviewer_id = current_user.id
     if review.status == models.AppealStatus.APPROVED:
+        # Approved appeals remove the underlying block immediately.
         block = (
             db.query(models.Block).filter(models.Block.id == appeal.block_id).first()
         )

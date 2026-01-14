@@ -17,6 +17,7 @@ WARNING_THRESHOLD = 3  # Escalate to ban after this many warnings
 
 
 def _get_model_by_id(db: Session, model, id_value):
+    """Helper for  get model by id."""
     instance = db.query(model).filter(model.id == id_value).first()
     if not instance:
         raise ValueError(f"{model.__name__} with id {id_value} not found")
@@ -41,6 +42,7 @@ def _handle_errors(func):
 
 @_handle_errors
 def warn_user(db: Session, user_id: int, reason: str):
+    """Helper for warn user."""
     user = _get_model_by_id(db, models.User, user_id)
     user.warning_count += 1
     user.last_warning_date = datetime.now(timezone.utc)
@@ -56,6 +58,7 @@ def warn_user(db: Session, user_id: int, reason: str):
 
 @_handle_errors
 def ban_user(db: Session, user_id: int, reason: str):
+    """Helper for ban user."""
     user = _get_model_by_id(db, models.User, user_id)
 
     user.ban_count += 1
@@ -105,6 +108,7 @@ def clean_expired_blocks(db: Session) -> int:
 
 
 def calculate_ban_duration(ban_count: int) -> timedelta:
+    """Helper for calculate ban duration."""
     if ban_count == 1:
         return timedelta(days=1)
     if ban_count == 2:
@@ -116,11 +120,13 @@ def calculate_ban_duration(ban_count: int) -> timedelta:
 
 @_handle_errors
 def process_report(db: Session, report_id: int, is_valid: bool, reviewer_id: int):
+    """Helper for process report."""
     report = _get_model_by_id(db, models.Report, report_id)
 
     report.is_valid = is_valid
     report.reviewed_at = datetime.now(timezone.utc)
     report.reviewed_by = reviewer_id
+    report.status = models.ReportStatus.REVIEWED
 
     reported_user = _get_model_by_id(db, models.User, report.reported_user_id)
     reported_user.total_reports += 1
@@ -134,7 +140,73 @@ def process_report(db: Session, report_id: int, is_valid: bool, reviewer_id: int
 
 
 @_handle_errors
+def resolve_report(
+    db: Session,
+    *,
+    report_id: int,
+    action: str,
+    reviewer_id: int,
+    resolution_notes: str | None = None,
+) -> models.Report:
+    """Helper for resolve report."""
+    report = _get_model_by_id(db, models.Report, report_id)
+    now = datetime.now(timezone.utc)
+
+    if action == "delete":
+        # Treat delete actions as valid reports and scrub the offending content.
+        if report.post_id:
+            post = _get_model_by_id(db, models.Post, report.post_id)
+            post.is_deleted = True
+            post.deleted_at = now
+            post.title = "[Deleted]"
+            post.content = "[Deleted]"
+            if hasattr(post, "media_url"):
+                post.media_url = None
+            if hasattr(post, "media_text"):
+                post.media_text = None
+        elif report.comment_id:
+            comment = _get_model_by_id(db, models.Comment, report.comment_id)
+            comment.is_deleted = True
+            comment.deleted_at = now
+            comment.content = "[Deleted]"
+        is_valid = True
+    else:
+        is_valid = False
+
+    # Persist the moderator decision and update reporter metadata.
+    report.resolution_notes = resolution_notes
+    report.status = models.ReportStatus.RESOLVED
+    report.reviewed_at = now
+    report.reviewed_by = reviewer_id
+    report.is_valid = is_valid
+
+    reported_user = _get_model_by_id(db, models.User, report.reported_user_id)
+    reported_user.total_reports += 1
+    if is_valid:
+        reported_user.valid_reports += 1
+
+    db.commit()
+
+    if is_valid:
+        check_auto_ban(db, report.reported_user_id)
+
+    db.refresh(report)
+    return report
+
+
+@_handle_errors
+def unban_user(db: Session, user_id: int) -> models.User:
+    """Helper for unban user."""
+    user = _get_model_by_id(db, models.User, user_id)
+    user.current_ban_end = None
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@_handle_errors
 def check_auto_ban(db: Session, user_id: int):
+    """Helper for check auto ban."""
     valid_reports_count = (
         db.query(func.count(models.Report.id))
         .filter(
@@ -170,6 +242,7 @@ def submit_block_appeal(
 def review_block_appeal(
     db: Session, appeal_id: int, approve: bool, reviewer_id: int
 ) -> BlockAppeal:
+    """Helper for review block appeal."""
     appeal = _get_model_by_id(db, BlockAppeal, appeal_id)
     appeal.status = AppealStatus.APPROVED if approve else AppealStatus.REJECTED
     appeal.reviewed_at = datetime.now(timezone.utc)
@@ -186,6 +259,8 @@ __all__ = [
     "calculate_ban_duration",
     "check_auto_ban",
     "process_report",
+    "resolve_report",
+    "unban_user",
     "warn_user",
     "submit_block_appeal",
     "review_block_appeal",

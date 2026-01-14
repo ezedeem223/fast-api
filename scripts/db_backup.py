@@ -21,6 +21,7 @@ from urllib.parse import quote_plus
 
 
 def resolve_db_url() -> str:
+    """Helper for resolve db url."""
     url = os.getenv("DATABASE_URL")
     if url:
         return url
@@ -35,6 +36,7 @@ def resolve_db_url() -> str:
 
 
 def main():
+    """Helper for main."""
     parser = argparse.ArgumentParser(description="Backup Postgres database with pg_dump")
     parser.add_argument(
         "--out",

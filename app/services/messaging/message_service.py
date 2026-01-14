@@ -728,9 +728,13 @@ class MessageService:
             content = await audio_file.read()
             buffer.write(content)
 
+        conversation_id = self._get_or_create_direct_conversation(
+            current_user.id, receiver_id
+        )
         new_message = models.Message(
             sender_id=current_user.id,
             receiver_id=receiver_id,
+            conversation_id=conversation_id,
             audio_url=str(file_path),
             duration=duration,
             message_type=schemas.MessageType.FILE,

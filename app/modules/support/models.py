@@ -14,6 +14,7 @@ from app.core.db_defaults import timestamp_default
 
 
 class TicketStatus(str, enum.Enum):
+    """Enumeration for TicketStatus."""
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     CLOSED = "closed"

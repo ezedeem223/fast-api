@@ -90,6 +90,7 @@ FACEBOOK_ACCESS_TOKEN = "YOUR_FACEBOOK_ACCESS_TOKEN"
 
 
 def _social_sharing_configured(token: str) -> bool:
+    """Helper for  social sharing configured."""
     return bool(token and not token.startswith("YOUR_"))
 
 

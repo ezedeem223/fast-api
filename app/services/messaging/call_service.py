@@ -52,6 +52,7 @@ class CallService:
                 detail="Maximum number of active calls reached",
             )
 
+        # Generate a fresh encryption key for the call session.
         new_call = Call(
             caller_id=current_user.id,
             receiver_id=payload.receiver_id,
@@ -92,6 +93,7 @@ class CallService:
         call.status = payload.status
         if payload.status == CallStatus.ENDED:
             call.end_time = datetime.now(timezone.utc)
+            # Close any active screen-share sessions when the call ends.
             active_share = (
                 self.db.query(ScreenShareSession)
                 .filter(

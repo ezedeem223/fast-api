@@ -13,10 +13,12 @@ router = APIRouter(tags=["OAuth"])
 
 
 def _get_callback_url(request: Request, name: str) -> str:
+    """Helper for  get callback url."""
     return str(request.url_for(name))
 
 
 def _issue_token_for_email(db: Session, email: str | None) -> dict:
+    """Helper for  issue token for email."""
     if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -65,6 +67,7 @@ oauth.register(
 
 @router.get("/google")
 async def auth_google(request: Request):
+    """Helper for auth google."""
     redirect_uri = _get_callback_url(request, "auth_google_callback")
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
@@ -74,6 +77,7 @@ async def auth_google_callback(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    """Helper for auth google callback."""
     try:
         token = await oauth.google.authorize_access_token(request)
         user_info = await oauth.google.parse_id_token(request, token)
@@ -89,6 +93,7 @@ async def auth_google_callback(
 
 @router.get("/facebook")
 async def auth_facebook(request: Request):
+    """Helper for auth facebook."""
     redirect_uri = _get_callback_url(request, "auth_facebook_callback")
     return await oauth.facebook.authorize_redirect(request, redirect_uri)
 
@@ -98,6 +103,7 @@ async def auth_facebook_callback(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    """Helper for auth facebook callback."""
     try:
         token = await oauth.facebook.authorize_access_token(request)
         resp = await oauth.facebook.get(
@@ -117,6 +123,7 @@ async def auth_facebook_callback(
 
 @router.get("/twitter")
 async def auth_twitter(request: Request):
+    """Helper for auth twitter."""
     redirect_uri = _get_callback_url(request, "auth_twitter_callback")
     return await oauth.twitter.authorize_redirect(request, redirect_uri)
 
@@ -126,6 +133,7 @@ async def auth_twitter_callback(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    """Helper for auth twitter callback."""
     try:
         token = await oauth.twitter.authorize_access_token(request)
         resp = await oauth.twitter.get(

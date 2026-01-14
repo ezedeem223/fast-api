@@ -1,100 +1,158 @@
 # FastAPI Social Platform
 
-A modular FastAPI backend that powers social features such as posts, reels/stories, group messaging, notifications, and moderation workflows. Code is organised under pp/ into core config, domain modules, services, and routers so each concern stays isolated and testable.
+A modular FastAPI backend that powers social features such as posts, reels/stories,
+messaging, notifications, and moderation workflows. Code is organized under `app/`
+into core config, domain modules, services, and routers to keep each concern
+isolated and testable.
+
+## Requirements
+- Python 3.11+ (3.12 tested)
+- Postgres 13+ (required)
+- Redis 6+ (required for Celery/realtime; optional for API-only runs)
+- Optional: Go 1.21+ (realtime gateway), FFmpeg (media processing), Rust (maturin)
 
 ## Getting Started
-
-`ash
+```bash
 python -m venv venv
-source venv/bin/activate  # or .\\venv\\Scripts\\activate on Windows
+# Windows
+.\venv\Scripts\activate
+# Linux/macOS
+# source venv/bin/activate
+
 pip install -r requirements.txt
-cp .env.example .env  # provide secrets like DATABASE_URL, REDIS_URL, etc.
-`
+cp .env.example .env
+```
+
+Edit `.env` with your local settings (DB, Redis, secrets).
+
+## Run Locally
+```bash
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Optional worker/beat (Celery):
+```bash
+celery -A app.celery_worker.celery_app worker -B -l info
+```
+
+Optional realtime gateway (Go):
+```bash
+cd go/realtime
+go run main.go
+```
+
+Optional social economy extension (Rust): see `rust/social_economy/README.md`
+for build steps and maturin integration.
+
+## Configuration
+Full list is in `.env.example`. Minimal local values:
+```bash
+APP_ENV=development
+DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/app_db
+TEST_DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/app_db_test
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=change-me
+REFRESH_SECRET_KEY=change-me
+REFRESH_ALGORITHM=HS256
+REFRESH_TOKEN_EXPIRE_MINUTES=10080
+RSA_PRIVATE_KEY_PATH=./private_key.pem
+RSA_PUBLIC_KEY_PATH=./public_key.pem
+OTP_ENCRYPTION_KEY=change-me
+```
 
 Key environment variables:
 - `APP_ENV` (`production`/`development`/`test`) toggles heavy integrations.
 - `DATABASE_URL` / `TEST_DATABASE_URL` control SQLAlchemy connections.
-- `REDIS_URL`, `CORS_ORIGINS`, `FRONTEND_BASE_URL` tune caching and API boundaries.
-- `ALLOWED_HOSTS` comma-separated allowlist for `TrustedHostMiddleware` (default `*`).
-- `FORCE_HTTPS` (bool) enables `HTTPSRedirectMiddleware` in production.
-- `STATIC_ROOT` / `UPLOADS_ROOT` determine on-disk static + user-upload dirs mounted at `/static` and `/uploads`; corresponding `STATIC_CACHE_CONTROL` / `UPLOADS_CACHE_CONTROL` headers control browser caching.
-- `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` and `TWITTER_API_KEY` / `TWITTER_API_SECRET` configure the additional OAuth providers exposed under `/auth/facebook` and `/auth/twitter`.
+- `REDIS_URL` powers caching, Celery broker/backend, and realtime fanout.
+- `ALLOWED_HOSTS` and `CORS_ORIGINS` control allowed hosts and CORS origins.
+- `FORCE_HTTPS` enables HTTPS redirects in production.
+- `STATIC_ROOT` / `UPLOADS_ROOT` set static and upload directories.
+- `REFRESH_SECRET_KEY` / `REFRESH_ALGORITHM` / `REFRESH_TOKEN_EXPIRE_MINUTES` govern refresh tokens.
+- `OTP_ENCRYPTION_KEY` encrypts OTP secrets at rest.
+- `JWT_KEY_ID` / `JWT_PRIVATE_KEYS` / `JWT_PUBLIC_KEYS` enable JWT key rotation and JWKS.
+- `GLOBAL_RATE_LIMIT` sets the app-wide default rate limit (per IP).
+- `PASSWORD_STRENGTH_REQUIRED` / `PASSWORD_STRENGTH_MIN_SCORE` enforce password strength.
+- `REALTIME_REDIS_URL` / `REALTIME_REDIS_CHANNEL` let FastAPI publish to the Go gateway.
 
 ### Environment loading & secrets
-- Precedence: `.env` at the repo root is loaded first, then process environment variables override it.
-- Databases: prefer `DATABASE_URL`; for tests use `TEST_DATABASE_URL` or `_test`-suffixed DB names.
-- Crypto: `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` resolve relative to the repo root when not absolute and must point to non-empty files.
-- Redis: `REDIS_URL` enables caching; if unset or unreachable the app degrades gracefully with cache disabled.
-- HTTPS/hosts: `FORCE_HTTPS` defaults to true in production when unset; set `ALLOWED_HOSTS` (JSON or comma list) to restrict hosts behind your edge/WAF.
+- `.env` in the repo root is loaded first, then process env overrides it.
+- Databases: prefer `DATABASE_URL`; for tests use `TEST_DATABASE_URL` or a `_test` DB.
+- Crypto: `RSA_PRIVATE_KEY_PATH` / `RSA_PUBLIC_KEY_PATH` must point to non-empty files; set `RSA_PRIVATE_KEY` / `RSA_PUBLIC_KEY` to write them at startup; in `APP_ENV=development|test`, missing keys are generated automatically.
+- Redis: required for Celery/realtime; if unset the API still starts with cache disabled.
 
 ### Logging
-- Defaults: console logging with colors; rotation to `logs/` when `LOG_DIR` is set (see `.env.example`).
-- JSON logs: enable via `USE_JSON_LOGS=true` for aggregation platforms; files rotate at 10MB with 5 backups.
-- Context: request logs include `request_id`, `user_id`, and `ip` when available via middleware.
+- Defaults: console logging; set `LOG_DIR` for file rotation.
+- JSON logs: set `USE_JSON_LOGS=true` for aggregation platforms.
 
 ### Background jobs
-- Celery worker + beat: uses Redis (or in-memory/eager in tests) for notifications, bans, content checks, and scheduled posts.
-- APScheduler + repeat_every tasks: run only outside tests; cover search suggestions, post score recalculation, notification cleanup/retry.
-- Keep `APP_ENV=test` for local CI-style runs to avoid starting long-lived schedulers.
+- Celery worker + beat uses Redis by default (in-memory eager mode in tests).
+- APScheduler/repeat_every tasks run only outside tests.
 
 ### Realtime gateway (Go)
-- A lightweight Go WebSocket bridge lives in `go/realtime` and fans out messages received on Redis pub/sub to connected clients.
-- Env: `REDIS_URL` (default `redis://localhost:6379/0`), `REDIS_CHANNEL` (default `realtime:broadcast`), `BIND_ADDR` (default `:8081`).
-- Run locally: `cd go/realtime && go run main.go`.
-- FastAPI can publish to the bridge by setting `REALTIME_REDIS_URL` / `REALTIME_REDIS_CHANNEL` (see notifications realtime sender).
+- Env: `REDIS_URL`, `REDIS_CHANNEL` (default `realtime:broadcast`), `BIND_ADDR` (default `:8081`).
+- FastAPI can publish to the gateway via `REALTIME_REDIS_URL` / `REALTIME_REDIS_CHANNEL`.
 
 ### Optional AI (Amenhotep)
-- Model: `aubmindlab/bert-base-arabertv02`; prefers ONNX runtime if `AMENHOTEP_ONNX_PATH` exists, otherwise uses PyTorch.
-- Cache: embeddings cached with TTL/size bounds to reduce recomputation.
-- Data: knowledge base loaded from `data/amenhotep/knowledge_base.json` when present.
-- Export to ONNX: `python scripts/export_amenhotep_onnx.py --out data/amenhotep/amenhotep.onnx` (requires torch/transformers/onnxruntime).
+- Model: `aubmindlab/bert-base-arabertv02`; ONNX if `AMENHOTEP_ONNX_PATH` exists.
+- Export to ONNX: `python scripts/export_amenhotep_onnx.py --out data/amenhotep/amenhotep.onnx`.
 
 ### Static & uploads
-- Static files served from `STATIC_ROOT` (default `static/`) at `/static`; uploads from `UPLOADS_ROOT` at `/uploads`.
-- Cache-Control headers set via `STATIC_CACHE_CONTROL` / `UPLOADS_CACHE_CONTROL`; review before hosting sensitive files.
-- Terms/privacy or other legal docs under `static/` are served as-is; consider CDN caching/invalidations as needed.
+- Static files served from `STATIC_ROOT` at `/static`; uploads from `UPLOADS_ROOT` at `/uploads`.
+- Cache headers set via `STATIC_CACHE_CONTROL` / `UPLOADS_CACHE_CONTROL`.
 
 ### Operations (Docker/Compose)
-- `Dockerfile` builds a slim runtime image; `docker-compose-dev.yml` mounts source read-only with hot reload for dev.
-- Set secrets via environment or mounted `.env`; never bake keys into the image (RSA keys resolved relative to repo).
-- For production, ensure Redis/Postgres endpoints are reachable; set `FORCE_HTTPS=true` and tighten `ALLOWED_HOSTS`.
+- `Dockerfile` builds a slim runtime image.
+- Local stack: `docker compose up --build` (API + Postgres + Redis + Celery worker).
+- Monitoring stack: `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build`
+  starts Prometheus + Grafana.
+- Legacy: `docker-compose-dev.yml` and `docker-compose-prod.yml` are retained for
+  backwards compatibility.
+
+### Monitoring
+- `/metrics` is available when `ENABLE_METRICS=1`.
+- Prometheus scrapes `api:8000/metrics` (see `monitoring/prometheus.yml`).
+- Grafana is pre-provisioned with a dashboard (`monitoring/grafana/dashboards/fastapi.json`).
+  Default login: `admin` / `admin` (change for shared environments).
+
+### Kubernetes
+- Manifests live in `k8s/` and are applied via `kubectl apply -k k8s`.
+- Update `k8s/api-configmap.yaml` and `k8s/api-secrets.yaml` before deploying.
+- `k8s/postgres-statefulset.yaml` and `k8s/redis-deployment.yaml` are for dev/test clusters;
+  use managed services in production.
 
 ## Running & Quality Gates
+```bash
+pytest -q
+python scripts/perf_startup.py
+```
 
-`ash
-python -m pytest -q             # unit/integration tests
-python scripts/perf_startup.py  # startup regression guard
-`
-
-Static checks are enforced locally through pre-commit:
-`ash
+Pre-commit (optional):
+```bash
 pip install pre-commit
 pre-commit install
-pre-commit run --all-files  # optional before pushing
-`
+pre-commit run --all-files
+```
 
 ## Continuous Integration
-
-GitHub Actions workflow (.github/workflows/ci.yml) runs on pushes/pull-requests to main. It installs dependencies, executes Ruff linting, pytest, and the startup smoke test with APP_ENV=test so heavy services (Firebase, schedulers) stay disabled.
+GitHub Actions runs linting, pytest, and startup smoke tests with `APP_ENV=test`.
 
 ## Security & Edge Protection
-
-- Deploy the API behind a WAF/CDN (e.g., Cloudflare, Azure FrontDoor). Combine the edge allowlist with the `ALLOWED_HOSTS` and `FORCE_HTTPS` flags to restrict origins and force TLS end-to-end.
-- `/livez` and `/readyz` are lightweight health checks that can be used by your load balancer/WAF to decide when to route traffic.
-- Auth & sessions: JWTs are RSA-signed; sessions can be revoked/blacklisted via session endpoints. IP bans are enforced in non-test environments.
-- Rate limits: enforced via slowapi where decorators are applied (e.g., posts, polls, uploads).
-- Blocking/bans: moderation models support user/IP bans; requests from banned IPs are short-circuited early in middleware.
-- WebSocket auth: `/ws/{user_id}` requires a valid JWT matching the path user in production; test contexts allow tokenless for fixtures. Messages are forwarded to the user via the notifications manager.
-
-## Operations Runbook
-- **Migrations**: `alembic upgrade head` (ensure `ALEMBIC_DATABASE_URL` or `DATABASE_URL` is set). Generate via `alembic revision --autogenerate -m "msg"`.
-- **Cache/queues**: Redis is optional; when available, it powers caching and Celery broker/backend. If Redis is down, cache gracefully disables; ensure broker is reachable before starting workers.
-- **Workers**: start Celery worker + beat (`celery -A app.celery_worker.celery_app worker -B`) after DB is ready. In tests/CI, Celery runs eager/in-memory.
-- **Observability**: `/metrics` (Prometheus), `/livez` (liveness), `/readyz` (DB/Redis readiness). Logs rotate in `LOG_DIR` when set; enable `USE_JSON_LOGS` for aggregation.
-- **Rust acceleration**: a PyO3 crate under `rust/social_economy` exposes `social_economy_rs`; build via `maturin develop` and the `SocialEconomyService` will dispatch scoring to Rust if the extension is present.
+- Deploy behind a WAF/CDN and restrict `ALLOWED_HOSTS`.
+- `/livez` and `/readyz` are health checks for load balancers.
+- JWT auth uses RSA keys; WebSocket auth requires a valid token in production.
+- JWKS is available at `/jwks.json` for public key discovery.
+- Rate limits apply globally and on selected endpoints (e.g., posts, uploads).
 
 ## Documentation
+- Full project reference: `docs/PROJECT_REFERENCE.md`
+- Scalability roadmap: `docs/SCALABILITY.md`
+- Repository file index: `docs/REPO_REFERENCE.md`
+- API inventory: `docs/API_REFERENCE.md`
+- Data model overview: `docs/DATA_MODEL.md`
+- Feature flows: `docs/FEATURE_FLOWS.md`
+- Tests index: `docs/TESTS_REFERENCE.md`
+- Native components: `go/realtime/README.md`, `rust/social_economy/README.md`
 
-- Full project reference (architecture, style, changelog, roadmap): `docs/PROJECT_REFERENCE.md`
-
-Contributions should follow the module/service/router structure and include tests whenever behaviour changes.
+Contributions should follow the module/service/router structure and include tests
+when behavior changes.

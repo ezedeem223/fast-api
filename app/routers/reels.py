@@ -16,6 +16,7 @@ router = APIRouter(prefix="/reels", tags=["Reels"])
 
 
 def get_reel_service(db: Session = Depends(get_db)) -> ReelService:
+    """Return reel service."""
     return ReelService(db)
 
 
@@ -25,6 +26,7 @@ async def create_reel(
     service: ReelService = Depends(get_reel_service),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Create reel."""
     return service.create_reel(payload=payload, current_user=current_user)
 
 
@@ -36,6 +38,7 @@ async def list_reels(
     service: ReelService = Depends(get_reel_service),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """List reels."""
     if include_expired and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -53,6 +56,7 @@ async def increment_reel_views(
     reel_id: int,
     service: ReelService = Depends(get_reel_service),
 ):
+    """Helper for increment reel views."""
     return service.record_view(reel_id=reel_id)
 
 
@@ -62,5 +66,6 @@ async def delete_reel(
     service: ReelService = Depends(get_reel_service),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Delete reel."""
     service.deactivate_reel(reel_id=reel_id, current_user=current_user)
     return {"status": "deleted"}

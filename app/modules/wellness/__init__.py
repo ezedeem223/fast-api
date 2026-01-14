@@ -1,3 +1,4 @@
+"""Package exports for wellness domain."""
 from .models import (
     DigitalWellnessMetrics,
     UsagePattern,

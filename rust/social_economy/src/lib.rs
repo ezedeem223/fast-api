@@ -1,9 +1,12 @@
+//! Rust helpers for social economy scoring exposed to Python via PyO3.
+
 use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 
 static MAX_SCORE: f64 = 100.0;
 
 fn clamp_score(score: f64) -> f64 {
+    // Keep scores within a 0..=MAX_SCORE range.
     if score < 0.0 {
         0.0
     } else if score > MAX_SCORE {
@@ -14,6 +17,7 @@ fn clamp_score(score: f64) -> f64 {
 }
 
 fn engagement_core(likes: i64, comments: i64) -> f64 {
+    // Weight comments higher than likes; log-scale to reduce outliers.
     let raw = (likes as f64) + (comments as f64) * 2.0;
     if raw <= 0.0 {
         return 0.0;
@@ -22,6 +26,7 @@ fn engagement_core(likes: i64, comments: i64) -> f64 {
 }
 
 fn quality_core(content: &str) -> f64 {
+    // Use lightweight heuristics: length, formatting, and lexical diversity.
     let mut score = 0.0_f64;
     let len = content.chars().count();
     if (50..=2000).contains(&len) {

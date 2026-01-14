@@ -17,8 +17,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Helper for upgrade."""
     pass
 
 
 def downgrade() -> None:
+    """Helper for downgrade."""
     pass

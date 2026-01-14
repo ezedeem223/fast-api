@@ -19,9 +19,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi_utils.tasks import repeat_every
 
 from app import models
-from app.ai_chat.amenhotep import AmenhotepAI
+from app.ai_chat.amenhotep import get_shared_amenhotep
 from app.analytics import clean_old_statistics, model
 from app.celery_worker import celery_app
+from app.core.cache.redis_cache import cache_manager
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.firebase_config import initialize_firebase
@@ -50,11 +51,20 @@ def _run_async_blocking(awaitable):
 
 
 def _is_test_env() -> bool:
+    """Helper for  is test env."""
     return (
         settings.environment.lower() == "test"
         or os.getenv("APP_ENV", "").lower() == "test"
         or os.getenv("PYTEST_CURRENT_TEST") is not None
     )
+
+
+async def _prewarm_amenhotep(app: FastAPI) -> None:
+    """Warm Amenhotep AI in the background to reduce first-response latency."""
+    try:
+        await get_shared_amenhotep(app)
+    except Exception as exc:  # pragma: no cover - defensive log
+        logger.warning("Amenhotep AI prewarm failed: %s", exc)
 
 
 def _maybe_repeat_every(**kwargs):
@@ -94,6 +104,7 @@ def register_startup_tasks(app: FastAPI) -> None:
     app.add_event_handler("startup", update_all_post_scores)
     app.add_event_handler("startup", cleanup_old_notifications)
     app.add_event_handler("startup", retry_failed_notifications)
+    app.add_event_handler("startup", monitor_cache_size)
 
     scheduler = _configure_scheduler()
     if scheduler:
@@ -130,6 +141,7 @@ def _clean_old_statistics_job() -> None:
 
 
 def _startup_event_factory(app: FastAPI):
+    """Helper for  startup event factory."""
     async def startup_event() -> None:
         """One-time startup hook for non-test environments (search, AI, Firebase, beat schedule)."""
         if settings.environment.lower() == "test":
@@ -141,7 +153,8 @@ def _startup_event_factory(app: FastAPI):
         update_search_vector()
 
         arabic_words_path = Path(__file__).resolve().parents[2] / "arabic_words.txt"
-        app.state.amenhotep = AmenhotepAI()
+        if not getattr(app.state, "amenhotep", None):
+            app.state.amenhotep_task = asyncio.create_task(_prewarm_amenhotep(app))
         spell.word_frequency.load_dictionary(str(arabic_words_path))
         celery_app.conf.beat_schedule = {
             "check-scheduled-posts": {
@@ -173,6 +186,7 @@ def update_all_communities_statistics() -> None:
 
 @_maybe_repeat_every(seconds=60 * 60 * 24)
 async def update_search_suggestions_task() -> None:
+    """Update search suggestions task."""
     db = next(get_db())
     try:
         update_search_suggestions(db)
@@ -185,6 +199,7 @@ async def update_search_suggestions_task() -> None:
 
 @_maybe_repeat_every(seconds=60 * 60)
 async def update_all_post_scores() -> None:
+    """Update all post scores."""
     db = SessionLocal()
     try:
         posts = db.query(models.Post).all()
@@ -240,8 +255,21 @@ def retry_failed_notifications() -> None:
         db.close()
 
 
+@_maybe_repeat_every(seconds=3600)
+async def monitor_cache_size() -> None:
+    """Log Redis cache size to help track growth and TTL effectiveness."""
+    if not cache_manager.enabled or not cache_manager.redis:
+        return None
+    try:
+        size = await cache_manager.redis.dbsize()
+        logger.info("Redis cache size: %s keys", size)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Failed to read Redis cache size: %s", exc)
+
+
 @_maybe_repeat_every(seconds=1800)
 def cleanup_expired_reels_task() -> None:
+    """Helper for cleanup expired reels task."""
     db = SessionLocal()
     try:
         return ReelService(db).cleanup_expired_reels()

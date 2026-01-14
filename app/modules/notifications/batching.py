@@ -8,6 +8,9 @@ from typing import Dict, List
 
 from fastapi_mail import MessageSchema
 
+from app.firebase_config import send_multicast_notification
+
+from .common import logger
 from .email import send_email_notification
 
 
@@ -154,9 +157,26 @@ class NotificationBatcher:
         await send_email_notification(message)
 
     async def _send_batch_push(self, notifications: List[dict]) -> None:
-        """Placeholder for batched push delivery (implementation pending)."""
-        # TODO: integrate push batching with Firebase/admin SDK
-        _ = notifications
+        """Send batched push notifications grouped by device tokens."""
+        grouped: Dict[tuple[str, ...], List[dict]] = {}
+        for notif in notifications:
+            tokens = notif.get("tokens") or notif.get("device_tokens") or []
+            tokens = [token for token in tokens if token]
+            if not tokens:
+                logger.info("Skipping push batch item without device tokens.")
+                continue
+            grouped.setdefault(tuple(tokens), []).append(notif)
+
+        for tokens, batch in grouped.items():
+            title = "New Notifications"
+            if len(batch) == 1 and batch[0].get("title"):
+                title = str(batch[0]["title"])
+            body = self._format_batch_push(batch)
+            data = {"batch_size": str(len(batch))}
+            ids = [str(item.get("id")) for item in batch if item.get("id") is not None]
+            if ids:
+                data["notification_ids"] = ",".join(ids[:50])
+            send_multicast_notification(list(tokens), title, body, data=data)
 
     async def _send_batch_in_app(self, notifications: List[dict]) -> None:
         """Placeholder for batched in-app delivery (implementation pending)."""
@@ -184,6 +204,27 @@ class NotificationBatcher:
                 f"<small>{timestamp}</small></div>"
             )
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_batch_push(notifications: List[dict]) -> str:
+        """Return a concise push body for a batch."""
+        if len(notifications) == 1:
+            return (
+                str(notifications[0].get("content"))
+                if notifications[0].get("content")
+                else "You have a new notification."
+            )
+        titles = [
+            str(n.get("title") or n.get("content") or "")
+            for n in notifications
+            if n.get("title") or n.get("content")
+        ]
+        if not titles:
+            return f"You have {len(notifications)} new notifications."
+        preview = "; ".join(titles[:3])
+        if len(titles) > 3:
+            preview = f"{preview}..."
+        return preview
 
 
 __all__ = ["NotificationBatcher"]

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-config
+data:
+  APP_ENV: "production"
+  ALLOWED_HOSTS: "example.com"
+  CORS_ORIGINS: "https://example.com"
+  FORCE_HTTPS: "true"
+  DATABASE_HOSTNAME: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "app_db"
+  DATABASE_USERNAME: "app_user"
+  DATABASE_SSL_MODE: "require"
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_BACKEND_URL: "redis://redis:6379/0"
+  ENABLE_METRICS: "1"

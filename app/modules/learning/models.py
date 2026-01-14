@@ -1,3 +1,4 @@
+"""SQLAlchemy models for the learning domain."""
 # app/modules/learning/models.py - Learning paths and certification models
 
 from __future__ import annotations

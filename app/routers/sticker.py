@@ -29,6 +29,7 @@ UPLOAD_DIRECTORY = "static/stickers"
 
 
 def _is_admin(user: models.User) -> bool:
+    """Helper for  is admin."""
     role = getattr(user, "role", "")
     if hasattr(role, "value"):
         role = role.value

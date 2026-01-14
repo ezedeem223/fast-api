@@ -1,3 +1,4 @@
+"""Service logic for the wellness domain."""
 # app/modules/wellness/service.py
 
 import logging
@@ -18,6 +19,7 @@ from app.modules.wellness.models import (
 
 
 class WellnessService:
+    """Service layer for WellnessService."""
 
     @staticmethod
     def get_or_create_metrics(db: Session, user_id: int) -> DigitalWellnessMetrics:
@@ -45,6 +47,7 @@ class WellnessService:
         metrics.daily_usage_minutes = usage_minutes
         metrics.last_activity_at = datetime.now(timezone.utc)
 
+        # Map usage minutes into coarse buckets for UI/alerts.
         if usage_minutes < 60:
             metrics.usage_pattern = UsagePattern.LIGHT
         elif usage_minutes < 180:
@@ -185,6 +188,7 @@ class WellnessService:
     def _calculate_wellness_score(metrics: DigitalWellnessMetrics):
         score = 100.0
 
+        # Penalize excessive usage and negative wellness indicators.
         if metrics.daily_usage_minutes > 360:
             score -= (metrics.daily_usage_minutes - 360) * 0.1
 
@@ -198,6 +202,7 @@ class WellnessService:
 
         score -= metrics.comparison_anxiety * 0.3
 
+        # Clamp to 0-100 and map to discrete wellness levels.
         metrics.wellness_score = max(0, min(100, score))
 
         if metrics.wellness_score >= 80:

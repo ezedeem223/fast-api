@@ -15,6 +15,7 @@ from transformers import AutoModel, AutoTokenizer
 
 
 def export_model(output_path: str) -> None:
+    """Helper for export model."""
     model_name = "aubmindlab/bert-base-arabertv02"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModel.from_pretrained(model_name)
@@ -41,6 +42,7 @@ def export_model(output_path: str) -> None:
 
 
 def main():
+    """Helper for main."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="data/amenhotep/amenhotep.onnx")
     args = parser.parse_args()

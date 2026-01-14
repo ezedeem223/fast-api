@@ -13,6 +13,7 @@ ALLOWED_CATEGORIES = {"goods", "services", "skills"}
 
 
 def _ensure_user(user):
+    """Helper for  ensure user."""
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Auth required"
@@ -35,6 +36,7 @@ class LocalEconomyService:
                 status_code=status.HTTP_403_FORBIDDEN, detail="User not verified"
             )
 
+        # Normalize payload values and validate core fields.
         title = getattr(payload, "title", "") or ""
         price = getattr(payload, "price", 0)
         category = getattr(payload, "category", None)
@@ -114,6 +116,7 @@ class LocalEconomyService:
                 detail="Quantity must be positive",
             )
 
+        # Derive transaction amount from listing price and quantity.
         amount = (listing.price or 0) * quantity
         txn = models.LocalMarketTransaction(
             listing_id=listing_id,
@@ -222,6 +225,7 @@ class LocalEconomyService:
             amount=amount,
             description=notes or "",
         )
+        # Mirror cooperative revenue as transactions are recorded.
         coop.revenue = (coop.revenue or 0) + amount
         self.db.add(txn)
         self.db.commit()

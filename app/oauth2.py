@@ -39,6 +39,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 ALGORITHM = settings.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+REFRESH_TOKEN_EXPIRE_MINUTES = settings.refresh_token_expire_minutes
 
 
 # ============================================
@@ -71,14 +72,50 @@ def create_access_token(data: dict):
             raise ValueError("Invalid user_id format")
 
     try:
-        # Sign with the RSA private key so downstream services can verify using the public key only.
+        kid = settings.get_jwt_key_id()
+        private_key = settings.get_jwt_private_key(kid)
+        # Sign with the active private key so downstream services can verify using public keys.
         encoded_jwt = jwt.encode(
-            to_encode, settings.rsa_private_key, algorithm=ALGORITHM
+            to_encode, private_key, algorithm=ALGORITHM, headers={"kid": kid}
         )
         return encoded_jwt
     except Exception as e:
         logger.error(f"Error creating access token: {str(e)}")
         raise
+
+
+def create_refresh_token(data: dict):
+    """Create a refresh token signed with the refresh secret key."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    refresh_secret = settings.refresh_secret_key or settings.secret_key
+    if not refresh_secret:
+        raise ValueError("Refresh secret key is not configured")
+    return jwt.encode(
+        to_encode, refresh_secret, algorithm=settings.refresh_algorithm
+    )
+
+
+def _decode_access_token(token: str) -> dict:
+    """Decode access token using kid-aware lookup with fallback to all known public keys."""
+    try:
+        header = jwt.get_unverified_header(token)
+    except Exception:
+        header = {}
+
+    kid = header.get("kid")
+    public_keys = settings.get_jwt_public_keys()
+    if kid and kid in public_keys:
+        return jwt.decode(token, public_keys[kid], algorithms=[ALGORITHM])
+
+    last_error = None
+    for key in public_keys.values():
+        try:
+            return jwt.decode(token, key, algorithms=[ALGORITHM])
+        except JWTError as exc:
+            last_error = exc
+    raise last_error or JWTError("Invalid token")
 
 
 # ============================================
@@ -92,8 +129,7 @@ def get_current_session(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Updated to use RSA public key for decoding
-        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
+        payload = _decode_access_token(token)
         session_id: str = payload.get("session_id")
         if session_id is None:
             raise credentials_exception
@@ -109,7 +145,7 @@ def verify_access_token(token: str, credentials_exception):
     """Verify JWT access token (exp/user_id) and return TokenData or raise HTTPException."""
     try:
         logger.debug(f"Token to verify: {token[:20]}...")
-        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
+        payload = _decode_access_token(token)
         logger.debug(f"Decoded Payload: {payload}")
 
         user_id = payload.get("user_id")
@@ -154,7 +190,7 @@ def get_current_user(
             raise HTTPException(status_code=403, detail="Your IP address is banned")
 
     try:
-        payload = jwt.decode(token, settings.rsa_public_key, algorithms=[ALGORITHM])
+        payload = _decode_access_token(token)
         user_id = payload.get("user_id")
         if user_id is None:
             raise credentials_exception

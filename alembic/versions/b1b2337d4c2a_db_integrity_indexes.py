@@ -17,6 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Helper for upgrade."""
     op.create_index("ix_follows_followed_id", "follows", ["followed_id"], unique=False)
     op.create_index("ix_follows_follower_id", "follows", ["follower_id"], unique=False)
     op.create_index(
@@ -30,6 +31,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Helper for downgrade."""
     op.drop_constraint("uq_search_statistics_user_term", "search_statistics", type_="unique")
     op.drop_index("ix_search_statistics_term", table_name="search_statistics")
     op.drop_index("ix_follows_follower_id", table_name="follows")

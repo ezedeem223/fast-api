@@ -8,9 +8,11 @@ from typing import List
 from pydantic import BaseModel, ConfigDict
 
 from app.modules.users.schemas import UserOut
+from app.modules.support.models import TicketStatus
 
 
 class TicketResponse(BaseModel):
+    """Pydantic schema for TicketResponse."""
     id: int
     content: str
     created_at: datetime
@@ -20,11 +22,13 @@ class TicketResponse(BaseModel):
 
 
 class TicketCreate(BaseModel):
+    """Pydantic schema for TicketCreate."""
     subject: str
     description: str
 
 
 class Ticket(BaseModel):
+    """Pydantic schema for Ticket."""
     id: int
     subject: str
     description: str
@@ -36,4 +40,9 @@ class Ticket(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-__all__ = ["Ticket", "TicketCreate", "TicketResponse"]
+class TicketStatusUpdate(BaseModel):
+    """Pydantic schema for TicketStatusUpdate."""
+    status: TicketStatus
+
+
+__all__ = ["Ticket", "TicketCreate", "TicketResponse", "TicketStatusUpdate"]

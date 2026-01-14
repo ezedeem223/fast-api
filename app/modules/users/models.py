@@ -14,11 +14,13 @@ from sqlalchemy import Float, ForeignKey, Integer, Interval, LargeBinary, String
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.orm import relationship
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 
 from app.core.database import Base
 from app.core.db_defaults import timestamp_default
 from app.modules.users.associations import post_mentions, user_hashtag_follows
+from app.modules.utils.security import decrypt_otp_secret, encrypt_otp_secret
 
 
 def _array_type(item_type):
@@ -36,24 +38,45 @@ def _jsonb_type():
     return PG_JSONB().with_variant(JSON, "sqlite").with_variant(JSON, "sqlite+pysqlite")
 
 
+class EncryptedString(TypeDecorator):
+    """Column type for encrypting/decrypting sensitive strings at rest."""
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return encrypt_otp_secret(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return decrypt_otp_secret(value)
+
+
 class UserType(str, enum.Enum):
+    """Enumeration for UserType."""
     PERSONAL = "personal"
     BUSINESS = "business"
 
 
 class VerificationStatus(str, enum.Enum):
+    """Enumeration for VerificationStatus."""
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
 
 
 class PrivacyLevel(str, enum.Enum):
+    """SQLAlchemy model for PrivacyLevel."""
     PUBLIC = "public"
     PRIVATE = "private"
     CUSTOM = "custom"
 
 
 class UserRole(str, enum.Enum):
+    """SQLAlchemy model for UserRole."""
     ADMIN = "admin"
     MODERATOR = "moderator"
     USER = "user"
@@ -74,7 +97,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     social_credits = Column(Float, default=0.0, index=True, nullable=False)
     verification_document = Column(String, nullable=True)
-    otp_secret = Column(String, nullable=True)
+    otp_secret = Column(EncryptedString(), nullable=True)
     is_2fa_enabled = Column(Boolean, default=False)
     role = Column(
         SQLAlchemyEnum(UserRole, name="user_role_enum"), default=UserRole.USER

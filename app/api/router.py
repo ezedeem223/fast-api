@@ -101,5 +101,3 @@ api_router.include_router(fact_checking.router)
 api_router.include_router(wellness.router)
 api_router.include_router(collaboration.router)
 api_router.include_router(impact.router)
-
-# api_router.include_router(social_posts.router)  # Disabled pending module review

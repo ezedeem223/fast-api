@@ -30,6 +30,7 @@ router = APIRouter(prefix="/communities", tags=["Communities"])
 
 
 class InvitationRequest(BaseModel):
+    """Class InvitationRequest."""
     user_id: int
 
 

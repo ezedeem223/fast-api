@@ -59,6 +59,7 @@ class BannedWordService:
         if search:
             query = query.filter(BannedWord.word.ilike(f"%{search}%"))
 
+        # Support stable sorting by word or creation time.
         if sort_by == "created_at":
             column = BannedWord.created_at
         else:
@@ -133,6 +134,7 @@ class BannedWordService:
             BannedWord(**word.model_dump(), created_by=current_user.id)
             for word in payloads
         ]
+        # Bulk insert keeps audit logging in one entry.
         self.db.add_all(new_words)
         self.db.commit()
 

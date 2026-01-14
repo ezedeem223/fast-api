@@ -61,6 +61,7 @@ MIN_QUALITY_THRESHOLD = 50
 
 def create_default_categories(db: Session):
     """Create default post categories and subcategories if missing."""
+    # Seed core categories and add scoped subcategories only when the parent is new.
     default_categories = [
         {"name": "Work", "description": "Posts related to job opportunities"},
         {
@@ -78,6 +79,7 @@ def create_default_categories(db: Session):
             db.add(new_category)
             db.commit()
             db.refresh(new_category)
+            # Derive subcategories from the parent name for consistent taxonomy.
             if category["name"] == "Work":
                 sub_categories = ["Work in Canada", "Work in USA", "Work in Europe"]
             elif category["name"] == "Migration":

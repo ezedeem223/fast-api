@@ -15,10 +15,12 @@ from app.core.config import settings
 
 
 def _client():
+    """Helper for  client."""
     return settings.redis_client
 
 
 def _ensure_str(value: Any) -> Optional[str]:
+    """Helper for  ensure str."""
     if value is None:
         return None
     if isinstance(value, bytes):
@@ -29,6 +31,7 @@ def _ensure_str(value: Any) -> Optional[str]:
 
 
 def get_cached_json(key: str) -> Optional[Any]:
+    """Return cached json."""
     client = _client()
     if not client:
         # Fail open: absent Redis means no cache hit rather than raising in hot paths.
@@ -44,6 +47,7 @@ def get_cached_json(key: str) -> Optional[Any]:
 
 
 def set_cached_json(key: str, value: Any, ttl_seconds: int = 300) -> None:
+    """Helper for set cached json."""
     client = _client()
     if not client:
         return
@@ -51,6 +55,7 @@ def set_cached_json(key: str, value: Any, ttl_seconds: int = 300) -> None:
 
 
 def delete_keys(keys: Iterable[str]) -> None:
+    """Delete keys."""
     client = _client()
     if not client:
         return
@@ -60,6 +65,7 @@ def delete_keys(keys: Iterable[str]) -> None:
 
 
 def delete_pattern(pattern: str) -> None:
+    """Delete pattern."""
     client = _client()
     if not client:
         return
@@ -69,6 +75,7 @@ def delete_pattern(pattern: str) -> None:
 
 
 def _json_serializer(value: Any):
+    """Helper for  json serializer."""
     if hasattr(value, "model_dump"):
         return value.model_dump()
     if hasattr(value, "isoformat"):
@@ -77,18 +84,22 @@ def _json_serializer(value: Any):
 
 
 def popular_cache_key(limit: int) -> str:
+    """Helper for popular cache key."""
     return f"search:stats:popular:{limit}"
 
 
 def recent_cache_key(limit: int) -> str:
+    """Helper for recent cache key."""
     return f"search:stats:recent:{limit}"
 
 
 def user_cache_key(user_id: int, limit: int) -> str:
+    """Helper for user cache key."""
     return f"search:stats:user:{user_id}:{limit}"
 
 
 def invalidate_stats_cache(for_user_id: Optional[int] = None) -> None:
+    """Helper for invalidate stats cache."""
     if for_user_id is not None:
         delete_pattern(f"search:stats:user:{for_user_id}:*")
     delete_pattern("search:stats:popular:*")

@@ -50,6 +50,7 @@ class BusinessService:
                 detail="User is not registered as a business",
             )
 
+        # Store uploaded verification artifacts and mark as pending review.
         current_user.id_document_url = await save_upload_fn(files.id_document)
         current_user.passport_url = await save_upload_fn(files.passport)
         current_user.business_document_url = await save_upload_fn(
@@ -61,6 +62,47 @@ class BusinessService:
         self.db.commit()
         self.db.refresh(current_user)
         return current_user
+
+    def list_business_verifications(
+        self,
+        *,
+        status_filter: VerificationStatus | None = None,
+    ) -> list[User]:
+        query = self.db.query(User).filter(User.user_type == UserType.BUSINESS)
+        if status_filter is not None:
+            status_value = self._coerce_verification_status(status_filter)
+            query = query.filter(User.verification_status == status_value)
+        return query.order_by(User.id.desc()).all()
+
+    def review_business_verification(
+        self,
+        *,
+        user_id: int,
+        decision: schemas.BusinessVerificationDecision,
+    ) -> User:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.user_type != UserType.BUSINESS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is not a business account",
+            )
+
+        status_value = self._coerce_verification_status(decision.status)
+        if status_value == VerificationStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification decision must be approved or rejected",
+            )
+
+        # Update both the status flag and the convenience boolean.
+        user.verification_status = status_value
+        user.is_verified_business = status_value == VerificationStatus.APPROVED
+
+        self.db.commit()
+        self.db.refresh(user)
+        return user
 
     def create_transaction(
         self,
@@ -105,3 +147,15 @@ class BusinessService:
             .filter(BusinessTransaction.business_user_id == current_user.id)
             .all()
         )
+
+    def _coerce_verification_status(self, value) -> VerificationStatus:
+        if isinstance(value, VerificationStatus):
+            return value
+        raw_value = getattr(value, "value", value)
+        try:
+            return VerificationStatus(raw_value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification status",
+            ) from exc

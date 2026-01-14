@@ -1,3 +1,4 @@
+"""Helpers for the social domain."""
 import math
 from collections import defaultdict
 from typing import Dict, Iterable
@@ -15,6 +16,7 @@ except Exception:
 
 
 class SocialEconomyService:
+    """Service layer for SocialEconomyService."""
     def __init__(self, db: Session):
         self.db = db
 

@@ -1,3 +1,4 @@
+"""Application module."""
 import pickle
 from functools import wraps
 from pickle import PicklingError

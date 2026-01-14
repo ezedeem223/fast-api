@@ -1,3 +1,4 @@
+"""Application module."""
 import re
 
 from sqlalchemy.orm import Session

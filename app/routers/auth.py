@@ -14,7 +14,7 @@ from typing import List
 
 import pyotp
 from fastapi_mail import FastMail, MessageSchema
-from jose import JWTError, jwt
+from jose import JWTError, jwk, jwt
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
 
@@ -23,9 +23,20 @@ from app.core.database import get_db
 from app.core.middleware.rate_limit import limiter
 from app.modules.users import UserService
 from app.modules.utils.events import log_user_event
+from app.modules.utils.security import enforce_password_strength
 from app.modules.utils.security import hash as hash_password
+from app.modules.utils.security import password_strength_report
 from app.modules.utils.security import verify
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 
 # Local imports
@@ -46,11 +57,13 @@ DEFAULT_FRONTEND_URL = getattr(
 
 
 def _build_frontend_link(path: str, token: str) -> str:
+    """Helper for  build frontend link."""
     base = DEFAULT_FRONTEND_URL or "https://yourapp.com"
     return f"{base.rstrip('/')}/{path.lstrip('/')}?token={token}"
 
 
 def _schedule_verification_email(background_tasks: BackgroundTasks, email: str) -> None:
+    """Helper for  schedule verification email."""
     token = create_verification_token(email)
     verification_link = _build_frontend_link("verify-email", token)
     message = MessageSchema(
@@ -122,13 +135,18 @@ def login(
     # Check account status
     if user.is_suspended:
         raise HTTPException(status_code=403, detail="Account is suspended")
-    if user.account_locked_until and user.account_locked_until > datetime.now(
-        timezone.utc
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is locked. Please try again later.",
-        )
+    if user.account_locked_until:
+        locked_until = user.account_locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        if locked_until > now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is locked. Please try again later.",
+            )
 
     # Verify password
     if not verify(user_credentials.password, user.hashed_password):
@@ -215,6 +233,9 @@ def complete_login(
     access_token = oauth2.create_access_token(
         data={"user_id": user.id, "session_id": session.session_id}
     )
+    refresh_token = oauth2.create_refresh_token(
+        data={"sub": str(user.id), "session_id": session.session_id}
+    )
 
     # Log the login event
     log_user_event(
@@ -241,7 +262,11 @@ def complete_login(
         user_agent,
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
@@ -399,6 +424,7 @@ async def reset_password(
     ):
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
+    enforce_password_strength(reset_data.new_password)
     hashed_password = hash_password(reset_data.new_password)
     user.hashed_password = hashed_password
     user.reset_token = None
@@ -410,14 +436,30 @@ async def reset_password(
 
 
 @router.post("/refresh-token", response_model=schemas.Token)
-async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
+async def refresh_token(
+    refresh_token: str | None = Body(None, embed=True),
+    db: Session = Depends(get_db),
+    refresh_token_query: str | None = Query(None, alias="refresh_token"),
+):
     """Endpoint: refresh_token."""
+    # Accept refresh token from JSON body or query string for client flexibility.
+    token = refresh_token or refresh_token_query
+    if not token:
+        raise HTTPException(status_code=400, detail="Refresh token required")
     try:
         payload = jwt.decode(
-            refresh_token, settings.refresh_secret_key, algorithms=[settings.algorithm]
+            token,
+            settings.refresh_secret_key or settings.secret_key,
+            algorithms=[settings.refresh_algorithm],
         )
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        raw_user_id = payload.get("sub")
+        if raw_user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        if payload.get("type") not in (None, "refresh"):
             raise HTTPException(status_code=401, detail="Invalid refresh token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -426,8 +468,48 @@ async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    access_token = oauth2.create_access_token(data={"user_id": user.id})
-    return {"access_token": access_token, "token_type": "bearer"}
+    session_id = payload.get("session_id")
+    if session_id:
+        # Ensure the refresh token still maps to an active session.
+        session = (
+            db.query(models.UserSession)
+            .filter(
+                models.UserSession.user_id == user.id,
+                models.UserSession.session_id == session_id,
+            )
+            .first()
+        )
+        if not session:
+            raise HTTPException(status_code=401, detail="Session not found")
+
+    access_payload = {"user_id": user.id}
+    if session_id:
+        access_payload["session_id"] = session_id
+    access_token = oauth2.create_access_token(data=access_payload)
+    new_refresh_token = oauth2.create_refresh_token(
+        data={"sub": str(user.id), "session_id": session_id}
+    )
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.get("/jwks.json")
+async def jwks_keys():
+    """Expose public keys for JWT verification (JWKS)."""
+    if settings.algorithm.upper().startswith("HS"):
+        raise HTTPException(
+            status_code=400, detail="JWKS not available for symmetric algorithms"
+        )
+    keys = []
+    for kid, key in settings.get_jwt_public_keys().items():
+        jwk_key = jwk.construct(key, algorithm=settings.algorithm)
+        jwk_dict = jwk_key.to_dict()
+        jwk_dict.update({"kid": kid, "use": "sig", "alg": settings.algorithm})
+        keys.append(jwk_dict)
+    return {"keys": keys}
 
 
 @router.post("/verify-email")
@@ -551,41 +633,7 @@ async def end_session(
 @router.post("/password-strength")
 async def check_password_strength(password: str):
     """Endpoint: check_password_strength."""
-    strength = 0
-    suggestions = []
-    if len(password) >= 8:
-        strength += 1
-    else:
-        suggestions.append("Password must be at least 8 characters")
-    if any(c.isupper() for c in password):
-        strength += 1
-    else:
-        suggestions.append("Must contain at least one uppercase letter")
-    if any(c.islower() for c in password):
-        strength += 1
-    else:
-        suggestions.append("Must contain at least one lowercase letter")
-    if any(c.isdigit() for c in password):
-        strength += 1
-    else:
-        suggestions.append("Must contain at least one digit")
-    if any(not c.isalnum() for c in password):
-        strength += 1
-    else:
-        suggestions.append("Must contain at least one special character")
-    strength_text = {
-        0: "Very weak",
-        1: "Weak",
-        2: "Medium",
-        3: "Good",
-        4: "Strong",
-        5: "Very strong",
-    }
-    return {
-        "strength": strength,
-        "strength_text": strength_text[strength],
-        "suggestions": suggestions,
-    }
+    return password_strength_report(password)
 
 
 @router.post("/change-password")

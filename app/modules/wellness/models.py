@@ -1,3 +1,4 @@
+"""SQLAlchemy models for the wellness domain."""
 # app/modules/wellness/models.py
 
 import enum
@@ -20,6 +21,7 @@ from app.core.database import Base
 
 
 class WellnessLevel(str, enum.Enum):
+    """SQLAlchemy model for WellnessLevel."""
     EXCELLENT = "excellent"
     GOOD = "good"
     FAIR = "fair"
@@ -28,6 +30,7 @@ class WellnessLevel(str, enum.Enum):
 
 
 class UsagePattern(str, enum.Enum):
+    """SQLAlchemy model for UsagePattern."""
     LIGHT = "light"
     MODERATE = "moderate"
     HEAVY = "heavy"
@@ -36,6 +39,7 @@ class UsagePattern(str, enum.Enum):
 
 class DigitalWellnessMetrics(Base):
 
+    """SQLAlchemy model for DigitalWellnessMetrics."""
     __tablename__ = "digital_wellness_metrics"
 
     id = Column(Integer, primary_key=True)
@@ -47,14 +51,17 @@ class DigitalWellnessMetrics(Base):
     wellness_score = Column(Float, default=100.0)
     wellness_level = Column(Enum(WellnessLevel), default=WellnessLevel.EXCELLENT)
 
+    # Activity usage aggregates used to derive usage patterns.
     daily_usage_minutes = Column(Integer, default=0)
     weekly_usage_hours = Column(Float, default=0.0)
     usage_pattern = Column(Enum(UsagePattern), default=UsagePattern.LIGHT)
 
+    # Engagement signals used in wellness scoring.
     posts_per_day = Column(Float, default=0.0)
     comments_per_day = Column(Float, default=0.0)
     likes_received_per_day = Column(Float, default=0.0)
 
+    # Self-reported or inferred mental state indicators.
     stress_level = Column(Float, default=0.0)
     anxiety_level = Column(Float, default=0.0)
     mood_score = Column(Float, default=5.0)
@@ -86,6 +93,7 @@ class DigitalWellnessMetrics(Base):
 
 class WellnessAlert(Base):
 
+    """SQLAlchemy model for WellnessAlert."""
     __tablename__ = "wellness_alerts"
 
     id = Column(Integer, primary_key=True)
@@ -111,6 +119,7 @@ class WellnessAlert(Base):
 
 class WellnessSession(Base):
 
+    """SQLAlchemy model for WellnessSession."""
     __tablename__ = "wellness_sessions"
 
     id = Column(Integer, primary_key=True)
@@ -132,6 +141,7 @@ class WellnessSession(Base):
 
 class WellnessGoal(Base):
 
+    """SQLAlchemy model for WellnessGoal."""
     __tablename__ = "wellness_goals"
 
     id = Column(Integer, primary_key=True)
@@ -158,6 +168,7 @@ class WellnessGoal(Base):
 
 class WellnessMode(Base):
 
+    """SQLAlchemy model for WellnessMode."""
     __tablename__ = "wellness_modes"
 
     id = Column(Integer, primary_key=True)

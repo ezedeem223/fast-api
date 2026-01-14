@@ -21,6 +21,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from slowapi.middleware import SlowAPIMiddleware
 
 from app import models, oauth2
 from app.api.router import api_router
@@ -138,6 +139,7 @@ def _configure_app(app: FastAPI) -> None:
     app.middleware("http")(language_middleware)
     app.middleware("http")(add_language_header)
     app.middleware("http")(ip_ban_middleware)
+    app.add_middleware(SlowAPIMiddleware)
 
     _mount_static_files(app)
     register_startup_tasks(app)

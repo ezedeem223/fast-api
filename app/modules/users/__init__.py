@@ -37,6 +37,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    """Helper for   getattr  ."""
     if name == "UserService":
         from app.services.users.service import UserService as _UserService
 

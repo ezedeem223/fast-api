@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def extract_audio_from_video(video_path: str) -> str:
+    """Helper for extract audio from video."""
     output_path = Path(video_path).with_suffix(".wav")
     try:
         stream = ffmpeg.input(video_path)
@@ -29,6 +30,7 @@ def extract_audio_from_video(video_path: str) -> str:
 
 
 def speech_to_text(audio_path: str) -> str:
+    """Helper for speech to text."""
     import speech_recognition as sr  # Deferred import to avoid module-wide warnings
 
     recognizer = sr.Recognizer()
@@ -44,6 +46,7 @@ def speech_to_text(audio_path: str) -> str:
 
 
 def process_media_file(file_path: str) -> str:
+    """Helper for process media file."""
     file_path_lower = file_path.lower()
     if file_path_lower.endswith((".mp4", ".avi", ".mov")):
         audio_path = extract_audio_from_video(file_path)
@@ -55,6 +58,7 @@ def process_media_file(file_path: str) -> str:
 
 
 def scan_file_for_viruses(file_path: str) -> bool:
+    """Helper for scan file for viruses."""
     import warnings
 
     with warnings.catch_warnings():

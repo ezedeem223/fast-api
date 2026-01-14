@@ -1,7 +1,7 @@
 """Support router for ticket creation, responses, and status updates.
 
 Auth required; models map to support tickets/responses stored via services. Minimal
-logic here—delegates to services for validations and notifications.
+logic here delegates to services for validations and notifications.
 """
 
 from typing import List
@@ -93,3 +93,28 @@ async def add_ticket_response(
     db.commit()
     db.refresh(new_response)
     return new_response
+
+
+@router.put("/tickets/{ticket_id}/status", response_model=schemas.Ticket)
+async def update_ticket_status(
+    ticket_id: int,
+    status_update: schemas.TicketStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    """Update the status of a support ticket (support staff/admin only)."""
+    if not current_user.is_moderator and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    ticket = (
+        db.query(models.SupportTicket)
+        .filter(models.SupportTicket.id == ticket_id)
+        .first()
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket.status = status_update.status
+    db.commit()
+    db.refresh(ticket)
+    return ticket

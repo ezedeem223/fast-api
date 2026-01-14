@@ -14,27 +14,32 @@ from app.modules.moderation.models import BlockType as BlockTypeEnum
 
 
 class WordSeverity(str, Enum):
+    """Pydantic schema for WordSeverity."""
     warn = "warn"
     ban = "ban"
 
 
 class BannedWordBase(BaseModel):
+    """Pydantic schema for BannedWordBase."""
     word: str
     severity: WordSeverity = WordSeverity.warn
     is_regex: bool = False
 
 
 class BannedWordCreate(BannedWordBase):
+    """Pydantic schema for BannedWordCreate."""
     pass
 
 
 class BannedWordUpdate(BaseModel):
+    """Pydantic schema for BannedWordUpdate."""
     word: Optional[str] = None
     severity: Optional[WordSeverity] = None
     is_regex: Optional[bool] = None
 
 
 class BannedWordOut(BannedWordBase):
+    """Pydantic schema for BannedWordOut."""
     id: int
     created_by: int
     created_at: datetime
@@ -43,11 +48,13 @@ class BannedWordOut(BannedWordBase):
 
 
 class BlockAppealCreate(BaseModel):
+    """Pydantic schema for BlockAppealCreate."""
     block_id: int
     reason: str
 
 
 class BlockAppealOut(BaseModel):
+    """Pydantic schema for BlockAppealOut."""
     id: int
     block_id: int
     user_id: int
@@ -61,10 +68,12 @@ class BlockAppealOut(BaseModel):
 
 
 class BlockAppealReview(BaseModel):
+    """Pydantic schema for BlockAppealReview."""
     status: AppealStatus
 
 
 class BlockStatistics(BaseModel):
+    """Pydantic schema for BlockStatistics."""
     total_blocks: int
     active_blocks: int
     expired_blocks: int
@@ -73,16 +82,19 @@ class BlockStatistics(BaseModel):
 
 
 class IPBanBase(BaseModel):
+    """Pydantic schema for IPBanBase."""
     ip_address: str
     reason: Optional[str] = None
     expires_at: Optional[datetime] = None
 
 
 class IPBanCreate(IPBanBase):
+    """Pydantic schema for IPBanCreate."""
     pass
 
 
 class IPBanOut(IPBanBase):
+    """Pydantic schema for IPBanOut."""
     id: int
     banned_at: datetime
     created_by: int
@@ -91,27 +103,32 @@ class IPBanOut(IPBanBase):
 
 
 class CallType(str, Enum):
+    """Pydantic schema for CallType."""
     AUDIO = "audio"
     VIDEO = "video"
 
 
 class CallStatus(str, Enum):
+    """Pydantic schema for CallStatus."""
     PENDING = "pending"
     ONGOING = "ongoing"
     ENDED = "ended"
 
 
 class CallCreate(BaseModel):
+    """Pydantic schema for CallCreate."""
     receiver_id: int
     call_type: CallType
 
 
 class CallUpdate(BaseModel):
+    """Pydantic schema for CallUpdate."""
     status: CallStatus
     current_screen_share_id: Optional[int] = None
 
 
 class CallOut(BaseModel):
+    """Pydantic schema for CallOut."""
     id: int
     caller_id: int
     receiver_id: int
@@ -126,6 +143,7 @@ class CallOut(BaseModel):
 
 
 class BlockCreate(BaseModel):
+    """Pydantic schema for BlockCreate."""
     blocked_id: int
     duration: Optional[int] = Field(None, ge=1)
     duration_unit: Optional[BlockDuration] = None
@@ -134,10 +152,12 @@ class BlockCreate(BaseModel):
 
 
 class BlockSettings(BaseModel):
+    """Pydantic schema for BlockSettings."""
     default_block_type: BlockTypeEnum
 
 
 class BlockOut(BaseModel):
+    """Pydantic schema for BlockOut."""
     blocker_id: int
     blocked_id: int
     created_at: datetime
@@ -148,12 +168,14 @@ class BlockOut(BaseModel):
 
 
 class BlockLogCreate(BaseModel):
+    """Pydantic schema for BlockLogCreate."""
     blocked_id: int
     block_type: BlockTypeEnum
     reason: Optional[str] = None
 
 
 class BlockLogOut(BaseModel):
+    """Pydantic schema for BlockLogOut."""
     id: int
     blocker_id: int
     blocked_id: int
@@ -166,6 +188,7 @@ class BlockLogOut(BaseModel):
 
 
 class BanStatisticsOverview(BaseModel):
+    """Pydantic schema for BanStatisticsOverview."""
     total_bans: int
     ip_bans: int
     word_bans: int
@@ -174,6 +197,7 @@ class BanStatisticsOverview(BaseModel):
 
 
 class BanReasonOut(BaseModel):
+    """Pydantic schema for BanReasonOut."""
     reason: str
     count: int
     last_used: datetime
@@ -182,17 +206,20 @@ class BanReasonOut(BaseModel):
 
 
 class EffectivenessTrend(BaseModel):
+    """Pydantic schema for EffectivenessTrend."""
     date: date
     effectiveness: float
 
 
 class BanTypeDistribution(BaseModel):
+    """Pydantic schema for BanTypeDistribution."""
     ip_bans: int
     word_bans: int
     user_bans: int
 
 
 class BlockedUserOut(BaseModel):
+    """Pydantic schema for BlockedUserOut."""
     id: int
     username: str
     email: str
@@ -204,20 +231,24 @@ class BlockedUserOut(BaseModel):
 
 
 class WarningCreate(BaseModel):
+    """Pydantic schema for WarningCreate."""
     reason: str
 
 
 class BanCreate(BaseModel):
+    """Pydantic schema for BanCreate."""
     reason: str
 
 
 class ReportStatus(str, Enum):
+    """Pydantic schema for ReportStatus."""
     PENDING = "pending"
     REVIEWED = "reviewed"
     RESOLVED = "resolved"
 
 
 class ReportBase(BaseModel):
+    """Pydantic schema for ReportBase."""
     reason: constr(min_length=1)
     report_reason: Optional[str] = None
     ai_detected: bool = False
@@ -237,6 +268,7 @@ class ReportBase(BaseModel):
 
 
 class ReportCreate(ReportBase):
+    """Pydantic schema for ReportCreate."""
     post_id: Optional[int] = None
     comment_id: Optional[int] = None
 
@@ -250,6 +282,7 @@ class ReportCreate(ReportBase):
 
 
 class Report(ReportBase):
+    """Pydantic schema for Report."""
     id: int
     post_id: Optional[int]
     comment_id: Optional[int]
@@ -261,15 +294,38 @@ class Report(ReportBase):
 
 
 class ReportReview(BaseModel):
+    """Pydantic schema for ReportReview."""
     is_valid: bool
 
 
 class ReportUpdate(BaseModel):
+    """Pydantic schema for ReportUpdate."""
     status: ReportStatus
     resolution_notes: Optional[str] = None
 
 
+class ReportDecisionAction(str, Enum):
+    """Pydantic schema for ReportDecisionAction."""
+    DELETE = "delete"
+    IGNORE = "ignore"
+
+
+class ReportDecision(BaseModel):
+    """Pydantic schema for ReportDecision."""
+    action: ReportDecisionAction
+    resolution_notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_notes_for_ignore(self):
+        if self.action == ReportDecisionAction.IGNORE:
+            notes = (self.resolution_notes or "").strip()
+            if not notes:
+                raise ValueError("Resolution notes are required when ignoring a report")
+        return self
+
+
 class ReportOut(Report):
+    """Pydantic schema for ReportOut."""
     status: ReportStatus
     reviewed_by: Optional[int]
     resolution_notes: Optional[str]
@@ -310,6 +366,8 @@ __all__ = [
     "Report",
     "ReportBase",
     "ReportCreate",
+    "ReportDecision",
+    "ReportDecisionAction",
     "ReportOut",
     "ReportReview",
     "ReportStatus",

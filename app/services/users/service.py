@@ -20,6 +20,7 @@ from app.modules.users.models import (
     UserSession,
     UserStatistics,
 )
+from app.modules.utils.security import enforce_password_strength
 from app.modules.utils.security import hash as hash_password
 from app.modules.utils.security import verify
 from fastapi import HTTPException, UploadFile, status
@@ -37,6 +38,7 @@ class UserService:
         if existing:
             raise HTTPException(status_code=400, detail="Email already registered")
 
+        enforce_password_strength(payload.password)
         hashed_password = hash_password(payload.password)
         coerced_public_key = self._coerce_public_key(payload.public_key)
         new_user = User(
@@ -422,6 +424,7 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password"
             )
 
+        enforce_password_strength(password_change.new_password)
         current_user.hashed_password = hash_password(password_change.new_password)
         self.db.commit()
         return {"message": "Password changed successfully"}

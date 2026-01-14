@@ -1,3 +1,4 @@
+"""Pydantic schemas for the collaboration domain."""
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ from .models import ProjectStatus
 
 
 class ProjectCreate(BaseModel):
+    """Pydantic schema for ProjectCreate."""
     title: str
     description: Optional[str] = None
     goals: Optional[str] = None
@@ -14,6 +16,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectOut(BaseModel):
+    """Pydantic schema for ProjectOut."""
     id: int
     title: str
     description: Optional[str]
@@ -27,11 +30,13 @@ class ProjectOut(BaseModel):
 
 
 class ContributionCreate(BaseModel):
+    """Pydantic schema for ContributionCreate."""
     content: Optional[str] = None
     contribution_type: str = "text"
 
 
 class ContributionOut(BaseModel):
+    """Pydantic schema for ContributionOut."""
     id: int
     project_id: int
     user_id: int
@@ -43,4 +48,5 @@ class ContributionOut(BaseModel):
 
 
 class ProjectWithContributions(ProjectOut):
+    """Pydantic schema for ProjectWithContributions."""
     contributions: List[ContributionOut] = []

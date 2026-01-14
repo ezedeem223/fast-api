@@ -1,3 +1,4 @@
+"""Package exports for fact_checking domain."""
 from .models import (
     CredibilityBadge,
     Fact,

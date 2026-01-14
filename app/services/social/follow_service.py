@@ -77,6 +77,7 @@ class FollowService:
         )
         self.db.add(new_follow)
 
+        # Mark mutual follows when the target already follows the current user.
         mutual_follow = (
             self.db.query(Follow)
             .filter(
@@ -89,6 +90,7 @@ class FollowService:
             new_follow.is_mutual = True
             mutual_follow.is_mutual = True
 
+        # Update counters for both sides.
         user_to_follow.followers_count += 1
         current_user.following_count += 1
 
@@ -124,6 +126,7 @@ class FollowService:
         follower_identity = (
             getattr(current_user, "username", None) or current_user.email
         )
+        # Create in-app notification after the follow is committed.
         create_notification_fn(
             self.db,
             target_user_id,
@@ -202,6 +205,7 @@ class FollowService:
         if sort_by == "username":
             order_column = User.email
 
+        # Apply requested ordering before pagination.
         query = (
             query.order_by(desc(order_column))
             if order == "desc"
@@ -246,6 +250,7 @@ class FollowService:
         if sort_by == "username":
             order_column = User.email
 
+        # Apply requested ordering before pagination.
         query = (
             query.order_by(desc(order_column))
             if order == "desc"
@@ -277,6 +282,7 @@ class FollowService:
 
     def get_follow_statistics(self, *, current_user: User) -> Dict[str, object]:
         thirty_days_ago = datetime.now() - timedelta(days=30)
+        # Track daily follower growth for the last 30 days.
         daily_growth = (
             self.db.query(func.date(Follow.created_at), func.count())
             .filter(Follow.followed_id == current_user.id)
@@ -285,6 +291,7 @@ class FollowService:
             .all()
         )
 
+        # Interaction rate normalizes total activity by follower count.
         interaction_rate = (
             self.db.query(func.count(Post.id) + func.count(Comment.id))
             .filter(

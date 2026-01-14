@@ -16,6 +16,7 @@ from app.main import app
 
 
 async def run_benchmark(requests: int, concurrency: int) -> None:
+    """Helper for run benchmark."""
     sem = asyncio.Semaphore(concurrency)
     latencies = []
 
@@ -43,6 +44,7 @@ async def run_benchmark(requests: int, concurrency: int) -> None:
 
 
 def main():
+    """Helper for main."""
     parser = argparse.ArgumentParser(description="In-process API latency benchmark.")
     parser.add_argument("--requests", type=int, default=20)
     parser.add_argument("--concurrency", type=int, default=5)

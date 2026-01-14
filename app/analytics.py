@@ -200,6 +200,7 @@ def get_ban_statistics(db: Session):
 
 
 def _schemas_from_rows(rows):
+    """Helper for  schemas from rows."""
     stats = []
     for row in rows:
         stats.append(
@@ -213,10 +214,12 @@ def _schemas_from_rows(rows):
 
 
 def _cache_stats(key: str, stats):
+    """Helper for  cache stats."""
     set_cached_json(key, [stat.model_dump() for stat in stats], ttl_seconds=300)
 
 
 def _cached_stats(key: str):
+    """Helper for  cached stats."""
     payload = get_cached_json(key)
     if payload is None:
         return None
@@ -321,6 +324,7 @@ def generate_search_trends_chart():
     Returns the chart as a base64 encoded PNG image.
     """
     db = next(get_db())
+    # Aggregate search counts by date for the trendline.
     rows = (
         db.query(
             func.date(getattr(SearchStatistics, _STAT_TS_ATTR)).label("date"),
@@ -334,6 +338,7 @@ def generate_search_trends_chart():
     if not rows:
         return ""
 
+    # Prepare an ordered dataframe for plotting.
     df = pl.DataFrame(
         {"date": [r.date for r in rows], "count": [r.count for r in rows]}
     )
@@ -347,6 +352,7 @@ def generate_search_trends_chart():
     plt.xticks(rotation=45)
     plt.tight_layout()
 
+    # Render to an in-memory buffer and return a base64 string.
     buffer = io.BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)

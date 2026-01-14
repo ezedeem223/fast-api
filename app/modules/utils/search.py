@@ -25,6 +25,7 @@ search_cache = TTLCache(maxsize=100, ttl=60)
 
 
 def _resolve_bind(session: Session | None):
+    """Helper for  resolve bind."""
     if session is None:
         return None
     if hasattr(session, "get_bind"):
@@ -38,12 +39,14 @@ def _resolve_bind(session: Session | None):
 
 
 def _is_sqlite(bind) -> bool:
+    """Helper for  is sqlite."""
     dialect = getattr(bind, "dialect", None)
     name = getattr(dialect, "name", "")
     return bool(name) and str(name).lower().startswith("sqlite")
 
 
 def _uses_sqlite(session: Session | None) -> bool:
+    """Helper for  uses sqlite."""
     bind = _resolve_bind(session)
     if bind is not None:
         return _is_sqlite(bind)

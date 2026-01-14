@@ -99,6 +99,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         """Handle request validation errors."""
         errors = []
         for error in exc.errors():
+            # Strip "body" to keep field paths consistent with client payloads.
             field = ".".join(str(loc) for loc in error["loc"] if loc != "body")
             errors.append(
                 {
@@ -193,6 +194,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
         if hasattr(request.app.state, "environment"):
             env = request.app.state.environment.lower()
+            # Only echo stack traces in non-production environments.
             if env in ("development", "dev", "test"):
                 message = str(exc)
                 details = {

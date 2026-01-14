@@ -891,7 +891,7 @@ class NotificationRetryHandler:
         if not notification:
             return
         if notification.retry_count >= self.max_retries:
-            notification.status = "permanently_failed"
+            notification.status = notification_models.NotificationStatus.PERMANENTLY_FAILED
             self.db.commit()
             return
         delay = self.retry_delays[notification.retry_count]

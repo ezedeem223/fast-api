@@ -12,6 +12,10 @@ render.json
 .env
 public_key
 private_key
+*.pem
+*.key
+*.p12
+*.pfx
 env.
 venv
 debug_report_api.py

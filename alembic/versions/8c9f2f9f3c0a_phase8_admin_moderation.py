@@ -17,6 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Helper for upgrade."""
     op.create_table(
         "audit_logs",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -49,6 +50,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Helper for downgrade."""
     op.drop_table("archived_reels")
     op.drop_column("banned_words", "is_regex")
     op.drop_table("audit_logs")

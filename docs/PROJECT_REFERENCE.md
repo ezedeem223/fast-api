@@ -2,13 +2,25 @@
 
 Single-source reference for architecture, developer guidance, documentation style, changelog, and roadmap.
 
+## Documentation Map
+- `docs/REPO_REFERENCE.md`: full file index with one-line summaries per module/file.
+- `docs/API_REFERENCE.md`: router/endpoint inventory generated from route decorators.
+- `docs/DATA_MODEL.md`: domain-level data model overview and relationships.
+- `docs/FEATURE_FLOWS.md`: end-to-end feature workflows (auth, content, moderation, business, support, AI).
+- `docs/TESTS_REFERENCE.md`: test-suite index with module-level summaries.
+- `docs/SCALABILITY.md`: scaling roadmap and decomposition signals.
+
 ## Architecture Map
 - **app/**: core config (settings, DB, cache, logging, monitoring, middleware, app factory), API aggregation, routers, domain modules (users, community, posts, notifications, messaging, moderation, search, media, utils, social, marketplace, learning, local_economy, collaboration, wellness, amenhotep), services, integrations, AI chat, compatibility shims, models/schemas, Celery worker, entrypoint.
 - **alembic/**: migration environment and versioned scripts.
 - **scripts/**: CLI helpers (perf benchmarks, DB checks, backups, subclass checks, locust load tests).
 - **docs/**: guides, dashboards, and this reference.
+- **monitoring/**: Prometheus/Grafana configs and dashboards.
+- **k8s/**: Kubernetes manifests (app, Redis, Postgres, HPA).
 - **static/**: served assets (legal docs, sample files).
 - **tests/**: pytest suite for routers/services/security/caching/monitoring/notifications/search/e2e; see `tests/README.md`.
+- **go/**: optional realtime gateway (Redis-backed WebSocket fanout).
+- **rust/**: optional PyO3 extension for social economy scoring helpers.
 - **ops**: Dockerfile, docker-compose, Procfile, requirements, README, .env example.
 
 ## Developer Guide
@@ -17,6 +29,7 @@ Single-source reference for architecture, developer guidance, documentation styl
 - **Modules**: domain-specific packages under `app/modules/**` (models, schemas, services, helpers).
 - **Routers**: thin FastAPI routers in `app/routers` depending on services/schemas.
 - **Services**: business logic in `app/services/**` to keep routers slim.
+- **Notifications**: canonical implementations live in `app/modules/notifications/**`; `app/notifications.py` is a compatibility shim for legacy imports.
 
 ### Adding a New Feature
 1. Define models/schemas in the relevant module (or create a new one under `app/modules`).
@@ -26,7 +39,7 @@ Single-source reference for architecture, developer guidance, documentation styl
 
 ### Configuration & Database
 - Import settings from `app.core.config` and DB sessions via `app.core.database.get_db`.
-- Key env vars: `APP_ENV`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, `FORCE_HTTPS`, `STATIC_ROOT`/`UPLOADS_ROOT` (+ cache headers), `REDIS_URL` (optional, degrades gracefully), DB URLs (`DATABASE_URL`/`TEST_DATABASE_URL`), RSA key paths.
+- Key env vars: `APP_ENV`, `CORS_ORIGINS`, `ALLOWED_HOSTS`, `FORCE_HTTPS`, `STATIC_ROOT`/`UPLOADS_ROOT` (+ cache headers), `REDIS_URL` (optional, degrades gracefully), DB URLs (`DATABASE_URL`/`TEST_DATABASE_URL`), RSA key paths (auto-generated in dev/test when missing) or `RSA_PRIVATE_KEY`/`RSA_PUBLIC_KEY` to write key files at startup.
 - Migrations: `alembic revision --autogenerate -m "<msg>"` + `alembic upgrade head`.
 
 ### Testing & Quality Gates
@@ -46,6 +59,7 @@ Single-source reference for architecture, developer guidance, documentation styl
 - Model: `aubmindlab/bert-base-arabertv02`; uses ONNX if `AMENHOTEP_ONNX_PATH` exists, else PyTorch.
 - Export helper: `AmenhotepAI.export_to_onnx()` writes to `data/amenhotep/amenhotep.onnx`.
 - Embeddings cached with TTL/max size to avoid recomputation.
+- Arabic prompts are answered in Modern Standard Arabic; verified facts are summarized when a DB session is available.
 
 ### WebRTC Signaling (Calls)
 - Endpoint: `GET /ws/call/{room_id}?token=<join_token>` with JWT auth.
@@ -106,6 +120,12 @@ Single-source reference for architecture, developer guidance, documentation styl
 - Documentation sweep: added module/class docstrings across core app factory, middleware, cache, search, AI, notifications, messaging, and services; consolidated reference into this document.
 - README expansions: environment loading/secrets, logging rotation/JSON, background jobs, static/uploads hosting, optional AI setup, WebSocket auth, and ops runbook for migrations/cache/workers/observability.
 - Tests: added `tests/README.md` summarizing fixtures/env defaults and notable suites; clarified monitoring/cache guard behavior.
+
+## Next Steps
+- Retire compatibility shims (`app/notifications.py`, `app/utils.py`) after imports migrate to modular packages; delete shims once downstream usages are updated.
+- Decide the fate of social media publishing: either reintroduce a maintained router or drop the unused models/fields that only serve the placeholder integration.
+- Expand coverage for newly added admin/moderation/support workflows and WebSocket edge cases to reduce regression risk.
+- Keep dependency hygiene tight: review Dependabot alerts weekly and run a periodic `pip-audit`/`pip list --outdated` pass before releases.
 
 ## Documentation Roadmap (Completed)
 - Phases 1–22 executed covering inventory, style, DB layer, logging/monitoring, errors/middleware, security/auth, cache/Redis, scheduling/Celery, API/WebSockets, domain models/services/routers, notifications/realtime, messaging/calls, search/caching, media/content safety, AI, static assets, testing/quality gates, operations/runbooks, and final audit.

@@ -1,3 +1,4 @@
+"""SQLAlchemy models for the marketplace domain."""
 # app/modules/marketplace/models.py - Creator marketplace models
 
 from __future__ import annotations

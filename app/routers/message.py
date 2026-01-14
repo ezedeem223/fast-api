@@ -35,7 +35,7 @@ from fastapi import (
 
 # Project modules
 from .. import models, oauth2, schemas
-from ..ai_chat.amenhotep import AmenhotepAI
+from ..ai_chat.amenhotep import get_shared_amenhotep
 
 router = APIRouter(prefix="/message", tags=["Messages"])
 
@@ -469,18 +469,22 @@ async def update_read_status_visibility(
 
 
 @router.websocket("/ws/amenhotep/{user_id}")
-async def amenhotep_chat(websocket: WebSocket, user_id: int):
+async def amenhotep_chat(
+    websocket: WebSocket,
+    user_id: int,
+    db: Session = Depends(get_db),
+):
     """Endpoint: amenhotep_chat."""
     await websocket.accept()
-    amenhotep = AmenhotepAI()
+    amenhotep = await get_shared_amenhotep(websocket.app)
     # Send welcome message
-    await websocket.send_text(amenhotep.get_welcome_message())
+    await websocket.send_text(amenhotep.welcome_message)
     try:
         while True:
             # Receive message from the user
             message = await websocket.receive_text()
             # Get response from Amenhotep AI
-            response_text = await amenhotep.get_response(message)
+            response_text = await amenhotep.get_response(user_id, message, db=db)
             # Send the response back to the user
             await websocket.send_text(response_text)
     except WebSocketDisconnect:

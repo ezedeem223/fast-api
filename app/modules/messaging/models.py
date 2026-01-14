@@ -28,7 +28,7 @@ def _conversation_id_default(context):
     if sender is None or receiver is None:
         return None
     user_a, user_b = sorted((sender, receiver))
-    return f"{user_a}-{user_b}"
+    return f"{user_a}_{user_b}"
 
 
 def _utcnow():
@@ -37,17 +37,20 @@ def _utcnow():
 
 
 class CallType(str, enum.Enum):
+    """Enumeration for CallType."""
     AUDIO = "audio"
     VIDEO = "video"
 
 
 class CallStatus(str, enum.Enum):
+    """Enumeration for CallStatus."""
     PENDING = "pending"
     ONGOING = "ongoing"
     ENDED = "ended"
 
 
 class MessageType(str, enum.Enum):
+    """Enumeration for MessageType."""
     TEXT = "text"
     IMAGE = "image"
     FILE = "file"
@@ -55,17 +58,20 @@ class MessageType(str, enum.Enum):
 
 
 class ScreenShareStatus(str, enum.Enum):
+    """Enumeration for ScreenShareStatus."""
     ACTIVE = "active"
     ENDED = "ended"
     FAILED = "failed"
 
 
 class ConversationType(str, enum.Enum):
+    """Enumeration for ConversationType."""
     DIRECT = "direct"
     GROUP = "group"
 
 
 class ConversationMemberRole(str, enum.Enum):
+    """SQLAlchemy model for ConversationMemberRole."""
     OWNER = "owner"
     ADMIN = "admin"
     MEMBER = "member"

@@ -1,0 +1,11 @@
+resources:
+  - api-configmap.yaml
+  - api-secrets.yaml
+  - rsa-keys-secret.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - api-hpa.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - postgres-service.yaml
+  - postgres-statefulset.yaml

@@ -20,14 +20,17 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 class ReactionBase(BaseModel):
+    """Pydantic schema for ReactionBase."""
     reaction_type: ReactionType
 
 
 class ReactionCreate(ReactionBase):
+    """Pydantic schema for ReactionCreate."""
     post_id: int
 
 
 class Reaction(ReactionBase):
+    """Pydantic schema for Reaction."""
     id: int
     user_id: int
 
@@ -35,11 +38,13 @@ class Reaction(ReactionBase):
 
 
 class ReactionCount(BaseModel):
+    """Pydantic schema for ReactionCount."""
     reaction_type: ReactionType
     count: int
 
 
 class PostVoteStatisticsBase(BaseModel):
+    """Pydantic schema for PostVoteStatisticsBase."""
     total_votes: int
     upvotes: int
     downvotes: int
@@ -52,10 +57,12 @@ class PostVoteStatisticsBase(BaseModel):
 
 
 class PostVoteStatisticsCreate(PostVoteStatisticsBase):
+    """Pydantic schema for PostVoteStatisticsCreate."""
     pass
 
 
 class PostVoteStatistics(PostVoteStatisticsBase):
+    """Pydantic schema for PostVoteStatistics."""
     id: int
     post_id: int
     last_updated: datetime
@@ -64,6 +71,7 @@ class PostVoteStatistics(PostVoteStatisticsBase):
 
 
 class PostVoteAnalytics(BaseModel):
+    """Pydantic schema for PostVoteAnalytics."""
     post_id: int
     title: str
     statistics: PostVoteStatistics
@@ -73,6 +81,7 @@ class PostVoteAnalytics(BaseModel):
 
 
 class UserVoteAnalytics(BaseModel):
+    """Pydantic schema for UserVoteAnalytics."""
     total_posts: int
     total_votes_received: int
     average_votes_per_post: float
@@ -82,14 +91,17 @@ class UserVoteAnalytics(BaseModel):
 
 
 class HashtagBase(BaseModel):
+    """Pydantic schema for HashtagBase."""
     name: str
 
 
 class HashtagCreate(HashtagBase):
+    """Pydantic schema for HashtagCreate."""
     pass
 
 
 class Hashtag(HashtagBase):
+    """Pydantic schema for Hashtag."""
     id: int
     followers_count: int = 0
 
@@ -97,12 +109,14 @@ class Hashtag(HashtagBase):
 
 
 class HashtagStatistics(BaseModel):
+    """Pydantic schema for HashtagStatistics."""
     post_count: int
     follower_count: int
     engagement_rate: float
 
 
 class PostCategoryBase(BaseModel):
+    """Pydantic schema for PostCategoryBase."""
     name: str
     description: Optional[str] = None
     parent_id: Optional[int] = None
@@ -116,10 +130,12 @@ class PostCategoryBase(BaseModel):
 
 
 class PostCategoryCreate(PostCategoryBase):
+    """Pydantic schema for PostCategoryCreate."""
     pass
 
 
 class PostCategory(PostCategoryBase):
+    """Pydantic schema for PostCategory."""
     id: int
     children: List["PostCategory"] = Field(default_factory=list)
 
@@ -130,16 +146,19 @@ PostCategory.model_rebuild()
 
 
 class PollOption(BaseModel):
+    """Pydantic schema for PollOption."""
     id: int
     option_text: str
 
 
 class PollData(BaseModel):
+    """Pydantic schema for PollData."""
     options: List[PollOption]
     end_date: Optional[datetime]
 
 
 class PollCreate(BaseModel):
+    """Pydantic schema for PollCreate."""
     title: str
     description: str
     options: List[str]
@@ -147,6 +166,7 @@ class PollCreate(BaseModel):
 
 
 class PollResults(BaseModel):
+    """Pydantic schema for PollResults."""
     post_id: int
     total_votes: int
     results: List[Dict[str, Union[int, str, float]]]
@@ -155,6 +175,7 @@ class PollResults(BaseModel):
 
 
 class PostBase(BaseModel):
+    """Pydantic schema for PostBase."""
     title: constr(min_length=1, max_length=300)
     content: str
     published: bool = True
@@ -170,6 +191,7 @@ class PostBase(BaseModel):
 
 
 class PostCreate(PostBase):
+    """Pydantic schema for PostCreate."""
     community_id: Optional[int] = None
     hashtags: List[str] = Field(default_factory=list)
     related_to_post_id: Optional[int] = None
@@ -183,6 +205,7 @@ class PostCreate(PostBase):
 
 
 class Post(PostBase):
+    """Pydantic schema for Post."""
     id: int
     created_at: datetime
     owner_id: int
@@ -205,6 +228,7 @@ class PostRelationOut(BaseModel):
 
 
 class PostOut(Post):
+    """Pydantic schema for PostOut."""
     community: Optional["CommunityOutRef"] = None
     privacy_level: PrivacyLevel = PrivacyLevel.PUBLIC
     reactions: List[Reaction] = Field(default_factory=list)
@@ -240,6 +264,7 @@ class PostOut(Post):
 
 
 class EngagementStats(BaseModel):
+    """Pydantic schema for EngagementStats."""
     upvotes: Optional[int]
     downvotes: Optional[int]
     comments: Optional[int]
@@ -248,6 +273,7 @@ class EngagementStats(BaseModel):
 
 
 class SocialPostBase(BaseModel):
+    """Pydantic schema for SocialPostBase."""
     title: Optional[str] = None
     content: str
     media_urls: Optional[List[HttpUrl]] = None
@@ -255,10 +281,12 @@ class SocialPostBase(BaseModel):
 
 
 class SocialPostCreate(SocialPostBase):
+    """Pydantic schema for SocialPostCreate."""
     platform: SocialMediaType
 
 
 class SocialPostUpdate(BaseModel):
+    """Pydantic schema for SocialPostUpdate."""
     title: Optional[str] = None
     content: Optional[str] = None
     media_urls: Optional[List[HttpUrl]] = None
@@ -266,6 +294,7 @@ class SocialPostUpdate(BaseModel):
 
 
 class SocialPostOut(SocialPostBase):
+    """Pydantic schema for SocialPostOut."""
     id: int
     user_id: int
     account_id: int
@@ -280,12 +309,14 @@ class SocialPostOut(SocialPostBase):
 
 
 class PostSearch(BaseModel):
+    """Pydantic schema for PostSearch."""
     keyword: Optional[str] = None
     category_id: Optional[int] = None
     hashtag: Optional[str] = None
 
 
 class LivingTestimonyOut(BaseModel):
+    """Pydantic schema for LivingTestimonyOut."""
     id: int
     post_id: int
     verified_by_user_id: Optional[int] = None
@@ -297,6 +328,7 @@ class LivingTestimonyOut(BaseModel):
 
 
 class CommentStatistics(BaseModel):
+    """Pydantic schema for CommentStatistics."""
     total_comments: int
     top_commenters: List[Tuple[int, str, int]]
     most_commented_posts: List[Tuple[int, str, int]]
@@ -304,10 +336,12 @@ class CommentStatistics(BaseModel):
 
 
 class CommentBase(BaseModel):
+    """Pydantic schema for CommentBase."""
     content: str
 
 
 class CommentCreate(CommentBase):
+    """Pydantic schema for CommentCreate."""
     content: str
     post_id: int
     parent_id: Optional[int] = None
@@ -317,6 +351,7 @@ class CommentCreate(CommentBase):
 
 
 class CommentOut(BaseModel):
+    """Pydantic schema for CommentOut."""
     contains_profanity: bool
     has_invalid_urls: bool
     reported_count: int
@@ -339,14 +374,17 @@ class CommentOut(BaseModel):
 
 
 class FlagCommentRequest(BaseModel):
+    """Pydantic schema for FlagCommentRequest."""
     flag_reason: str = Field(..., min_length=5, max_length=200)
 
 
 class CommentUpdate(CommentBase):
+    """Pydantic schema for CommentUpdate."""
     pass
 
 
 class CommentEditHistoryOut(BaseModel):
+    """Pydantic schema for CommentEditHistoryOut."""
     id: int
     previous_content: str
     edited_at: datetime
@@ -355,6 +393,7 @@ class CommentEditHistoryOut(BaseModel):
 
 
 class Comment(CommentBase):
+    """Pydantic schema for Comment."""
     id: int
     created_at: datetime
     owner_id: int
@@ -371,6 +410,7 @@ class Comment(CommentBase):
 
 
 class TimelinePoint(BaseModel):
+    """Pydantic schema for TimelinePoint."""
     year: int
     month: int
     posts_count: int
@@ -380,6 +420,7 @@ class TimelinePoint(BaseModel):
 
 
 class MemoryItem(BaseModel):
+    """Pydantic schema for MemoryItem."""
     post_id: int
     title: str
     snippet: str

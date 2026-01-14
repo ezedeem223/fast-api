@@ -382,9 +382,9 @@ def calculate_ban_effectiveness():
             .first()
         )
         if yesterday_stats:
-            total_content = db.query(
-                func.count(legacy_models.Post.id) + func.count(legacy_models.Comment.id)
-            ).scalar()
+            total_posts = db.query(func.count(legacy_models.Post.id)).scalar() or 0
+            total_comments = db.query(func.count(legacy_models.Comment.id)).scalar() or 0
+            total_content = total_posts + total_comments
             reported_content = (
                 db.query(func.count(legacy_models.Report.id))
                 .filter(legacy_models.Report.created_at >= yesterday)

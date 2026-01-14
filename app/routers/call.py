@@ -9,6 +9,7 @@ ConnectionManager to fan out realtime events between participants.
 # ==================== Imports ========================
 # =====================================================
 from datetime import datetime, timedelta, timezone
+import inspect
 from typing import List
 
 from fastapi_utils.tasks import repeat_every
@@ -47,7 +48,10 @@ from ..notifications import ConnectionManager
 # =============== Global Variables ====================
 # =====================================================
 router = APIRouter(prefix="/calls", tags=["Calls"])
-manager = ConnectionManager()  # Manages WebSocket connections for calls
+manager = ConnectionManager(
+    registry_prefix="calls:sockets",
+    registry_tag="calls:sockets",
+)  # Manages WebSocket connections for calls
 
 # Interval for updating encryption key (every 30 minutes)
 KEY_UPDATE_INTERVAL = timedelta(minutes=30)
@@ -127,7 +131,10 @@ async def get_active_calls(
     Returns:
       A list of active calls.
     """
-    return service.get_active_calls(current_user=current_user)
+    result = service.get_active_calls(current_user=current_user)
+    if inspect.isawaitable(result):
+        result = await result
+    return result
 
 
 @router.websocket("/ws/{call_id}")
@@ -144,32 +151,40 @@ async def websocket_endpoint(
     Handles real-time data exchange during the call, manages encryption key updates,
     and checks call quality.
     """
-    await websocket.accept()
     try:
         call = db.query(Call).filter(Call.id == call_id).first()
         if not call or current_user.id not in [call.caller_id, call.receiver_id]:
+            # Reject non-participants to avoid leaking call metadata.
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+        connected = await manager.connect(websocket, current_user.id)
+        if connected is False:
+            return
+
+        other_user_id = (
+            call.receiver_id
+            if current_user.id == call.caller_id
+            else call.caller_id
+        )
 
         while True:
             data = await websocket.receive_json()
-            other_user_id = (
-                call.receiver_id
-                if current_user.id == call.caller_id
-                else call.caller_id
-            )
 
+            # Rotate encryption keys and apply quality heuristics on each message batch.
             await _handle_encryption_key_update(call, db, other_user_id)
             await _handle_call_quality(
                 data, call_id, db, current_user.id, other_user_id, background_tasks
             )
-            await _handle_call_data(data, other_user_id, notifications)
+            await _handle_call_data(data, other_user_id)
 
     except WebSocketDisconnect:
+        # On disconnect, update call state and clear quality buffers.
         await _handle_call_disconnect(call, db, other_user_id)
         clean_old_quality_buffers()
     except Exception:
         await websocket.close(code=1011, reason="Internal server error")
+    finally:
+        await manager.disconnect(websocket, current_user.id, reason="disconnect")
 
 
 def update_call_quality(db: Session, call_id: int, quality_score: int):
@@ -190,7 +205,7 @@ async def _handle_encryption_key_update(call, db, other_user_id):
         call.last_key_update = datetime.now(timezone.utc)
         db.commit()
         for user_id in [call.caller_id, call.receiver_id]:
-            await notifications.send_real_time_notification(
+            await _send_call_payload(
                 user_id, {"type": "new_encryption_key", "key": new_key}
             )
 
@@ -207,13 +222,13 @@ async def _handle_call_quality(
     if should_adjust_video_quality(call_id):
         recommended_quality = get_recommended_video_quality(call_id)
         for user_id in [current_user_id, other_user_id]:
-            await notifications.send_real_time_notification(
+            await _send_call_payload(
                 user_id,
                 {"type": "adjust_video_quality", "quality": recommended_quality},
             )
 
 
-async def _handle_call_data(data, other_user_id, notifications):
+async def _handle_call_data(data, other_user_id, notification_backend=notifications):
     """Endpoint: _handle_call_data."""
     valid_types = [
         "offer",
@@ -225,7 +240,7 @@ async def _handle_call_data(data, other_user_id, notifications):
         "screen_share_data",
     ]
     if data.get("type") in valid_types:
-        await notifications.send_real_time_notification(other_user_id, data)
+        await _send_call_payload(other_user_id, data, notification_backend)
 
 
 async def _handle_call_disconnect(call, db, other_user_id):
@@ -246,9 +261,19 @@ async def _handle_call_disconnect(call, db, other_user_id):
         active_share.end_time = datetime.now(timezone.utc)
 
     db.commit()
-    await notifications.send_real_time_notification(
+    await _send_call_payload(
         other_user_id, {"type": "call_ended", "call_id": call.id}
     )
+
+
+async def _send_call_payload(
+    user_id: int, payload: dict, notification_backend=notifications
+) -> None:
+    """Prefer call sockets; fallback to notifications if no call connection exists."""
+    if manager.active_connections.get(user_id):
+        await manager.send_personal_message(payload, user_id)
+    else:
+        await notification_backend.send_real_time_notification(user_id, payload)
 
 
 # =====================================================

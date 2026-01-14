@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_offensive_classifier():
+    """Helper for  get offensive classifier."""
     global _offensive_classifier
     if _offensive_classifier is not None:
         return _offensive_classifier
@@ -66,6 +67,7 @@ def _get_offensive_classifier():
 
 
 def _get_sentiment_pipeline():
+    """Helper for  get sentiment pipeline."""
     global _sentiment_pipeline
     if _sentiment_pipeline is not None:
         return _sentiment_pipeline
@@ -109,6 +111,7 @@ def detect_language(text: str) -> str:
 
 
 def train_content_classifier():
+    """Helper for train content classifier."""
     X = ["This is a good comment", "Bad comment with profanity", "Normal text here"]
     y = [0, 1, 0]
     vectorizer = CountVectorizer(stop_words=stopwords.words("english"))
@@ -188,6 +191,7 @@ def is_content_offensive(text: str) -> Tuple[bool, float]:
 
 # Provide a callable sentiment_pipeline for backward compatibility.
 def sentiment_pipeline(text: str):
+    """Helper for sentiment pipeline."""
     pipeline_fn = _get_sentiment_pipeline()
     return pipeline_fn(text)
 

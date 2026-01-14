@@ -46,6 +46,7 @@ ACTIVITY_THRESHOLD_VIP = getattr(settings, "COMMUNITY_VIP_THRESHOLD", 1000)
 
 
 class CommunityService:
+    """Service layer for CommunityService."""
     def __init__(self, db: Session):
         self.db = db
         self._translated_fields = ("name", "description")

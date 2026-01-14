@@ -40,6 +40,7 @@ _cached_client: Optional[TypesenseClient] = None
 
 
 def get_typesense_client() -> Optional[TypesenseClient]:
+    """Return typesense client."""
     global _cached_client
     if not settings.typesense_enabled:
         return None

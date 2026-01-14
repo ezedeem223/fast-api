@@ -20,6 +20,7 @@ from .associations import community_tags
 
 
 class CommunityRole(str, enum.Enum):
+    """SQLAlchemy model for CommunityRole."""
     OWNER = "owner"
     ADMIN = "admin"
     MODERATOR = "moderator"
@@ -60,6 +61,7 @@ class Community(Base):
     is_private = Column(Boolean, default=False)
     requires_approval = Column(Boolean, default=False)
     language = Column(String, nullable=False, default="en")
+    # Temporary communities are auto-dissolved based on expires_at.
     is_temporary = Column(
         Boolean, default=False, doc="Marks the community as instant/temporary"
     )

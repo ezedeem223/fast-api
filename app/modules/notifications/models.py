@@ -28,13 +28,16 @@ def _jsonb_type():
 
 
 class NotificationStatus(str, enum.Enum):
+    """Enumeration for NotificationStatus."""
     PENDING = "pending"
     DELIVERED = "delivered"
     FAILED = "failed"
     RETRYING = "retrying"
+    PERMANENTLY_FAILED = "permanently_failed"
 
 
 class NotificationPriority(str, enum.Enum):
+    """SQLAlchemy model for NotificationPriority."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -42,6 +45,7 @@ class NotificationPriority(str, enum.Enum):
 
 
 class NotificationCategory(str, enum.Enum):
+    """SQLAlchemy model for NotificationCategory."""
     SYSTEM = "system"
     SOCIAL = "social"
     SECURITY = "security"
@@ -50,6 +54,7 @@ class NotificationCategory(str, enum.Enum):
 
 
 class NotificationType(str, enum.Enum):
+    """Enumeration for NotificationType."""
     NEW_FOLLOWER = "new_follower"
     NEW_COMMENT = "new_comment"
     NEW_REACTION = "new_reaction"
@@ -131,6 +136,7 @@ class Notification(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     related_id = Column(Integer)
+    # Flexible payloads for clients/analytics without schema churn.
     notification_metadata = Column(_jsonb_type(), default={})
     group_id = Column(Integer, ForeignKey("notification_groups.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=timestamp_default())
@@ -150,6 +156,7 @@ class Notification(Base):
     priority_level = Column(Integer, default=1)
     expiration_date = Column(DateTime(timezone=True), nullable=True)
     delivery_tracking = Column(_jsonb_type(), default={})
+    # Retry/backoff settings used by workers and schedulers.
     retry_strategy = Column(String, nullable=True)
     max_retries = Column(Integer, default=3)
     current_retry_count = Column(Integer, default=0)

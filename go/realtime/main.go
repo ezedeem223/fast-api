@@ -1,3 +1,4 @@
+// Package main provides a Redis-backed WebSocket fanout gateway.
 package main
 
 import (
@@ -13,10 +14,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Allow cross-origin WS connections; enforce auth at the API gateway if needed.
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+// hub tracks live connections and broadcasts payloads to all clients.
 type hub struct {
 	clients map[*websocket.Conn]struct{}
 	mu      sync.RWMutex
@@ -54,6 +57,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Read Redis Pub/Sub settings for external fanout.
 	redisURL := getenv("REDIS_URL", "redis://localhost:6379/0")
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {

@@ -24,18 +24,21 @@ from app.core.db_defaults import timestamp_default
 
 
 class BlockDuration(enum.Enum):
+    """SQLAlchemy model for BlockDuration."""
     HOURS = "hours"
     DAYS = "days"
     WEEKS = "weeks"
 
 
 class BlockType(str, enum.Enum):
+    """Enumeration for BlockType."""
     FULL = "full"
     PARTIAL_COMMENT = "partial_comment"
     PARTIAL_MESSAGE = "partial_message"
 
 
 class AppealStatus(str, enum.Enum):
+    """Enumeration for AppealStatus."""
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"

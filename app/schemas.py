@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 # Imports
 # ================================================================
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, conint
+from fastapi import UploadFile
 
 from app.modules.community.schemas import *  # noqa: F401,F403
 from app.modules.community.schemas import (
@@ -118,6 +119,7 @@ from app.modules.users.schemas import UserContentOut, UserOut, UserRoleUpdate
 # Schemas related to screen sharing sessions and appeal processes.
 # ================================================================
 class VerificationStatus(str, Enum):
+    """Pydantic schema for VerificationStatus."""
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -129,6 +131,7 @@ class VerificationStatus(str, Enum):
 # ================================================================
 # Business registration model
 class BusinessRegistration(BaseModel):
+    """Pydantic schema for BusinessRegistration."""
     business_name: str
     business_registration_number: str
     bank_account_info: str
@@ -136,6 +139,7 @@ class BusinessRegistration(BaseModel):
 
 # Follow statistics model
 class FollowStatistics(BaseModel):
+    """Pydantic schema for FollowStatistics."""
     followers_count: int
     following_count: int
     daily_growth: Dict[date, int]
@@ -144,6 +148,7 @@ class FollowStatistics(BaseModel):
 
 # Copyright types for posts
 class CopyrightType(str, Enum):
+    """Pydantic schema for CopyrightType."""
     ALL_RIGHTS_RESERVED = "all_rights_reserved"
     CREATIVE_COMMONS = "creative_commons"
     PUBLIC_DOMAIN = "public_domain"
@@ -154,13 +159,39 @@ class CopyrightType(str, Enum):
 # Schemas for business verification and comment statistics.
 # ================================================================
 class BusinessVerificationUpdate(BaseModel):
-    id_document: Any  # Expected to be an UploadFile (from fastapi)
+    """Pydantic schema for BusinessVerificationUpdate."""
+    id_document: Any
     passport: Any
     business_document: Any
     selfie: Any
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class BusinessVerificationDecision(BaseModel):
+    """Pydantic schema for BusinessVerificationDecision."""
+    status: VerificationStatus
+    note: Optional[str] = None
+
+
+class BusinessVerificationRequestOut(BaseModel):
+    """Pydantic schema for BusinessVerificationRequestOut."""
+    id: int
+    email: EmailStr
+    business_name: Optional[str] = None
+    business_registration_number: Optional[str] = None
+    id_document_url: Optional[str] = None
+    passport_url: Optional[str] = None
+    business_document_url: Optional[str] = None
+    selfie_url: Optional[str] = None
+    verification_status: VerificationStatus
+    is_verified_business: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class BusinessUserOut(BaseModel):
+    """Pydantic schema for BusinessUserOut."""
     business_name: str
     business_registration_number: str
     verification_status: VerificationStatus
@@ -170,11 +201,13 @@ class BusinessUserOut(BaseModel):
 
 
 class BusinessTransactionCreate(BaseModel):
+    """Pydantic schema for BusinessTransactionCreate."""
     client_user_id: int
     amount: float
 
 
 class BusinessTransactionOut(BaseModel):
+    """Pydantic schema for BusinessTransactionOut."""
     id: int
     business_user: "UserOut"
     client_user: "UserOut"
@@ -201,16 +234,19 @@ class BusinessTransactionOut(BaseModel):
 
 # Models for encrypted calls (voice/video)
 class EncryptedCallCreate(BaseModel):
+    """Pydantic schema for EncryptedCallCreate."""
     receiver_id: int
     call_type: str
 
 
 class EncryptedCallUpdate(BaseModel):
+    """Pydantic schema for EncryptedCallUpdate."""
     quality_score: Optional[int] = None
     is_active: Optional[bool] = None
 
 
 class EncryptedCallOut(BaseModel):
+    """Pydantic schema for EncryptedCallOut."""
     id: int
     caller_id: int
     receiver_id: int
@@ -227,20 +263,24 @@ class EncryptedCallOut(BaseModel):
 # Schemas for articles, communities, and reels content.
 # ================================================================
 class ArticleBase(BaseModel):
+    """Pydantic schema for ArticleBase."""
     title: str
     content: str
 
 
 # Extend community create schema locally to keep legacy rule payload support.
 class CommunityCreate(CommunityCreateBase):
+    """Pydantic schema for CommunityCreate."""
     rules: Optional[List["CommunityRuleCreate"]] = Field(default_factory=list)
 
 
 class CommunityOut(CommunityOutBase):
+    """Pydantic schema for CommunityOut."""
     category: Optional["Category"] = None
 
 
 class ReelBase(BaseModel):
+    """Pydantic schema for ReelBase."""
     title: str
     video_url: str
     description: Optional[str] = None
@@ -251,6 +291,7 @@ class ReelBase(BaseModel):
 
 # Repost statistics model
 class RepostStatisticsOut(BaseModel):
+    """Pydantic schema for RepostStatisticsOut."""
     post_id: int
     repost_count: int
     last_reposted: datetime
@@ -260,6 +301,7 @@ class RepostStatisticsOut(BaseModel):
 
 # Settings for reposting posts
 class RepostSettings(BaseModel):
+    """Pydantic schema for RepostSettings."""
     scope: str = "public"
     community_id: Optional[int] = None
     visibility: Optional[str] = "all_members"
@@ -268,16 +310,19 @@ class RepostSettings(BaseModel):
 
 # Model for creating reposts (extends PostCreate later)
 class RepostCreate(BaseModel):
+    """Pydantic schema for RepostCreate."""
     repost_settings: Optional[RepostSettings] = None
 
 
 # Preferences for notification updates
 # Amenhotep (chatbot or analytics) models
 class AmenhotepMessageCreate(BaseModel):
+    """Pydantic schema for AmenhotepMessageCreate."""
     message: str
 
 
 class AmenhotepMessageOut(BaseModel):
+    """Pydantic schema for AmenhotepMessageOut."""
     id: int
     user_id: int
     message: str
@@ -288,6 +333,7 @@ class AmenhotepMessageOut(BaseModel):
 
 
 class AmenhotepAnalyticsBase(BaseModel):
+    """Pydantic schema for AmenhotepAnalyticsBase."""
     session_id: str
     total_messages: int
     topics_discussed: List[str]
@@ -296,10 +342,12 @@ class AmenhotepAnalyticsBase(BaseModel):
 
 
 class AmenhotepAnalyticsCreate(AmenhotepAnalyticsBase):
+    """Pydantic schema for AmenhotepAnalyticsCreate."""
     user_id: int
 
 
 class AmenhotepAnalyticsOut(AmenhotepAnalyticsBase):
+    """Pydantic schema for AmenhotepAnalyticsOut."""
     id: int
     created_at: datetime
 
@@ -307,6 +355,7 @@ class AmenhotepAnalyticsOut(AmenhotepAnalyticsBase):
 
 
 class AmenhotepSessionSummary(BaseModel):
+    """Pydantic schema for AmenhotepSessionSummary."""
     total_sessions: int
     average_duration: float
     most_discussed_topics: List[str]
@@ -314,6 +363,7 @@ class AmenhotepSessionSummary(BaseModel):
 
 
 class TopPostStat(BaseModel):
+    """Pydantic schema for TopPostStat."""
     id: int
     title: Optional[str] = None
     votes: int
@@ -323,6 +373,7 @@ class TopPostStat(BaseModel):
 
 
 class TopUserStat(BaseModel):
+    """Pydantic schema for TopUserStat."""
     id: int
     email: Optional[EmailStr] = None
     username: Optional[str] = None
@@ -338,11 +389,13 @@ class TopUserStat(BaseModel):
 # Schemas for social account integration and social posts.
 # ================================================================
 class SocialMediaType(str, Enum):
+    """Pydantic schema for SocialMediaType."""
     REDDIT = "reddit"
     LINKEDIN = "linkedin"
 
 
 class PostStatus(str, Enum):
+    """Pydantic schema for PostStatus."""
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     PUBLISHED = "published"
@@ -351,15 +404,18 @@ class PostStatus(str, Enum):
 
 # Base model for a social account
 class SocialAccountBase(BaseModel):
+    """Pydantic schema for SocialAccountBase."""
     platform: SocialMediaType
     account_username: Optional[str] = None
 
 
 class SocialAccountCreate(SocialAccountBase):
+    """Pydantic schema for SocialAccountCreate."""
     pass
 
 
 class SocialAccountOut(SocialAccountBase):
+    """Pydantic schema for SocialAccountOut."""
     id: int
     user_id: int
     is_active: bool
@@ -384,15 +440,18 @@ class SocialAccountOut(SocialAccountBase):
 
 
 class InitialKeyExchange(BaseModel):
+    """Pydantic schema for InitialKeyExchange."""
     user_id: int
     public_key: str
 
 
 class KeyExchange(BaseModel):
+    """Pydantic schema for KeyExchange."""
     public_key: str
 
 
 class DecryptedMessage(BaseModel):
+    """Pydantic schema for DecryptedMessage."""
     id: int
     sender_id: int
     receiver_id: int
@@ -405,6 +464,7 @@ class DecryptedMessage(BaseModel):
 
 
 class SessionKeyUpdate(BaseModel):
+    """Pydantic schema for SessionKeyUpdate."""
     session_id: int
     new_public_key: str
 
@@ -414,11 +474,14 @@ class SessionKeyUpdate(BaseModel):
 # Schemas for handling JWT tokens.
 # ================================================================
 class Token(BaseModel):
+    """Pydantic schema for Token."""
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str
 
 
 class TokenData(BaseModel):
+    """Pydantic schema for TokenData."""
     id: Optional[int] = None
 
 
@@ -427,11 +490,13 @@ class TokenData(BaseModel):
 # Schemas for voting on posts.
 # ================================================================
 class Vote(BaseModel):
+    """Pydantic schema for Vote."""
     post_id: int
     dir: conint(le=1)
 
 
 class VoterOut(BaseModel):
+    """Pydantic schema for VoterOut."""
     id: int
     username: str
     email: EmailStr
@@ -440,6 +505,7 @@ class VoterOut(BaseModel):
 
 
 class VotersListOut(BaseModel):
+    """Pydantic schema for VotersListOut."""
     voters: List[VoterOut]
     total_count: int
 
@@ -452,6 +518,7 @@ class VotersListOut(BaseModel):
 # All community domain schemas are re-exported from app.modules.community.schemas.
 #
 class TranslationRequest(BaseModel):
+    """Pydantic schema for TranslationRequest."""
     text: str
     source_lang: str
     target_lang: str
@@ -471,10 +538,12 @@ PostCategorySchema = PostCategory
 
 
 class EncryptedSessionCreate(BaseModel):
+    """Pydantic schema for EncryptedSessionCreate."""
     other_user_id: int
 
 
 class EncryptedSessionOut(BaseModel):
+    """Pydantic schema for EncryptedSessionOut."""
     id: int
     user_id: int
     other_user_id: int
@@ -484,6 +553,7 @@ class EncryptedSessionOut(BaseModel):
 
 
 class EncryptedSessionUpdate(BaseModel):
+    """Pydantic schema for EncryptedSessionUpdate."""
     root_key: str
     chain_key: str
     next_header_key: str
@@ -513,10 +583,12 @@ class EncryptedSessionUpdate(BaseModel):
 # Schemas for creating and representing articles.
 # ================================================================
 class ArticleCreate(ArticleBase):
+    """Pydantic schema for ArticleCreate."""
     community_id: int
 
 
 class Article(ArticleBase):
+    """Pydantic schema for Article."""
     id: int
     created_at: datetime
     author_id: int
@@ -527,6 +599,7 @@ class Article(ArticleBase):
 
 
 class ArticleOut(Article):
+    """Pydantic schema for ArticleOut."""
     community: CommunityOutRef
 
     model_config = ConfigDict(from_attributes=True)
@@ -537,11 +610,13 @@ class ArticleOut(Article):
 # Schemas for creating and representing reels.
 # ================================================================
 class ReelCreate(ReelBase):
+    """Pydantic schema for ReelCreate."""
     community_id: int
     expires_in_hours: int = Field(default=24, ge=1, le=168)
 
 
 class Reel(ReelBase):
+    """Pydantic schema for Reel."""
     id: int
     created_at: datetime
     owner_id: int
@@ -555,6 +630,7 @@ class Reel(ReelBase):
 
 
 class ReelOut(Reel):
+    """Pydantic schema for ReelOut."""
     community: CommunityOutRef
 
     model_config = ConfigDict(from_attributes=True)
@@ -569,14 +645,17 @@ class ReelOut(Reel):
 # Schemas for two-factor authentication processes.
 # ================================================================
 class Enable2FAResponse(BaseModel):
+    """Pydantic schema for Enable2FAResponse."""
     otp_secret: str
 
 
 class Verify2FARequest(BaseModel):
+    """Pydantic schema for Verify2FARequest."""
     otp: str
 
 
 class Verify2FAResponse(BaseModel):
+    """Pydantic schema for Verify2FAResponse."""
     message: str
 
 

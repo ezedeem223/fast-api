@@ -1,3 +1,4 @@
+"""SQLAlchemy models for the fact_checking domain."""
 # app/modules/fact_checking/models.py
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from app.core.database import Base
 
 
 class FactCheckStatus(str, enum.Enum):
+    """Enumeration for FactCheckStatus."""
     PENDING = "pending"
     VERIFIED = "verified"
     PARTIALLY_TRUE = "partially_true"
@@ -42,6 +44,7 @@ class Fact(Base):
     submitter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     status = Column(Enum(FactCheckStatus), default=FactCheckStatus.PENDING, index=True)
+    # Aggregated signals updated by verification/vote services.
     verification_score = Column(Float, default=0.0)
     community_consensus = Column(Float, default=0.0)
 
@@ -49,6 +52,7 @@ class Fact(Base):
     evidence_links = Column(JSON, default=[])
     sources = Column(JSON, default=[])
 
+    # Cached counters to avoid heavy aggregation on reads.
     verification_count = Column(Integer, default=0)
     support_votes = Column(Integer, default=0)
     oppose_votes = Column(Integer, default=0)

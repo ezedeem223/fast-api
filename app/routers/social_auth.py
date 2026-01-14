@@ -220,6 +220,7 @@ async def social_callback(
         A JSON object with a success message.
     """
     if platform == schemas.SocialMediaType.REDDIT:
+        # Exchange the OAuth code for tokens and capture the profile identity.
         token = await oauth.reddit.authorize_access_token(request)
         resp = await oauth.reddit.get("me")
         profile = resp.json()
@@ -233,6 +234,7 @@ async def social_callback(
             account_username=profile["name"],
         )
     elif platform == schemas.SocialMediaType.LINKEDIN:
+        # LinkedIn returns localized names; persist a display-friendly username.
         token = await oauth.linkedin.authorize_access_token(request)
         resp = await oauth.linkedin.get("me")
         profile = resp.json()
@@ -248,6 +250,7 @@ async def social_callback(
     else:
         raise HTTPException(status_code=400, detail="Unsupported platform callback")
 
+    # Persist the linked account for the current user.
     db.add(account)
     db.commit()
     db.refresh(account)

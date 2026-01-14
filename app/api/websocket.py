@@ -114,17 +114,12 @@ async def _safe_close(websocket: WebSocket, *, code: int, reason: str) -> None:
         logger.debug("Ignoring websocket close error for testing/mocks.")
 
 
-@router.websocket("/ws/{user_id}")
-async def websocket_endpoint(
+async def _notifications_socket(
     websocket: WebSocket,
     user_id: int,
-    token: Optional[str] = Query(None, description="Bearer token for socket auth"),
+    token: Optional[str],
 ):
-    """Handle websocket connections for notification streaming.
-
-    Message shape forwarded to clients mirrors input: payloads are forwarded back to the same user
-    via send_real_time_notification (manager.send_personal_message).
-    """
+    """Shared notification socket handler for both legacy and new routes."""
     authenticated_user = await _authenticate_websocket(websocket, user_id, token)
     if authenticated_user is None:
         return
@@ -154,6 +149,30 @@ async def websocket_endpoint(
         logger.exception("WebSocket error for user_id=%s: %s", authenticated_user, exc)
         await manager.disconnect(websocket, authenticated_user, reason="error")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+
+
+@router.websocket("/ws/notify/{user_id}")
+async def websocket_notifications(
+    websocket: WebSocket,
+    user_id: int,
+    token: Optional[str] = Query(None, description="Bearer token for socket auth"),
+):
+    """Preferred notifications WebSocket endpoint (new path)."""
+    await _notifications_socket(websocket, user_id, token)
+
+
+@router.websocket("/ws/{user_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: int,
+    token: Optional[str] = Query(None, description="Bearer token for socket auth"),
+):
+    """Handle websocket connections for notification streaming.
+
+    Message shape forwarded to clients mirrors input: payloads are forwarded back to the same user
+    via send_real_time_notification (manager.send_personal_message).
+    """
+    await _notifications_socket(websocket, user_id, token)
 
 
 __all__ = ["router"]

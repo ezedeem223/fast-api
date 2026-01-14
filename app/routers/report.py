@@ -16,6 +16,7 @@ def create_report(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user),
 ):
+    """Create report."""
     return submit_report(
         db,
         current_user,

@@ -22,7 +22,7 @@ from fastapi import (
 
 # Local imports
 from .. import models, oauth2, schemas
-from ..ai_chat.amenhotep import AmenhotepAI
+from ..ai_chat.amenhotep import get_shared_amenhotep
 
 # =====================================================
 # =============== Global Variables ====================
@@ -33,8 +33,16 @@ DEFAULT_FALLBACK_LANG = "en"
 
 
 class AmenhotepAskRequest(BaseModel):
+    """Class AmenhotepAskRequest."""
     message: str = Field(..., min_length=1)
     language: str | None = None
+
+
+async def _safe_get_response(bot, user_id: int, message: str, db: Session | None):
+    try:
+        return await bot.get_response(user_id, message, db=db)
+    except TypeError:
+        return await bot.get_response(user_id, message)
 
 
 # =====================================================
@@ -70,8 +78,8 @@ async def websocket_endpoint(
         await websocket.accept()
         logger.info(f"New WebSocket connection established for user {user_id}")
 
-        # Initialize Amenhotep AI (using the imported class)
-        amenhotep = AmenhotepAI()
+        # Initialize shared Amenhotep AI instance.
+        amenhotep = await get_shared_amenhotep(websocket.app)
 
         # Send welcome message
         await websocket.send_text(amenhotep.welcome_message)
@@ -95,7 +103,7 @@ async def websocket_endpoint(
                 logger.debug(f"Message saved to database for user {user_id}")
 
                 # Get response from Amenhotep AI (note: get_response expects user_id and message)
-                response = await amenhotep.get_response(user_id, message)
+                response = await _safe_get_response(amenhotep, user_id, message, db)
                 logger.debug(f"Generated response for user {user_id}: {response}")
 
                 # Update the database record with the AI response
@@ -206,20 +214,29 @@ async def clear_chat_history(
 
 
 class MessageRouter:
+    """Class MessageRouter."""
     def __init__(self):
-        self.amenhotep = AmenhotepAI()
+        self.amenhotep = None
 
     @router.websocket("/ws/amenhotep/{user_id}")
-    async def amenhotep_chat(self, websocket: WebSocket, user_id: int):
+    async def amenhotep_chat(
+        self,
+        websocket: WebSocket,
+        user_id: int,
+        db: Session = Depends(get_db),
+    ):
         """Endpoint: amenhotep_chat."""
         try:
             await websocket.accept()
+            self.amenhotep = await get_shared_amenhotep(websocket.app)
             # Send welcome message
             await websocket.send_text(self.amenhotep.welcome_message)
             while True:
                 message = await websocket.receive_text()
                 # Call get_response with both user_id and message
-                response = await self.amenhotep.get_response(user_id, message)
+                response = await _safe_get_response(
+                    self.amenhotep, user_id, message, db
+                )
                 await websocket.send_text(response)
         except WebSocketDisconnect:
             logger.info(f"User {user_id} disconnected from Amenhotep chat")
@@ -247,8 +264,8 @@ async def ask_amenhotep(
     preferred = payload.language or getattr(current_user, "preferred_language", None)
     language = preferred if preferred in i18n.ALL_LANGUAGES else default_lang
 
-    bot = AmenhotepAI()
-    response = await bot.get_response(current_user.id, message)
+    bot = await get_shared_amenhotep(request.app)
+    response = await _safe_get_response(bot, current_user.id, message, db)
 
     record = models.AmenhotepMessage(
         user_id=current_user.id, message=message, response=response

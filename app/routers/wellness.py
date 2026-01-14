@@ -19,12 +19,14 @@ router = APIRouter(prefix="/wellness", tags=["Wellness"])
 
 
 class WellnessGoalRequest(BaseModel):
+    """Class WellnessGoalRequest."""
     goal_type: str
     target_value: float
     target_date: Optional[str] = None
 
 
 class DoNotDisturbRequest(BaseModel):
+    """Class DoNotDisturbRequest."""
     duration_minutes: int
 
 
@@ -51,6 +53,7 @@ async def create_wellness_goal(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Create wellness goal."""
     """ """
     goal = WellnessService.set_wellness_goal(
         db=db,
@@ -67,6 +70,7 @@ async def enable_do_not_disturb(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for enable do not disturb."""
     """ """
     mode = WellnessService.enable_do_not_disturb(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes
@@ -80,6 +84,7 @@ async def enable_mental_health_mode(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for enable mental health mode."""
     """ """
     mode = WellnessService.enable_mental_health_mode(
         db=db, user_id=current_user.id, duration_minutes=request.duration_minutes

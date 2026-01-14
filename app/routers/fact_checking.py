@@ -17,6 +17,7 @@ router = APIRouter(prefix="/fact-checking", tags=["Fact Checking"])
 
 
 class FactSubmitRequest(BaseModel):
+    """Class FactSubmitRequest."""
     claim: str
     description: Optional[str] = None
     evidence_links: Optional[List[str]] = None
@@ -24,6 +25,7 @@ class FactSubmitRequest(BaseModel):
 
 
 class FactVerifyRequest(BaseModel):
+    """Class FactVerifyRequest."""
     verdict: FactCheckStatus
     confidence_score: float
     explanation: Optional[str] = None
@@ -31,15 +33,18 @@ class FactVerifyRequest(BaseModel):
 
 
 class FactCorrectionRequest(BaseModel):
+    """Class FactCorrectionRequest."""
     corrected_claim: str
     reason: Optional[str] = None
 
 
 class FactVoteRequest(BaseModel):
+    """Class FactVoteRequest."""
     vote_type: str  # "support" or "oppose"
 
 
 class FactOverrideRequest(BaseModel):
+    """Class FactOverrideRequest."""
     status: FactCheckStatus
     note: Optional[str] = None
 
@@ -53,6 +58,7 @@ async def submit_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for submit fact."""
     """ """
     fact = FactCheckingService.submit_fact(
         db=db,
@@ -77,6 +83,7 @@ async def verify_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for verify fact."""
     """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
@@ -106,6 +113,7 @@ async def correct_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for correct fact."""
     """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
@@ -132,6 +140,7 @@ async def vote_on_fact(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Helper for vote on fact."""
     """ """
     fact = FactCheckingService.get_fact_by_id(db, fact_id)
     if not fact:
@@ -170,6 +179,7 @@ async def list_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    """List facts."""
     """ """
     if status:
         facts = FactCheckingService.get_facts_by_status(db, status, skip, limit)
@@ -194,6 +204,7 @@ async def search_facts(
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    """Helper for search facts."""
     """ """
     facts = FactCheckingService.search_facts(db, q, skip, limit)
     return [

@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 import redis
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from dotenv import load_dotenv
 from fastapi_mail import ConnectionConfig
 from pydantic import ConfigDict, EmailStr, PrivateAttr
@@ -113,6 +115,7 @@ class Settings(BaseSettings):
 
     secret_key: str = os.getenv("SECRET_KEY")
     algorithm: str = os.getenv("ALGORITHM")
+    refresh_algorithm: str = os.getenv("REFRESH_ALGORITHM", "HS256")
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
     google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "default_google_client_id")
@@ -140,6 +143,20 @@ class Settings(BaseSettings):
 
     huggingface_api_token: Optional[str] = os.getenv("HUGGINGFACE_API_TOKEN")
     refresh_secret_key: Optional[str] = os.getenv("REFRESH_SECRET_KEY")
+    refresh_token_expire_minutes: int = int(
+        os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7))
+    )
+    otp_encryption_key: Optional[str] = os.getenv("OTP_ENCRYPTION_KEY")
+    password_strength_min_score: int = int(
+        os.getenv("PASSWORD_STRENGTH_MIN_SCORE", "3")
+    )
+    password_strength_required: bool = _env_flag(
+        "PASSWORD_STRENGTH_REQUIRED", default=True
+    )
+    global_rate_limit: str = os.getenv("GLOBAL_RATE_LIMIT", "100/minute")
+    jwt_key_id: Optional[str] = os.getenv("JWT_KEY_ID")
+    jwt_private_keys: Optional[str] = os.getenv("JWT_PRIVATE_KEYS")
+    jwt_public_keys: Optional[str] = os.getenv("JWT_PUBLIC_KEYS")
     default_language: str = os.getenv("DEFAULT_LANGUAGE", "ar")
     followers_visibility: str = os.getenv("FOLLOWERS_VISIBILITY", "public")
     followers_custom_visibility: dict[str, Any] = {}
@@ -201,6 +218,8 @@ class Settings(BaseSettings):
 
     _rsa_private_key: str = PrivateAttr()
     _rsa_public_key: str = PrivateAttr()
+    _jwt_private_keys_map: dict[str, str] = PrivateAttr(default_factory=dict)
+    _jwt_public_keys_map: dict[str, str] = PrivateAttr(default_factory=dict)
 
     redis_client: ClassVar[redis.Redis] = None
 
@@ -209,10 +228,26 @@ class Settings(BaseSettings):
         env_override = os.getenv("APP_ENV")
         if env_override:
             object.__setattr__(self, "environment", env_override)
-        self._rsa_private_key = self._read_key_file(
-            self.rsa_private_key_path, "private"
+        self._rsa_private_key, self._rsa_public_key = self._load_or_generate_rsa_keys()
+        private_fallback = self._rsa_private_key
+        public_fallback = self._rsa_public_key
+        if self.algorithm and self.algorithm.upper().startswith("HS") and self.secret_key:
+            private_fallback = self.secret_key
+            public_fallback = self.secret_key
+        self._jwt_private_keys_map = self._parse_key_map(
+            os.getenv("JWT_PRIVATE_KEYS") or self.jwt_private_keys,
+            private_fallback,
+            "JWT_PRIVATE_KEYS",
         )
-        self._rsa_public_key = self._read_key_file(self.rsa_public_key_path, "public")
+        self._jwt_public_keys_map = self._parse_key_map(
+            os.getenv("JWT_PUBLIC_KEYS") or self.jwt_public_keys,
+            public_fallback,
+            "JWT_PUBLIC_KEYS",
+        )
+        effective_kid = self.jwt_key_id
+        if not effective_kid or effective_kid not in self._jwt_private_keys_map:
+            effective_kid = next(iter(self._jwt_private_keys_map))
+        object.__setattr__(self, "jwt_key_id", effective_kid)
 
         if self.REDIS_URL:
             try:
@@ -388,6 +423,137 @@ class Settings(BaseSettings):
         # Final fallback: keep prior sqlite behavior when no Postgres info is present.
         return "sqlite:///./test.db"
 
+    def _allow_generated_rsa_keys(self) -> bool:
+        """Allow auto-generation of RSA keys for non-production runs or explicit flag."""
+        if os.getenv("ALLOW_GENERATED_RSA_KEYS") == "1":
+            return True
+        env = (self.environment or "").lower()
+        return env in {"development", "dev", "test", "local"}
+
+    def _rsa_paths_explicit(self) -> bool:
+        """Return True when key paths were explicitly set via env or constructor."""
+        fields_set = getattr(self, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(self, "__pydantic_fields_set__", set())
+        if "rsa_private_key_path" in fields_set or "rsa_public_key_path" in fields_set:
+            return True
+        return bool(os.getenv("RSA_PRIVATE_KEY_PATH") or os.getenv("RSA_PUBLIC_KEY_PATH"))
+
+    @staticmethod
+    def _resolve_key_path(filename: str) -> Path:
+        raw_path = Path(filename)
+        if raw_path.is_absolute():
+            return raw_path.resolve()
+        return (BASE_DIR / raw_path).resolve()
+
+    @staticmethod
+    def _key_file_present(path: Path) -> bool:
+        return path.exists() and path.is_file() and path.stat().st_size > 0
+
+    @staticmethod
+    def _write_key_file(path: Path, key_data: str, key_type: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(key_data, encoding="utf-8")
+        logger.info("Generated %s RSA key at %s", key_type, path)
+
+    @staticmethod
+    def _generate_rsa_keypair() -> tuple[str, str]:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode("utf-8")
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("utf-8")
+        return private_pem, public_pem
+
+    @staticmethod
+    def _derive_public_key(private_pem: str) -> str:
+        private_key = serialization.load_pem_private_key(
+            private_pem.encode("utf-8"), password=None
+        )
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("utf-8")
+        return public_pem
+
+    @staticmethod
+    def _normalize_pem_env(value: str) -> str:
+        cleaned = value.strip()
+        if "\\n" in cleaned and "\n" not in cleaned:
+            cleaned = cleaned.replace("\\n", "\n")
+        return cleaned
+
+    def _load_or_generate_rsa_keys(self) -> tuple[str, str]:
+        """Load RSA keys or generate them for dev/test if missing."""
+        private_path = self._resolve_key_path(self.rsa_private_key_path)
+        public_path = self._resolve_key_path(self.rsa_public_key_path)
+
+        env_private = os.getenv("RSA_PRIVATE_KEY") or os.getenv("RSA_PRIVATE_KEY_PEM")
+        env_public = os.getenv("RSA_PUBLIC_KEY") or os.getenv("RSA_PUBLIC_KEY_PEM")
+        if env_private:
+            private_key = self._normalize_pem_env(env_private)
+            public_key = (
+                self._normalize_pem_env(env_public)
+                if env_public
+                else self._derive_public_key(private_key)
+            )
+            self._write_key_file(private_path, private_key, "private")
+            self._write_key_file(public_path, public_key, "public")
+            return private_key, public_key
+        if env_public and not env_private:
+            logger.error("RSA_PUBLIC_KEY provided without RSA_PRIVATE_KEY.")
+            raise ValueError("RSA_PRIVATE_KEY is required when RSA_PUBLIC_KEY is provided.")
+
+        private_present = self._key_file_present(private_path)
+        public_present = self._key_file_present(public_path)
+        explicit_paths = self._rsa_paths_explicit()
+
+        if explicit_paths and not (private_present and public_present):
+            # When the caller explicitly sets key paths, missing files are errors.
+            if not private_present:
+                self._read_key_file(str(private_path), "private")
+            if not public_present:
+                self._read_key_file(str(public_path), "public")
+
+        if private_present and public_present:
+            private_key = self._read_key_file(str(private_path), "private")
+            public_key = self._read_key_file(str(public_path), "public")
+            return private_key, public_key
+
+        if not self._allow_generated_rsa_keys():
+            private_key = self._read_key_file(str(private_path), "private")
+            public_key = self._read_key_file(str(public_path), "public")
+            return private_key, public_key
+
+        if private_present:
+            private_key = self._read_key_file(str(private_path), "private")
+            public_key = self._derive_public_key(private_key)
+            self._write_key_file(public_path, public_key, "public")
+            logger.warning(
+                "RSA public key was regenerated from the private key for %s",
+                public_path,
+            )
+            return private_key, public_key
+
+        private_key, public_key = self._generate_rsa_keypair()
+        if public_present:
+            logger.warning(
+                "RSA private key missing; overwriting existing public key at %s",
+                public_path,
+            )
+        self._write_key_file(private_path, private_key, "private")
+        self._write_key_file(public_path, public_key, "public")
+        logger.warning(
+            "RSA keypair generated for non-production environment (%s).",
+            self.environment,
+        )
+        return private_key, public_key
+
     def _read_key_file(self, filename: str, key_type: str) -> str:
         """Resolve and read RSA key files with repo-root fallback; reject missing/empty keys."""
         if not filename:
@@ -434,6 +600,28 @@ class Settings(BaseSettings):
                 f"Unexpected error reading {key_type} key file: {file_path}, error: {str(e)}"
             )
 
+    def _parse_key_map(
+        self, raw: Optional[str], fallback_key: str, label: str
+    ) -> dict[str, str]:
+        """Parse a JSON map of {kid: key} strings with a fallback to a single default key."""
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception as exc:
+                raise ValueError(f"Invalid {label}: must be JSON object") from exc
+            if not isinstance(parsed, dict) or not parsed:
+                raise ValueError(f"Invalid {label}: must be non-empty JSON object")
+            cleaned: dict[str, str] = {}
+            for kid, key in parsed.items():
+                if not isinstance(kid, str) or not kid.strip():
+                    raise ValueError(f"Invalid {label}: key ids must be strings")
+                if not isinstance(key, str) or not key.strip():
+                    raise ValueError(f"Invalid {label}: key values must be strings")
+                cleaned_key = key.strip().replace("\\n", "\n")
+                cleaned[kid.strip()] = cleaned_key
+            return cleaned
+        return {"default": fallback_key}
+
     @property
     def rsa_private_key(self) -> str:
         return self._rsa_private_key
@@ -441,6 +629,28 @@ class Settings(BaseSettings):
     @property
     def rsa_public_key(self) -> str:
         return self._rsa_public_key
+
+    def get_jwt_key_id(self) -> str:
+        """Return the active JWT key id used for signing tokens."""
+        return self.jwt_key_id or next(iter(self._jwt_private_keys_map))
+
+    def get_jwt_private_key(self, kid: Optional[str] = None) -> str:
+        """Return the private key for a given kid (defaults to active key)."""
+        effective_kid = kid or self.get_jwt_key_id()
+        return self._jwt_private_keys_map.get(
+            effective_kid, next(iter(self._jwt_private_keys_map.values()))
+        )
+
+    def get_jwt_public_key(self, kid: Optional[str] = None) -> str:
+        """Return the public key for a given kid (defaults to active key)."""
+        effective_kid = kid or self.get_jwt_key_id()
+        return self._jwt_public_keys_map.get(
+            effective_kid, next(iter(self._jwt_public_keys_map.values()))
+        )
+
+    def get_jwt_public_keys(self) -> dict[str, str]:
+        """Return a copy of all public keys indexed by kid."""
+        return dict(self._jwt_public_keys_map)
 
     @property
     def redis_url(self) -> Optional[str]:

@@ -12,6 +12,7 @@ from alembic.config import main as alembic_main
 
 
 def main() -> None:
+    """Helper for main."""
     temp_db = Path(".alembic_ci.db")
     os.environ.setdefault("APP_ENV", "test")
 

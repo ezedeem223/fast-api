@@ -1,3 +1,4 @@
+"""SQLAlchemy models for the local_economy domain."""
 # app/modules/local_economy/models.py - Local economy domain models
 
 from __future__ import annotations

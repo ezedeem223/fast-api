@@ -26,6 +26,7 @@ def __getattr__(name: str):
 
 
 def __dir__():
+    """Helper for   dir  ."""
     import importlib
 
     _registry = importlib.import_module("app.models.registry")

@@ -176,6 +176,7 @@ async def advanced_search(
 
     Returns total count and a list of posts formatted as PostOut.
     """
+    # Start with the base query and apply filters conditionally.
     search_query = db.query(models.Post)
 
     if query:
@@ -197,6 +198,7 @@ async def advanced_search(
     if author_id:
         search_query = search_query.filter(models.Post.owner_id == author_id)
 
+    # Count before pagination to keep accurate totals.
     total = search_query.count()
     posts = (
         search_query.order_by(models.Post.created_at.desc())

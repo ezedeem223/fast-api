@@ -1,3 +1,4 @@
+"""Service logic for the fact_checking domain."""
 # app/modules/fact_checking/service.py
 
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from app.modules.fact_checking.models import (
 
 
 class FactCheckingService:
+    """Service layer for FactCheckingService."""
 
     @staticmethod
     def submit_fact(

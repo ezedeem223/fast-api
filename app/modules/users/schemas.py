@@ -15,6 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 class SortOption(str, Enum):
+    """Pydantic schema for SortOption."""
     DATE = "date"
     USERNAME = "username"
     POST_COUNT = "post_count"
@@ -27,16 +28,19 @@ class SortOption(str, Enum):
 
 
 class UserFollowersSettings(BaseModel):
+    """Pydantic schema for UserFollowersSettings."""
     followers_visibility: str
     followers_custom_visibility: Optional[Dict[str, List[int]]] = None
     followers_sort_preference: SortOption = SortOption.RELEVANCE
 
 
 class EmailChange(BaseModel):
+    """Pydantic schema for EmailChange."""
     new_email: EmailStr
 
 
 class SecurityQuestionsSet(BaseModel):
+    """Pydantic schema for SecurityQuestionsSet."""
     question1: str
     answer1: str
     question2: str
@@ -46,27 +50,32 @@ class SecurityQuestionsSet(BaseModel):
 
 
 class SecurityQuestionAnswer(BaseModel):
+    """Pydantic schema for SecurityQuestionAnswer."""
     question: str
     answer: str
 
 
 class FollowingListOut(BaseModel):
+    """Pydantic schema for FollowingListOut."""
     following: List["UserOut"]
     total_count: int
 
 
 class PrivacyLevel(str, Enum):
+    """Pydantic schema for PrivacyLevel."""
     PUBLIC = "public"
     PRIVATE = "private"
     CUSTOM = "custom"
 
 
 class UserPrivacyUpdate(BaseModel):
+    """Pydantic schema for UserPrivacyUpdate."""
     privacy_level: PrivacyLevel
     custom_privacy: Optional[dict] = None
 
 
 class UserProfileUpdate(BaseModel):
+    """Pydantic schema for UserProfileUpdate."""
     profile_image: Optional[HttpUrl] = None
     bio: Optional[str] = None
     location: Optional[str] = None
@@ -76,6 +85,7 @@ class UserProfileUpdate(BaseModel):
 
 
 class UserProfileOut(BaseModel):
+    """Pydantic schema for UserProfileOut."""
     id: int
     email: str
     profile_image: Optional[str] = None
@@ -95,6 +105,7 @@ class UserProfileOut(BaseModel):
 
 
 class UserStatisticsOut(BaseModel):
+    """Pydantic schema for UserStatisticsOut."""
     date: date
     post_count: int
     comment_count: int
@@ -105,6 +116,7 @@ class UserStatisticsOut(BaseModel):
 
 
 class UserAnalytics(BaseModel):
+    """Pydantic schema for UserAnalytics."""
     total_posts: int
     total_comments: int
     total_likes: int
@@ -115,18 +127,21 @@ class UserAnalytics(BaseModel):
 
 
 class UISettings(BaseModel):
+    """Pydantic schema for UISettings."""
     theme: Optional[str] = "light"
     language: Optional[str] = "en"
     font_size: Optional[str] = "medium"
 
 
 class NotificationsSettings(BaseModel):
+    """Pydantic schema for NotificationsSettings."""
     email_notifications: bool = True
     push_notifications: bool = True
     newsletter: bool = True
 
 
 class UserWarningOut(BaseModel):
+    """Pydantic schema for UserWarningOut."""
     id: int
     user_id: int
     reason: str
@@ -136,6 +151,7 @@ class UserWarningOut(BaseModel):
 
 
 class UserBanOut(BaseModel):
+    """Pydantic schema for UserBanOut."""
     id: int
     user_id: int
     reason: str
@@ -146,31 +162,37 @@ class UserBanOut(BaseModel):
 
 
 class UserBase(BaseModel):
+    """Pydantic schema for UserBase."""
     email: EmailStr
     interests: Optional[List[str]] = None
 
 
 class UserPublicKeyUpdate(BaseModel):
+    """Pydantic schema for UserPublicKeyUpdate."""
     public_key: str
 
 
 class UserSettings(BaseModel):
+    """Pydantic schema for UserSettings."""
     ui_settings: UISettings
     notifications_settings: NotificationsSettings
 
 
 class UserSettingsUpdate(BaseModel):
+    """Pydantic schema for UserSettingsUpdate."""
     ui_settings: Optional[UISettings]
     notifications_settings: Optional[NotificationsSettings]
 
 
 class UserCreate(UserBase):
+    """Pydantic schema for UserCreate."""
     password: str
     email: EmailStr
     public_key: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
+    """Pydantic schema for UserUpdate."""
     hide_read_status: Optional[bool] = None
     phone_number: Optional[str] = None
     followers_settings: Optional[UserFollowersSettings] = None
@@ -179,16 +201,19 @@ class UserUpdate(BaseModel):
 
 
 class UserLogin(UserBase):
+    """Pydantic schema for UserLogin."""
     password: str
 
 
 class UserRole(str, Enum):
+    """Pydantic schema for UserRole."""
     ADMIN = "admin"
     MODERATOR = "moderator"
     USER = "user"
 
 
 class UserOut(UserBase):
+    """Pydantic schema for UserOut."""
     id: int
     created_at: datetime
     email: EmailStr
@@ -207,11 +232,13 @@ class UserOut(UserBase):
 
 
 class UserLanguageUpdate(BaseModel):
+    """Pydantic schema for UserLanguageUpdate."""
     preferred_language: str
     auto_translate: bool = True
 
 
 class FollowerOut(BaseModel):
+    """Pydantic schema for FollowerOut."""
     id: int
     username: str
     follow_date: datetime
@@ -222,21 +249,25 @@ class FollowerOut(BaseModel):
 
 
 class FollowersListOut(BaseModel):
+    """Pydantic schema for FollowersListOut."""
     followers: List[FollowerOut]
     total_count: int
 
 
 class UserRoleUpdate(BaseModel):
+    """Pydantic schema for UserRoleUpdate."""
     role: UserRole
 
 
 class UserSessionCreate(BaseModel):
+    """Pydantic schema for UserSessionCreate."""
     session_id: str
     ip_address: Optional[str]
     user_agent: Optional[str]
 
 
 class UserSessionOut(UserSessionCreate):
+    """Pydantic schema for UserSessionOut."""
     id: int
     user_id: int
     created_at: datetime
@@ -246,20 +277,24 @@ class UserSessionOut(UserSessionCreate):
 
 
 class PasswordChange(BaseModel):
+    """Pydantic schema for PasswordChange."""
     current_password: str
     new_password: str
 
 
 class EmailSchema(BaseModel):
+    """Pydantic schema for EmailSchema."""
     email: EmailStr
 
 
 class PasswordReset(BaseModel):
+    """Pydantic schema for PasswordReset."""
     token: str
     new_password: str
 
 
 class UserContentOut(BaseModel):
+    """Pydantic schema for UserContentOut."""
     posts: List["PostOut"]
     comments: List["PostComment"]
     articles: List["ArticleOut"]
@@ -269,11 +304,13 @@ class UserContentOut(BaseModel):
 
 
 class IdentityLinkCreate(BaseModel):
+    """Pydantic schema for IdentityLinkCreate."""
     linked_user_id: int
     relationship_type: str = "alias"  # alias, business, backup
 
 
 class IdentityOut(BaseModel):
+    """Pydantic schema for IdentityOut."""
     id: int
     linked_user_id: int
     relationship_type: str
@@ -283,6 +320,7 @@ class IdentityOut(BaseModel):
 
 
 class DataExportOut(BaseModel):
+    """Pydantic schema for DataExportOut."""
     user: dict
     posts: List[dict]
     comments: List[dict]

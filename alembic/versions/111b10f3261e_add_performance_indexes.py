@@ -15,8 +15,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Indexes are already in the initial_full_schema migration.
+    """Helper for upgrade."""
     pass
 
 
 def downgrade() -> None:
+    """Helper for downgrade."""
     pass

@@ -17,6 +17,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 def engagement_score(likes: int, comments: int) -> float:
+    """Helper for engagement score."""
     if AVAILABLE:
         return float(_accel.engagement_score(int(likes), int(comments)))  # type: ignore[attr-defined]
     raw = (likes * 1) + (comments * 2)
@@ -28,6 +29,7 @@ def engagement_score(likes: int, comments: int) -> float:
 
 
 def quality_score(content: str) -> float:
+    """Helper for quality score."""
     if AVAILABLE:
         return float(_accel.quality_score(content))  # type: ignore[attr-defined]
     score = 0.0

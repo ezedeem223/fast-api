@@ -66,17 +66,20 @@ post_hashtags = Table(
 
 
 class CopyrightType(str, enum.Enum):
+    """Enumeration for CopyrightType."""
     ALL_RIGHTS_RESERVED = "all_rights_reserved"
     CREATIVE_COMMONS = "creative_commons"
     PUBLIC_DOMAIN = "public_domain"
 
 
 class SocialMediaType(str, enum.Enum):
+    """Enumeration for SocialMediaType."""
     REDDIT = "reddit"
     LINKEDIN = "linkedin"
 
 
 class PostStatus(str, enum.Enum):
+    """Enumeration for PostStatus."""
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     PUBLISHED = "published"
@@ -84,6 +87,7 @@ class PostStatus(str, enum.Enum):
 
 
 class ReactionType(str, enum.Enum):
+    """Enumeration for ReactionType."""
     LIKE = "like"
     LOVE = "love"
     HAHA = "haha"
@@ -137,6 +141,7 @@ class Comment(Base):
     post_id = Column(
         Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
     )
+    # Parent linkage enables threaded replies under a single post.
     parent_id = Column(
         Integer,
         ForeignKey("comments.id", ondelete="CASCADE"),
@@ -249,6 +254,8 @@ class Post(Base):
         Enum(CopyrightType), nullable=False, default=CopyrightType.ALL_RIGHTS_RESERVED
     )
     custom_copyright = Column(String, nullable=True)
+    is_deleted = Column(Boolean, default=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_archived = Column(Boolean, default=False)
     archived_at = Column(DateTime(timezone=True), nullable=True)
     is_flagged = Column(Boolean, default=False)

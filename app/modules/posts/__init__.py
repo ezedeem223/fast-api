@@ -99,6 +99,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    """Helper for   getattr  ."""
     if name == "VoteService":
         from app.services.posts.vote_service import VoteService as _VoteService
 

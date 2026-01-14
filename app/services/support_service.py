@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 
 
 def _require_user(user):
+    """Helper for  require user."""
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Auth required"
@@ -57,6 +58,7 @@ class SupportService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
             )
+        # Normalize whitespace to keep responses consistent.
         resp = TicketResponseModel(
             ticket_id=ticket_id, user_id=current_user.id, content=content.strip()
         )

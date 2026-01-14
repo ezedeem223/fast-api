@@ -16,6 +16,7 @@ router = APIRouter(prefix="/banned-words", tags=["Banned Words"])
 
 
 def get_banned_word_service(db: Session = Depends(get_db)) -> BannedWordService:
+    """Return banned word service."""
     return BannedWordService(db)
 
 

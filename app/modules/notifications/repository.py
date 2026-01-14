@@ -199,7 +199,7 @@ class NotificationRepository:
             deleted = (
                 self.db.query(notification_models.Notification)
                 .filter(
-                    notification_models.Notification.created_at < cutoff,
+                    notification_models.Notification.created_at <= cutoff,
                     notification_models.Notification.is_archived.is_(True),
                 )
                 .delete(synchronize_session=False)

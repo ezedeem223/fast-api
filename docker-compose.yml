@@ -1,0 +1,80 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - DATABASE_HOSTNAME=${DATABASE_HOSTNAME:-postgres}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_NAME=${DATABASE_NAME:-app_db}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-app_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-app_password}
+      - DATABASE_SSL_MODE=${DATABASE_SSL_MODE:-disable}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_BACKEND_URL=${CELERY_BACKEND_URL:-redis://redis:6379/0}
+      - ENABLE_METRICS=${ENABLE_METRICS:-1}
+    depends_on:
+      - postgres
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./:/app
+
+  worker:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - DATABASE_HOSTNAME=${DATABASE_HOSTNAME:-postgres}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_NAME=${DATABASE_NAME:-app_db}
+      - DATABASE_USERNAME=${DATABASE_USERNAME:-app_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-app_password}
+      - DATABASE_SSL_MODE=${DATABASE_SSL_MODE:-disable}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_BACKEND_URL=${CELERY_BACKEND_URL:-redis://redis:6379/0}
+    depends_on:
+      - postgres
+      - redis
+    command: celery -A app.celery_worker.celery_app worker -B -l info
+    volumes:
+      - ./:/app
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME:-app_db}
+      - POSTGRES_USER=${DATABASE_USERNAME:-app_user}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:-app_password}
+    volumes:
+      - postgres-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-app_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-db:
+  redis-data:
