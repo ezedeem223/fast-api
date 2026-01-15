@@ -194,6 +194,9 @@ def test_settings_get_database_url_variants(monkeypatch):
 
     with monkeypatch.context() as m:
         m.delenv("DATABASE_URL", raising=False)
+        m.delenv("LOCAL_TEST_DATABASE_URL", raising=False)
+        m.delenv("TEST_DATABASE_URL", raising=False)
+        m.setenv("DATABASE_URL", "")
         m.setenv("DATABASE_HOSTNAME", "h")
         m.setenv("DATABASE_USERNAME", "u")
         m.setenv("DATABASE_PASSWORD", "p")
@@ -215,6 +218,10 @@ def test_settings_get_database_url_variants(monkeypatch):
 def test_settings_missing_keys_raise(monkeypatch, tmp_path):
     """Test case for test settings missing keys raise."""
     with monkeypatch.context() as m:
+        m.delenv("RSA_PRIVATE_KEY", raising=False)
+        m.delenv("RSA_PUBLIC_KEY", raising=False)
+        m.delenv("RSA_PRIVATE_KEY_PEM", raising=False)
+        m.delenv("RSA_PUBLIC_KEY_PEM", raising=False)
         m.setenv("RSA_PRIVATE_KEY_PATH", str(tmp_path / "missing_priv.pem"))
         m.setenv("RSA_PUBLIC_KEY_PATH", str(tmp_path / "missing_pub.pem"))
         env_module.get_settings.cache_clear()

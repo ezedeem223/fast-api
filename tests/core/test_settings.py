@@ -36,6 +36,13 @@ def test_force_https_default_in_production(monkeypatch):
 
 def test_read_key_file_relative_and_missing(monkeypatch, tmp_path):
     """Test case for test read key file relative and missing."""
+    for key in [
+        "RSA_PRIVATE_KEY",
+        "RSA_PUBLIC_KEY",
+        "RSA_PRIVATE_KEY_PEM",
+        "RSA_PUBLIC_KEY_PEM",
+    ]:
+        monkeypatch.delenv(key, raising=False)
     priv = tmp_path / "priv.pem"
     pub = tmp_path / "pub.pem"
     priv.write_text("PRIVATE KEY")

@@ -88,9 +88,16 @@ def test_get_current_user_ip_banned(session):
     assert exc.value.detail == "Your IP address is banned"
 
 
-def test_key_loading_validations(tmp_path):
+def test_key_loading_validations(tmp_path, monkeypatch):
     # Valid key files succeed
     """Test case for test key loading validations."""
+    for key in [
+        "RSA_PRIVATE_KEY",
+        "RSA_PUBLIC_KEY",
+        "RSA_PRIVATE_KEY_PEM",
+        "RSA_PUBLIC_KEY_PEM",
+    ]:
+        monkeypatch.delenv(key, raising=False)
     priv = tmp_path / "priv.pem"
     pub = tmp_path / "pub.pem"
     priv.write_text("PRIVATE KEY DATA")

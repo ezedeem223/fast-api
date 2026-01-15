@@ -10,7 +10,7 @@ import pytest
 from app import models
 from app.modules.notifications import models as notification_models
 from app.modules.notifications import service as notification_service
-from app.modules.notifications.common import notification_cache
+from app.modules.notifications.common import delivery_status_cache, notification_cache
 
 
 @pytest.mark.asyncio
@@ -56,6 +56,7 @@ async def test_delivery_manager_no_channels(session):
     session.refresh(user)
 
     notification_cache.clear()
+    delivery_status_cache.clear()
     prefs = notification_models.NotificationPreferences(
         user_id=user.id,
         email_notifications=False,

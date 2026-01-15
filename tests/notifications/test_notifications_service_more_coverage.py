@@ -13,11 +13,13 @@ from app import models as legacy_models
 from app.modules.notifications import models as notification_models
 from app.modules.notifications import schemas as notification_schemas
 from app.modules.notifications import service as notification_service
+from app.modules.notifications.common import delivery_status_cache
 
 
 def _clear_notification_caches():
     notification_service.notification_cache.clear()
     notification_service.priority_notification_cache.clear()
+    delivery_status_cache.clear()
 
 
 def test_publish_realtime_broadcast_swallow_errors(monkeypatch):
