@@ -1,14 +1,12 @@
 """Additional coverage for celery worker branches."""
 from __future__ import annotations
 
-import os
 import types
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app import celery_worker
 from app import models
-from app.modules.notifications import models as notification_models
 
 
 def test_update_notification_analytics_creates_records(monkeypatch):
@@ -125,6 +123,12 @@ def test_celery_worker_wrapped_assignment(monkeypatch):
         "__file__": str(source),
         "__package__": "app",
     }
+    def _make_dummy():
+        def _dummy(*_, **__):
+            return None
+
+        return _dummy
+
     # Prepopulate dummy tasks so __wrapped__ assignment runs.
     dummy_tasks = {}
     for name in [
@@ -142,7 +146,7 @@ def test_celery_worker_wrapped_assignment(monkeypatch):
         "reset_report_counters",
         "schedule_post_publication",
     ]:
-        dummy = lambda *_, **__: None
+        dummy = _make_dummy()
         dummy_tasks[name] = dummy
         module_globals[name] = dummy
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import math
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace

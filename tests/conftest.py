@@ -5,6 +5,7 @@ import atexit
 import importlib
 import os
 from typing import Any
+from urllib import request
 
 import psycopg2
 import redis
@@ -352,6 +353,23 @@ def _verify_external_dependencies() -> None:
         print(f"[preflight] Connected to Redis: {redis_url}")
     except Exception as exc:  # pragma: no cover - fail fast on connectivity
         raise RuntimeError(f"Failed to connect to Redis: {exc}") from exc
+
+
+def _verify_remote_readyz() -> None:
+    """Confirm remote readyz responds before running tests against a deployed API."""
+    remote_base = os.getenv("REMOTE_BASE_URL", "").rstrip("/")
+    if not remote_base:
+        raise RuntimeError("REMOTE_BASE_URL not set for readyz check")
+
+    url = f"{remote_base}/readyz"
+    try:
+        with request.urlopen(url, timeout=10) as response:
+            status = response.status or response.getcode()
+        if status != 200:
+            raise RuntimeError(f"Remote readyz returned {status}")
+        print(f"[preflight] Remote readyz OK: {url}")
+    except Exception as exc:  # pragma: no cover - fail fast on connectivity
+        raise RuntimeError(f"Failed to reach REMOTE_BASE_URL readyz: {exc}") from exc
 
 
 @pytest.fixture(scope="session", autouse=True)

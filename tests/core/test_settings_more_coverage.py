@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
 
-from app.core.config.settings import BASE_DIR, Settings
+from app.core.config.settings import Settings
 
 
 ORIGINAL_LOAD_KEYS = Settings._load_or_generate_rsa_keys

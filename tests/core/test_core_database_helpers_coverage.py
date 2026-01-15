@@ -5,8 +5,6 @@ import builtins
 import types
 from pathlib import Path
 
-import pytest
-
 from app import models
 from app.core.config import settings
 from app.core.database import query_helpers
