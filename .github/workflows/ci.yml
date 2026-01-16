@@ -445,23 +445,66 @@ jobs:
         run: sleep 30
 
       - name: Health check
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
         run: |
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL is not set."
+            exit 1
+          fi
+
+          base_url="${APP_URL%/}"
+          livez_url="${base_url}/livez"
           max_attempts=20
           attempt=0
 
           while [ $attempt -lt $max_attempts ]; do
-            if curl -f -s "${{ secrets.APP_URL }}/livez" > /dev/null 2>&1; then
+            http_code=$(curl -L -s -o /tmp/livez_body.txt -w "%{http_code}" \
+              --connect-timeout 5 --max-time 10 "$livez_url" || true)
+            if [ "$http_code" = "200" ]; then
               echo "Application is healthy."
               exit 0
             fi
             
-            echo "Waiting for application... (attempt $((attempt+1))/$max_attempts)"
+            echo "Waiting for application... (attempt $((attempt+1))/$max_attempts, http=$http_code)"
+            if [ -s /tmp/livez_body.txt ]; then
+              echo "Response snippet: $(head -c 300 /tmp/livez_body.txt | tr '\r\n' ' ' | tr -s ' ')" || true
+            fi
             sleep 20
             attempt=$((attempt+1))
           done
 
           echo "Application health check failed."
+          echo "Diagnostics:"
+          echo "livez_url=${livez_url}"
+          curl -L -v --connect-timeout 5 --max-time 10 "$livez_url" || true
+          echo "readyz_url=${base_url}/readyz"
+          curl -L -v --connect-timeout 5 --max-time 10 "${base_url}/readyz" || true
           exit 1
+
+      - name: Health check diagnostics (on failure)
+        if: failure()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL is not set."
+            exit 0
+          fi
+
+          base_url="${APP_URL%/}"
+          host=$(printf "%s" "$base_url" | sed -E 's#^https?://##' | cut -d/ -f1)
+          host=${host%%:*}
+
+          echo "Base URL: ${base_url}"
+          echo "Host: ${host}"
+          getent hosts "$host" || true
+          echo "HEAD ${base_url}"
+          curl -I -L --connect-timeout 5 --max-time 10 "$base_url" || true
+          echo "GET ${base_url}/livez"
+          curl -L -v --connect-timeout 5 --max-time 10 "${base_url}/livez" || true
+          echo "GET ${base_url}/readyz"
+          curl -L -v --connect-timeout 5 --max-time 10 "${base_url}/readyz" || true
 
   # ==========================================
   # Job 6: Post-Deployment Tests
