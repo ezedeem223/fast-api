@@ -446,21 +446,21 @@ jobs:
 
       - name: Health check
         run: |
-          max_attempts=10
+          max_attempts=20
           attempt=0
 
           while [ $attempt -lt $max_attempts ]; do
             if curl -f -s "${{ secrets.APP_URL }}/livez" > /dev/null 2>&1; then
-              echo "✅ Application is healthy!"
+              echo "Application is healthy."
               exit 0
             fi
             
-            echo "⏳ Waiting for application... (attempt $((attempt+1))/$max_attempts)"
-            sleep 10
+            echo "Waiting for application... (attempt $((attempt+1))/$max_attempts)"
+            sleep 20
             attempt=$((attempt+1))
           done
 
-          echo "❌ Application health check failed"
+          echo "Application health check failed."
           exit 1
 
   # ==========================================
@@ -478,4 +478,4 @@ jobs:
           echo "Testing critical endpoints..."
           curl -f "${{ secrets.APP_URL }}/livez" || exit 1
           curl -f "${{ secrets.APP_URL }}/readyz" || exit 1
-          echo "✅ All smoke tests passed!"
+          echo "All smoke tests passed."
